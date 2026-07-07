@@ -101,7 +101,9 @@ namespace XboxGamingBarHelper.Labs
                 // Step 1: Download the installer
                 Logger.Info($"Downloading ViGEmBus installer from {ViGEmBusDownloadUrl}...");
 
-                using (var client = new WebClient())
+                // TimedWebClient (60s): stock WebClient has no timeout, so a
+                // firewall that drops outbound (issue #91) hangs this forever.
+                using (var client = new XboxGamingBarHelper.Core.TimedWebClient(TimeSpan.FromSeconds(60)))
                 {
                     // Add user agent to avoid potential blocks
                     client.Headers.Add("User-Agent", "GoTweaks/1.0");

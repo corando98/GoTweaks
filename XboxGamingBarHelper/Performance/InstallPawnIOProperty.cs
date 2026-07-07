@@ -51,7 +51,10 @@ namespace XboxGamingBarHelper.Performance
                 // Step 1: Download the installer
                 Logger.Info($"Downloading PawnIO installer from {PawnIODownloadUrl}...");
 
-                using (var client = new WebClient())
+                // TimedWebClient (60s): stock WebClient has no timeout, so a
+                // firewall that drops outbound (issue #91) made this hang forever
+                // in the background — the widget's Install button looked dead.
+                using (var client = new TimedWebClient(TimeSpan.FromSeconds(60)))
                 {
                     // Add user agent to avoid potential blocks
                     client.Headers.Add("User-Agent", "GoTweaks/1.0");

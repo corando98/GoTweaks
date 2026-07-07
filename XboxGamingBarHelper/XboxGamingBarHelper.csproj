@@ -457,6 +457,7 @@
     <Compile Include="AMD\Settings\AMDDisplayCustomColorSetting.cs" />
     <Compile Include="Core\HelperProperties.cs" />
     <Compile Include="Core\HelperProperty.cs" />
+    <Compile Include="Core\TimedWebClient.cs" />
     <Compile Include="Core\HotkeyManager.cs" />
     <Compile Include="Core\ControllerHotkeyMonitor.cs" />
     <Compile Include="Core\IManager.cs" />

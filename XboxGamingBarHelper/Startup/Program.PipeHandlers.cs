@@ -1332,9 +1332,11 @@ namespace XboxGamingBarHelper
                                     Directory.Delete(tempFolder, true);
                                 Directory.CreateDirectory(tempFolder);
 
-                                // Download the zip file
+                                // Download the zip file. TimedWebClient (5 min — update
+                                // bundles are ~100 MB) so a blocked/stalled network errors
+                                // out instead of hanging the update forever (issue #91).
                                 Logger.Info($"Pipe: Downloading update from {updatePath}...");
-                                using (var client = new WebClient())
+                                using (var client = new XboxGamingBarHelper.Core.TimedWebClient(TimeSpan.FromMinutes(5)))
                                 {
                                     client.Headers.Add("User-Agent", "GoTweaks/1.0");
                                     client.DownloadFile(updatePath, zipPath);
