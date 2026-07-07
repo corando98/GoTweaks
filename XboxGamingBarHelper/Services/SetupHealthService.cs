@@ -1,0 +1,144 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Text;
+using NLog;
+
+namespace XboxGamingBarHelper.Services
+{
+    /// <summary>
+    /// Detects environment problems that make GoTweaks look broken to a new
+    /// user even though nothing crashed: conflicting OEM software holding the
+    /// controller HID, or missing drivers on hardware that needs them.
+    /// Inspired by Handheld Companion's Welcome-flow OEM software review.
+    ///
+    /// Evaluation is cheap (process list walk + flags the callers already
+    /// have), so callers run it on widget connect and on a slow timer, then
+    /// push the JSON to the widget which renders a dismissible banner.
+    /// </summary>
+    internal static class SetupHealthService
+    {
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+
+        // Lenovo software known to fight GoTweaks for the controller HID or
+        // TDP control. Legion Space's daemon holds the Legion controller
+        // device and its per-mode logic stomps our settings — issue #56
+        // ("controllers no longer work after helper starts, uninstalling
+        // Legion Space fixes it"). Match is case-insensitive on the process
+        // name without extension.
+        private static readonly string[] ConflictingProcessNames =
+        {
+            "LegionSpace",
+            "LegionSpaceService",
+            "LegionGoQuickSettings",
+            "LegionZoneService",
+        };
+
+        /// <summary>
+        /// One evaluated warning. Id is stable across evaluations so the
+        /// widget can key dismissals; Action is an optional machine hint the
+        /// widget maps to a button ("pawnio" → Install PawnIO).
+        /// </summary>
+        internal sealed class Warning
+        {
+            public string Id;
+            public string Message;
+            public string Action;
+        }
+
+        /// <summary>
+        /// Runs all checks and returns the warning list serialized as the
+        /// JSON array the SetupWarnings pipe function carries. Returns "[]"
+        /// when everything is healthy. Never throws.
+        /// </summary>
+        public static string EvaluateJson(bool isLegionDevice, bool supportsControllerFeatures, bool pawnIOInstalled)
+        {
+            try
+            {
+                var warnings = new List<Warning>();
+
+                if (isLegionDevice && supportsControllerFeatures)
+                {
+                    string running = FindRunningConflictingProcess();
+                    if (running != null)
+                    {
+                        warnings.Add(new Warning
+                        {
+                            Id = "legionspace",
+                            Message = $"{running} is running. It can take over the controller and undo GoTweaks settings. Consider closing or uninstalling it.",
+                        });
+                    }
+                }
+
+                if (isLegionDevice && !pawnIOInstalled)
+                {
+                    warnings.Add(new Warning
+                    {
+                        Id = "pawnio",
+                        Message = "PawnIO driver is not installed. Custom TDP and fan control need it.",
+                        Action = "pawnio",
+                    });
+                }
+
+                return Serialize(warnings);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"SetupHealthService.EvaluateJson failed: {ex.Message}");
+                return "[]";
+            }
+        }
+
+        private static string FindRunningConflictingProcess()
+        {
+            try
+            {
+                foreach (var process in Process.GetProcesses())
+                {
+                    string name;
+                    try { name = process.ProcessName; }
+                    catch { continue; }
+                    finally { process.Dispose(); }
+
+                    foreach (var conflict in ConflictingProcessNames)
+                    {
+                        if (string.Equals(name, conflict, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return conflict;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Debug($"SetupHealthService process walk failed: {ex.Message}");
+            }
+            return null;
+        }
+
+        private static string Serialize(List<Warning> warnings)
+        {
+            // Hand-rolled to avoid a JSON dependency for three fields; message
+            // text is our own constants so only quotes/backslashes need escaping.
+            var sb = new StringBuilder("[");
+            for (int i = 0; i < warnings.Count; i++)
+            {
+                if (i > 0) sb.Append(',');
+                sb.Append("{\"id\":\"").Append(Escape(warnings[i].Id))
+                  .Append("\",\"msg\":\"").Append(Escape(warnings[i].Message)).Append('"');
+                if (!string.IsNullOrEmpty(warnings[i].Action))
+                {
+                    sb.Append(",\"action\":\"").Append(Escape(warnings[i].Action)).Append('"');
+                }
+                sb.Append('}');
+            }
+            sb.Append(']');
+            return sb.ToString();
+        }
+
+        private static string Escape(string s)
+        {
+            return (s ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"");
+        }
+    }
+}

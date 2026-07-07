@@ -236,6 +236,15 @@ namespace XboxGamingBarHelper
         private const int ScreenSaverCheckIntervalMs = 5000; // Check every 5 seconds
 
         /// <summary>
+        /// Setup/environment health re-check (conflicting OEM software can be
+        /// launched at any time, PawnIO can be installed mid-session). Push is
+        /// change-gated inside SendSetupWarningsToWidget so a 2-min cadence
+        /// costs one process-list walk and usually no pipe traffic.
+        /// </summary>
+        private static System.Threading.Timer setupHealthTimer;
+        private const int SetupHealthCheckIntervalMs = 2 * 60 * 1000;
+
+        /// <summary>
         /// Auto hibernate idle monitoring - hibernates after inactivity timeout
         /// </summary>
         private static volatile bool autoHibernateEnabled = false;
@@ -819,10 +828,20 @@ namespace XboxGamingBarHelper
                     // status text in the widget reflects the saved state immediately on connect.
                     try { SendGyroBiasOffsetToWidget(); }
                     catch (Exception ex) { Logger.Warn($"Failed to push gyro bias offset on connect: {ex.Message}"); }
+                    // Setup/environment health (conflicting OEM software, missing PawnIO) —
+                    // force so a freshly-connected widget always gets current state.
+                    try { SendSetupWarningsToWidget(force: true); }
+                    catch (Exception ex) { Logger.Warn($"Failed to push setup warnings on connect: {ex.Message}"); }
                 };
                 pipeServer.Disconnected += (s, e) => Logger.Info("Widget disconnected from Named Pipe");
                 pipeServer.Start();
                 Logger.Info($"Named Pipe server started: {IPC.NamedPipeServer.FullPipePath}");
+
+                // Periodic setup-health re-check; push is change-gated so this is quiet
+                // unless something actually changes (Legion Space launched, PawnIO installed).
+                setupHealthTimer = new System.Threading.Timer(
+                    _ => SendSetupWarningsToWidget(),
+                    null, SetupHealthCheckIntervalMs, SetupHealthCheckIntervalMs);
             }
             catch (Exception ex)
             {

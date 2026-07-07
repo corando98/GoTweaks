@@ -1902,6 +1902,47 @@ namespace XboxGamingBarHelper
         /// Sent after every CalibrateGyroBias capture/reset, and on widget connect (so the
         /// status text reflects the persisted state immediately on reopen).
         /// </summary>
+        // Last SetupWarnings JSON pushed to the widget. Re-pushed only when the
+        // evaluation changes so the banner doesn't flicker on every timer tick.
+        private static string lastSetupWarningsJson = null;
+
+        /// <summary>
+        /// Evaluates setup/environment health (conflicting OEM software, missing
+        /// PawnIO) and pushes the result to the widget when it changed — or
+        /// unconditionally when <paramref name="force"/> (widget just connected
+        /// and has no prior state).
+        /// </summary>
+        internal static void SendSetupWarningsToWidget(bool force = false)
+        {
+            try
+            {
+                if (pipeServer == null || !pipeServer.IsConnected) return;
+
+                bool isLegion = legionManager?.LegionGoDetected?.Value ?? false;
+                bool controllerFeatures = (legionManager?.DetectedDevice?.SupportsControllerRemap ?? false)
+                                       || (legionManager?.DetectedDevice?.SupportsGyro ?? false);
+                bool pawnIO = performanceManager?.IsPawnIOInstalled ?? true; // assume fine when unknown
+
+                string json = Services.SetupHealthService.EvaluateJson(isLegion, controllerFeatures, pawnIO);
+                if (!force && string.Equals(json, lastSetupWarningsJson, StringComparison.Ordinal)) return;
+                lastSetupWarningsJson = json;
+
+                var msg = new global::Windows.Foundation.Collections.ValueSet();
+                msg.Add(nameof(Shared.Enums.Function), (int)Shared.Enums.Function.SetupWarnings);
+                msg.Add("Content", json);
+                var pm = Shared.IPC.PipeMessage.FromValueSet(msg);
+                pipeServer.SendMessage(pm.ToJson());
+                if (json != "[]")
+                {
+                    Logger.Info($"SetupWarnings pushed to widget: {json}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"SendSetupWarningsToWidget failed: {ex.Message}");
+            }
+        }
+
         private static void SendGyroBiasOffsetToWidget()
         {
             try

@@ -996,6 +996,7 @@ namespace XboxGamingBar
         private readonly PawnIOAvailableProperty pawnIOAvailable;
         private readonly PawnIOInstalledProperty pawnIOInstalled;
         private readonly InstallPawnIOProperty installPawnIO;
+        private readonly SetupWarningsProperty setupWarnings;
         private readonly ViGEmBusInstalledProperty vigemBusInstalled;
         private readonly InstallViGEmBusProperty installViGEmBus;
         private readonly HidHideInstalledProperty hidHideInstalled;
@@ -1723,6 +1724,7 @@ namespace XboxGamingBar
             pawnIOAvailable = new PawnIOAvailableProperty();
             pawnIOInstalled = new PawnIOInstalledProperty(this);
             installPawnIO = new InstallPawnIOProperty(this);
+            setupWarnings = new SetupWarningsProperty(this) { OnWarningsChanged = OnSetupWarningsChanged };
             vigemBusInstalled = new ViGEmBusInstalledProperty(this);
             installViGEmBus = new InstallViGEmBusProperty(this);
             hidHideInstalled = new HidHideInstalledProperty(this);
@@ -1973,6 +1975,7 @@ namespace XboxGamingBar
                 pawnIOAvailable,
                 pawnIOInstalled,
                 installPawnIO,
+                setupWarnings,
                 vigemBusInstalled,
                 installViGEmBus,
                 hidHideInstalled,

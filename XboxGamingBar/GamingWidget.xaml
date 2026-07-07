@@ -9880,6 +9880,53 @@
                     </Grid>
                 </Border>
 
+                <!-- Setup Warnings Banner - environment problems that make GoTweaks look
+                     broken (Legion Space conflict, missing PawnIO). Stacks below the
+                     update banner slot; both are transient so sharing the strip is fine. -->
+                <Border x:Name="SetupWarningsBanner"
+                        Background="#8A6D00"
+                        Padding="8,6"
+                        VerticalAlignment="Top"
+                        Visibility="Collapsed"
+                        CornerRadius="0"
+                        Margin="0,24,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="SetupWarningsText"
+                                   Text=""
+                                   Foreground="White"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"
+                                   VerticalAlignment="Center"
+                                   Grid.Column="0"
+                                   Margin="8,0,0,0"/>
+                        <Button x:Name="SetupWarningsActionButton"
+                                Content="Install"
+                                Grid.Column="1"
+                                Padding="12,2"
+                                FontSize="11"
+                                Background="#AA8800"
+                                Foreground="White"
+                                Margin="8,0,0,0"
+                                Visibility="Collapsed"
+                                Click="SetupWarningsActionButton_Click"/>
+                        <Button x:Name="DismissSetupWarningsButton"
+                                Content="&#xE711;"
+                                FontFamily="Segoe MDL2 Assets"
+                                Grid.Column="2"
+                                Padding="6,2"
+                                FontSize="10"
+                                Background="Transparent"
+                                Foreground="#FFE9A0"
+                                Margin="4,0,4,0"
+                                Click="DismissSetupWarningsButton_Click"/>
+                    </Grid>
+                </Border>
+
             </Grid>
             </Grid> <!-- End Content Area Grid.Row="1" -->
         </Grid> <!-- End MainNavContainer -->

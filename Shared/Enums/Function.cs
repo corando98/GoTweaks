@@ -512,5 +512,12 @@
         // can show "Calibrated 2 min ago, X +0.05, Y -0.03, Z +0.08 deg/s". Content is JSON:
         //   { "x":<deg/s>, "y":<deg/s>, "z":<deg/s>, "at":<UTC ticks>, "valid":<bool> }
         GyroBiasOffset,                                     // string JSON - see format above
+
+        // Helper -> widget push of setup/environment health warnings (conflicting OEM
+        // software running, missing drivers on hardware that needs them). Content is a
+        // JSON array: [ { "id":"legionspace", "msg":"<user-facing text>", "action":"<optional: pawnio>" } ]
+        // Empty array = all clear. Widget shows a dismissible warning banner; dismissal
+        // is keyed on the array content so NEW warnings resurface it.
+        SetupWarnings,                                      // string JSON - see format above
     }
 }
