@@ -182,6 +182,114 @@ namespace XboxGamingBarHelper.Windows
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         private static extern int ChangeDisplaySettings(ref DEVMODE lpDevMode, int dwFlags);
 
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+        private struct DISPLAY_DEVICE
+        {
+            public int cb;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+            public string DeviceName;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+            public string DeviceString;
+            public int StateFlags;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+            public string DeviceID;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+            public string DeviceKey;
+        }
+
+        private const int DISPLAY_DEVICE_ATTACHED_TO_DESKTOP = 0x00000001;
+        private const int DISPLAY_DEVICE_PRIMARY_DEVICE = 0x00000004;
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern bool EnumDisplayDevices(string lpDevice, uint iDevNum, ref DISPLAY_DEVICE lpDisplayDevice, uint dwFlags);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern int ChangeDisplaySettingsEx(string lpszDeviceName, ref DEVMODE lpDevMode, IntPtr hwnd, int dwFlags, IntPtr lParam);
+
+        /// <summary>
+        /// ChangeDisplaySettings pinned to the same PRIMARY display device that
+        /// EnumDisplaySettingsPrimary reads modes from. Mixing a primary-device
+        /// read with a NULL-device apply can target two different adapters on
+        /// multi-GPU / eGPU setups.
+        /// </summary>
+        private static int ChangeDisplaySettingsPrimary(ref DEVMODE lpDevMode, int dwFlags)
+        {
+            string device = _primaryDisplayDeviceName ?? (_primaryDisplayDeviceName = GetPrimaryDisplayDeviceName());
+            if (device != null)
+            {
+                return ChangeDisplaySettingsEx(device, ref lpDevMode, IntPtr.Zero, dwFlags, IntPtr.Zero);
+            }
+            return ChangeDisplaySettings(ref lpDevMode, dwFlags);
+        }
+
+        // Cached primary display device name (e.g. @"\\.\DISPLAY1"). Passing NULL
+        // to EnumDisplaySettings means "the display device on the calling thread",
+        // which for our elevated, scheduled-task-launched helper can resolve to
+        // the wrong adapter on multi-GPU / eGPU / remote-session setups — users
+        // then see a phantom 1920x1080@60 instead of the panel's real mode
+        // (issues #91, #47). Resolving the PRIMARY_DEVICE by name pins every
+        // query/change to the display the user actually sees. Cache is cheap to
+        // refresh and display topology rarely changes, so re-resolve on failure.
+        private static string _primaryDisplayDeviceName;
+
+        private static string GetPrimaryDisplayDeviceName()
+        {
+            try
+            {
+                var dd = new DISPLAY_DEVICE { cb = Marshal.SizeOf(typeof(DISPLAY_DEVICE)) };
+                for (uint i = 0; EnumDisplayDevices(null, i, ref dd, 0); i++)
+                {
+                    if ((dd.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE) != 0 &&
+                        (dd.StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP) != 0)
+                    {
+                        return dd.DeviceName;
+                    }
+                    dd.cb = Marshal.SizeOf(typeof(DISPLAY_DEVICE));
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Debug($"GetPrimaryDisplayDeviceName failed: {ex.Message}");
+            }
+            return null;    // fall back to NULL-device behaviour
+        }
+
+        /// <summary>
+        /// EnumDisplaySettings against the PRIMARY display device. For
+        /// ENUM_CURRENT_SETTINGS a failure means something is genuinely wrong
+        /// (stale topology cache, device vanished), so re-resolve once and fall
+        /// back to the NULL device. For mode-ENUMERATION indices a false return
+        /// is the normal end-of-list signal — no retry and no NULL-device
+        /// fallback there, or we'd splice two adapters' mode lists together.
+        /// </summary>
+        private static bool EnumDisplaySettingsPrimary(int iModeNum, ref DEVMODE lpDevMode)
+        {
+            string device = _primaryDisplayDeviceName ?? (_primaryDisplayDeviceName = GetPrimaryDisplayDeviceName());
+            bool isCurrentQuery = iModeNum == ENUM_CURRENT_SETTINGS;
+
+            if (device != null)
+            {
+                if (EnumDisplaySettings(device, iModeNum, ref lpDevMode))
+                {
+                    return true;
+                }
+                if (!isCurrentQuery)
+                {
+                    return false;   // end of mode enumeration — expected
+                }
+                // Stale cache (topology changed) — re-resolve once, then retry.
+                _primaryDisplayDeviceName = null;
+                device = _primaryDisplayDeviceName = GetPrimaryDisplayDeviceName();
+                if (device != null && EnumDisplaySettings(device, iModeNum, ref lpDevMode))
+                {
+                    return true;
+                }
+            }
+            return isCurrentQuery
+                ? EnumDisplaySettings(null, iModeNum, ref lpDevMode)
+                : device == null && EnumDisplaySettings(null, iModeNum, ref lpDevMode);
+        }
+
         private static int GetWindowProcessId(IntPtr windowHandle)
         {
             if (windowHandle == IntPtr.Zero)
@@ -378,7 +486,7 @@ namespace XboxGamingBarHelper.Windows
             DEVMODE vDevMode = new DEVMODE();
             vDevMode.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE));
 
-            if (EnumDisplaySettings(null, ENUM_CURRENT_SETTINGS, ref vDevMode))
+            if (EnumDisplaySettingsPrimary(ENUM_CURRENT_SETTINGS, ref vDevMode))
             {
                 return vDevMode.dmDisplayFrequency;
             }
@@ -392,7 +500,7 @@ namespace XboxGamingBarHelper.Windows
             devMode.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE));
 
             int modeIndex = 0;
-            while (EnumDisplaySettings(null, modeIndex++, ref devMode))
+            while (EnumDisplaySettingsPrimary(modeIndex++, ref devMode))
             {
                 int rate = devMode.dmDisplayFrequency;
                 if (rate > 0 && !refreshRates.Contains(rate))
@@ -421,7 +529,7 @@ namespace XboxGamingBarHelper.Windows
 
             DEVMODE mode = new DEVMODE { dmSize = (short)Marshal.SizeOf(typeof(DEVMODE)) };
 
-            if (!EnumDisplaySettings(null, ENUM_CURRENT_SETTINGS, ref mode))
+            if (!EnumDisplaySettingsPrimary(ENUM_CURRENT_SETTINGS, ref mode))
             {
                 Console.WriteLine("Error: Could not retrieve current display settings.");
                 return false;
@@ -431,7 +539,7 @@ namespace XboxGamingBarHelper.Windows
             mode.dmFields = DM_DISPLAYFREQUENCY;
 
             // Test before applying
-            int testResult = ChangeDisplaySettings(ref mode, CDS_TEST);
+            int testResult = ChangeDisplaySettingsPrimary(ref mode, CDS_TEST);
             if (testResult != DISP_CHANGE_SUCCESSFUL)
             {
                 Console.WriteLine($"Test failed: {targetRate}Hz not valid on this mode.");
@@ -439,7 +547,7 @@ namespace XboxGamingBarHelper.Windows
             }
 
             // Apply permanently
-            int result = ChangeDisplaySettings(ref mode, CDS_UPDATEREGISTRY);
+            int result = ChangeDisplaySettingsPrimary(ref mode, CDS_UPDATEREGISTRY);
             if (result == DISP_CHANGE_SUCCESSFUL)
             {
                 Console.WriteLine($"Successfully switched to {targetRate}Hz.");
@@ -457,7 +565,7 @@ namespace XboxGamingBarHelper.Windows
             DEVMODE vDevMode = new DEVMODE();
             vDevMode.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE));
 
-            if (EnumDisplaySettings(null, ENUM_CURRENT_SETTINGS, ref vDevMode))
+            if (EnumDisplaySettingsPrimary(ENUM_CURRENT_SETTINGS, ref vDevMode))
             {
                 return $"{vDevMode.dmPelsWidth}x{vDevMode.dmPelsHeight}";
             }
@@ -479,7 +587,7 @@ namespace XboxGamingBarHelper.Windows
 
             // First pass: log all resolutions and find native
             var allResolutions = new List<(int w, int h)>();
-            while (EnumDisplaySettings(null, modeIndex++, ref devMode))
+            while (EnumDisplaySettingsPrimary(modeIndex++, ref devMode))
             {
                 int w = devMode.dmPelsWidth;
                 int h = devMode.dmPelsHeight;
@@ -575,7 +683,7 @@ namespace XboxGamingBarHelper.Windows
 
             DEVMODE mode = new DEVMODE { dmSize = (short)Marshal.SizeOf(typeof(DEVMODE)) };
 
-            if (!EnumDisplaySettings(null, ENUM_CURRENT_SETTINGS, ref mode))
+            if (!EnumDisplaySettingsPrimary(ENUM_CURRENT_SETTINGS, ref mode))
             {
                 Logger.Error("Error: Could not retrieve current display settings.");
                 return false;
@@ -586,7 +694,7 @@ namespace XboxGamingBarHelper.Windows
             mode.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT;
 
             // Test before applying
-            int testResult = ChangeDisplaySettings(ref mode, CDS_TEST);
+            int testResult = ChangeDisplaySettingsPrimary(ref mode, CDS_TEST);
             if (testResult != DISP_CHANGE_SUCCESSFUL)
             {
                 Logger.Error($"Test failed: {targetResolution} not valid on this display.");
@@ -594,7 +702,7 @@ namespace XboxGamingBarHelper.Windows
             }
 
             // Apply permanently
-            int result = ChangeDisplaySettings(ref mode, CDS_UPDATEREGISTRY);
+            int result = ChangeDisplaySettingsPrimary(ref mode, CDS_UPDATEREGISTRY);
             if (result == DISP_CHANGE_SUCCESSFUL)
             {
                 Logger.Info($"Successfully switched to {targetResolution}.");
@@ -616,7 +724,7 @@ namespace XboxGamingBarHelper.Windows
             DEVMODE vDevMode = new DEVMODE();
             vDevMode.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE));
 
-            if (EnumDisplaySettings(null, ENUM_CURRENT_SETTINGS, ref vDevMode))
+            if (EnumDisplaySettingsPrimary(ENUM_CURRENT_SETTINGS, ref vDevMode))
             {
                 return vDevMode.dmDisplayOrientation;
             }
@@ -637,7 +745,7 @@ namespace XboxGamingBarHelper.Windows
 
             DEVMODE mode = new DEVMODE { dmSize = (short)Marshal.SizeOf(typeof(DEVMODE)) };
 
-            if (!EnumDisplaySettings(null, ENUM_CURRENT_SETTINGS, ref mode))
+            if (!EnumDisplaySettingsPrimary(ENUM_CURRENT_SETTINGS, ref mode))
             {
                 Logger.Error("Error: Could not retrieve current display settings.");
                 return false;
@@ -670,7 +778,7 @@ namespace XboxGamingBarHelper.Windows
             mode.dmDisplayOrientation = orientation;
 
             // Test before applying
-            int testResult = ChangeDisplaySettings(ref mode, CDS_TEST);
+            int testResult = ChangeDisplaySettingsPrimary(ref mode, CDS_TEST);
             if (testResult != DISP_CHANGE_SUCCESSFUL)
             {
                 Logger.Error($"Test failed: orientation {orientation} not valid on this display (error {testResult}).");
@@ -678,7 +786,7 @@ namespace XboxGamingBarHelper.Windows
             }
 
             // Apply permanently
-            int result = ChangeDisplaySettings(ref mode, CDS_UPDATEREGISTRY);
+            int result = ChangeDisplaySettingsPrimary(ref mode, CDS_UPDATEREGISTRY);
             if (result == DISP_CHANGE_SUCCESSFUL)
             {
                 string orientationName = orientation switch
