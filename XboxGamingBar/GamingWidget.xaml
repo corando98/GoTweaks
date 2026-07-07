@@ -4817,6 +4817,29 @@
                                             <ComboBoxItem Content="Handheld (device IMU)" Tag="Handheld"/>
                                         </ComboBox>
 
+                                        <!-- Sony-target gyro sign mode. Default off = TOTK-correct
+                                             (yaw=+gz, roll=-gy). When on, reverts to the upstream pattern
+                                             (yaw=-gz, roll=+gy) which Steam Input's gyro-to-mouse mapping
+                                             sometimes prefers. Affects DS4 / DualSense / DualSense Edge —
+                                             Switch Pro and Steam Deck builders are unaffected. -->
+                                        <Grid Margin="0,12,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                <TextBlock Text="Alternate gyro convention"
+                                                           FontSize="12" Foreground="#CCCCCC"/>
+                                                <TextBlock Text="Flips gyro polarity for DS4/DualSense or rotates 90&#176; for Steam Deck/Switch Pro. Try this if Steam gyro moves the wrong way."
+                                                           FontSize="11" Foreground="#808080" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                            </StackPanel>
+                                            <ToggleSwitch x:Name="ViiperAlternateGyroConventionToggle"
+                                                          Grid.Column="1"
+                                                          OnContent="On" OffContent="Off"
+                                                          Style="{StaticResource ModernToggleStyle}"
+                                                          IsOn="False"/>
+                                        </Grid>
+
                                         <!-- Software Gyro Bias (Steam-style one-shot calibration). Captures the
                                              current resting gyro reading and subtracts it from all subsequent
                                              samples so any small post-firmware-cal drift gets zeroed across

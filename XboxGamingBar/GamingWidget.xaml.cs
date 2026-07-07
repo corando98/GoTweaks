@@ -984,6 +984,7 @@ namespace XboxGamingBar
         private readonly ViiperMirrorLightbarToStickProperty viiperMirrorLightbarToStick;
         private readonly ViiperStickGyroEnabledProperty viiperStickGyroEnabled;
         private readonly ViiperJoyconGyroPerHalfProperty viiperJoyconGyroPerHalf;
+        private readonly ViiperAlternateGyroConventionProperty viiperAlternateGyroConvention;
         private readonly ViiperRumbleIntensityProperty viiperRumbleIntensity;
         private readonly ViiperStringComboProperty viiperGyroAxisMapX;
         private readonly ViiperStringComboProperty viiperGyroAxisMapY;
@@ -1687,6 +1688,7 @@ namespace XboxGamingBar
             viiperMirrorLightbarToStick = new ViiperMirrorLightbarToStickProperty(ViiperMirrorLightbarToStickToggle, this);
             viiperStickGyroEnabled = new ViiperStickGyroEnabledProperty(ViiperStickGyroEnabledToggle, this);
             viiperJoyconGyroPerHalf = new ViiperJoyconGyroPerHalfProperty(ViiperJoyconGyroPerHalfToggle, this);
+            viiperAlternateGyroConvention = new ViiperAlternateGyroConventionProperty(ViiperAlternateGyroConventionToggle, this);
             viiperRumbleIntensity = new ViiperRumbleIntensityProperty(100, ViiperRumbleIntensitySlider, this);
             viiperGyroAxisMapX = new ViiperStringComboProperty("X", Shared.Enums.Function.Viiper_GyroAxisMapX, ViiperGyroAxisMapXComboBox, this);
             viiperGyroAxisMapY = new ViiperStringComboProperty("Y", Shared.Enums.Function.Viiper_GyroAxisMapY, ViiperGyroAxisMapYComboBox, this);
@@ -1960,6 +1962,7 @@ namespace XboxGamingBar
                 viiperMirrorLightbarToStick,
                 viiperStickGyroEnabled,
                 viiperJoyconGyroPerHalf,
+                viiperAlternateGyroConvention,
                 viiperGyroAxisMapX,
                 viiperGyroAxisMapY,
                 viiperGyroAxisMapZ,

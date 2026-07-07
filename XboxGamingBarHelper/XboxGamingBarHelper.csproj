@@ -594,6 +594,7 @@
     <Compile Include="Settings\ViiperInputSourceProperty.cs" />
     <Compile Include="Settings\ViiperGyroSourceProperty.cs" />
     <Compile Include="Settings\ViiperJoyconGyroPerHalfProperty.cs" />
+    <Compile Include="Settings\ViiperAlternateGyroConventionProperty.cs" />
     <Compile Include="Settings\ViiperSteamSubDeviceProperty.cs" />
     <Compile Include="Settings\ViiperSonySubDeviceProperty.cs" />
     <Compile Include="Settings\ViiperNintendoSubDeviceProperty.cs" />
