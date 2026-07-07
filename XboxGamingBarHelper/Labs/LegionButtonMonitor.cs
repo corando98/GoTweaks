@@ -240,6 +240,18 @@ namespace XboxGamingBarHelper.Labs
 
         // Flag to prevent spamming "controller not found" log (only log once until found)
         private bool _loggedControllerNotFound = false;
+
+        // Consecutive full scans where Legion-VID/PID HID devices were present but
+        // EVERY one was rejected by ProbeDeviceFormat. On protocol-incompatible
+        // hardware (e.g. Legion Go S: 8 devices on vid_1a86, none with 64-byte
+        // 04:00:A1 reports — issue #90) this stays true forever, so after a few
+        // scans the reconnect loop backs way off instead of burning ~8s of probe
+        // I/O every 10s. Reset whenever a scan finds zero candidates (devices
+        // gone — normal disconnect) or a device is accepted.
+        private int _consecutiveAllRejectedScans = 0;
+        private bool _loggedIncompatibleBackoff = false;
+        private const int AllRejectedScansBeforeBackoff = 3;
+        internal const int IncompatibleRescanDelayMs = 5 * 60 * 1000; // 5 min
         private DateTime _lastGuideRouteReconcileTimeUtc = DateTime.MinValue;
 
         // Cached device path for faster reconnection (persisted to settings)
@@ -1494,6 +1506,8 @@ namespace XboxGamingBarHelper.Labs
 
                                                 // Reset the "not found" log flag so we'll log again if disconnected
                                                 _loggedControllerNotFound = false;
+                                                _consecutiveAllRejectedScans = 0;
+                                                _loggedIncompatibleBackoff = false;
                                                 return true;
                                             }
                                             else
@@ -1516,7 +1530,18 @@ namespace XboxGamingBarHelper.Labs
 
                     if (candidateCount > 0)
                     {
-                        Logger.Warn($"LegionButtonMonitor: Found {candidateCount} Legion HID devices but none had correct 64-byte format");
+                        _consecutiveAllRejectedScans++;
+                        if (_consecutiveAllRejectedScans <= AllRejectedScansBeforeBackoff)
+                        {
+                            Logger.Warn($"LegionButtonMonitor: Found {candidateCount} Legion HID devices but none had correct 64-byte format (scan {_consecutiveAllRejectedScans}/{AllRejectedScansBeforeBackoff} before backoff)");
+                        }
+                    }
+                    else
+                    {
+                        // Zero candidates = devices genuinely absent (disconnect /
+                        // driver reset), not a protocol mismatch — keep fast retry.
+                        _consecutiveAllRejectedScans = 0;
+                        _loggedIncompatibleBackoff = false;
                     }
                 }
                 finally
@@ -2611,9 +2636,31 @@ namespace XboxGamingBarHelper.Labs
                             }
                             else
                             {
-                                // Exponential backoff for reconnect attempts
-                                Thread.Sleep(reconnectDelayMs);
-                                reconnectDelayMs = Math.Min(reconnectDelayMs * 2, MAX_RECONNECT_DELAY_MS);
+                                // Protocol-incompatible hardware (issue #90, Legion Go S):
+                                // candidates keep appearing but every probe rejects them.
+                                // After a few full scans, stretch the retry to minutes —
+                                // the device family isn't going to grow a new HID format
+                                // between scans, and each scan costs ~1s of probe I/O per
+                                // candidate (8 devices on Go S).
+                                if (_consecutiveAllRejectedScans >= AllRejectedScansBeforeBackoff)
+                                {
+                                    if (!_loggedIncompatibleBackoff)
+                                    {
+                                        Logger.Warn($"LegionButtonMonitor: {_consecutiveAllRejectedScans} consecutive scans found only protocol-incompatible Legion HID devices — backing off to {IncompatibleRescanDelayMs / 60000} min rescans");
+                                        _loggedIncompatibleBackoff = true;
+                                    }
+                                    // Sleep in 1s slices so Stop() stays responsive.
+                                    for (int slept = 0; slept < IncompatibleRescanDelayMs && isRunning; slept += 1000)
+                                    {
+                                        Thread.Sleep(1000);
+                                    }
+                                }
+                                else
+                                {
+                                    // Exponential backoff for reconnect attempts
+                                    Thread.Sleep(reconnectDelayMs);
+                                    reconnectDelayMs = Math.Min(reconnectDelayMs * 2, MAX_RECONNECT_DELAY_MS);
+                                }
                             }
                             continue;
                         }

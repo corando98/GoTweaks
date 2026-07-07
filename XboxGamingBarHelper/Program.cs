@@ -1225,7 +1225,25 @@ namespace XboxGamingBarHelper
             // sync into legionManager's properties as soon as the real HID
             // device is found, and a zero-filled initial state is correct
             // in the meantime.
-            if (legionManager.LegionGoDetected.Value)
+            // Gate on the device config's HID capabilities, not just "is a Legion".
+            // LegionButtonMonitor speaks the 64-byte 04:00:A1 protocol of the
+            // Go 1 / Go 2 controllers (VID 0x17EF / 0x1A86-with-64-byte-reports).
+            // The Legion Go S (issue #90) exposes 8 HID devices on the same VID but
+            // NONE use that report format, so the monitor's reconnect loop rescanned
+            // all 8 candidates (~1s ProbeDeviceFormat each) every 10s forever —
+            // pure CPU waste plus log spam. Go S's DeviceConfig already declares
+            // SupportsControllerRemap=false AND SupportsGyro=false; the monitor
+            // has no job to do on such devices (buttons, gyro, battery all ride
+            // the same protocol), so don't start it at all.
+            bool deviceSupportsButtonMonitor =
+                legionManager.DetectedDevice.SupportsControllerRemap ||
+                legionManager.DetectedDevice.SupportsGyro;
+            if (legionManager.LegionGoDetected.Value && !deviceSupportsButtonMonitor)
+            {
+                Logger.Info($"Legion button monitor skipped: device '{legionManager.DetectedDevice.Model}' " +
+                            "declares no controller-remap or gyro support (HID protocol incompatible)");
+            }
+            if (legionManager.LegionGoDetected.Value && deviceSupportsButtonMonitor)
             {
                 _ = Task.Run(() =>
                 {
