@@ -242,16 +242,24 @@ namespace XboxGamingBarHelper.Labs
         private bool _loggedControllerNotFound = false;
 
         // Consecutive full scans where Legion-VID/PID HID devices were present but
-        // EVERY one was rejected by ProbeDeviceFormat. On protocol-incompatible
-        // hardware (e.g. Legion Go S: 8 devices on vid_1a86, none with 64-byte
-        // 04:00:A1 reports — issue #90) this stays true forever, so after a few
-        // scans the reconnect loop backs way off instead of burning ~8s of probe
-        // I/O every 10s. Reset whenever a scan finds zero candidates (devices
-        // gone — normal disconnect) or a device is accepted.
+        // EVERY one was rejected by ProbeDeviceFormat. Two very different causes:
+        //   • Protocol-incompatible hardware (Legion Go S, issue #90) — permanent.
+        //   • Transient no-stream states on Go 1/Go 2 — controllers powered off
+        //     while docked, detached, or mid mode-switch. Recovers when the user
+        //     powers them back on.
+        // Both waste ~1s of probe I/O per candidate per scan, so after a few
+        // all-rejected scans the reconnect loop backs off to 60s full probes.
+        // During backoff a cheap path-set check (string enumeration, no device
+        // opens) runs every 10s and aborts the backoff the moment the HID
+        // device set changes, so controller power-on is picked up in ≤10s when
+        // it surfaces new interfaces and ≤60s worst case when it doesn't.
+        // Reset whenever a scan finds zero candidates (devices gone — normal
+        // disconnect keeps the fast retry) or a device is accepted.
         private int _consecutiveAllRejectedScans = 0;
         private bool _loggedIncompatibleBackoff = false;
         private const int AllRejectedScansBeforeBackoff = 3;
-        internal const int IncompatibleRescanDelayMs = 5 * 60 * 1000; // 5 min
+        internal const int IncompatibleRescanDelayMs = 60 * 1000;      // 60s full-probe cadence
+        private const int BackoffPathSetCheckIntervalMs = 10 * 1000;   // cheap set check cadence
         private DateTime _lastGuideRouteReconcileTimeUtc = DateTime.MinValue;
 
         // Cached device path for faster reconnection (persisted to settings)
@@ -579,6 +587,68 @@ namespace XboxGamingBarHelper.Labs
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Cheap signature of the currently-present Legion HID interface set:
+        /// enumerates interface paths (SetupDi walk, string matching only — no
+        /// CreateFile, no report probing) and concatenates the sorted paths
+        /// whose VID/PID substring matches a supported Legion controller. Used
+        /// by the all-rejected backoff to notice controller power-on/attach
+        /// within seconds without paying full ProbeDeviceFormat costs: a new
+        /// interface appearing (or one vanishing) changes the signature.
+        /// </summary>
+        private static string ComputeLegionHidPathSetSignature()
+        {
+            try
+            {
+                HidD_GetHidGuid(out Guid hidGuid);
+                IntPtr deviceInfoSet = SetupDiGetClassDevs(ref hidGuid, IntPtr.Zero, IntPtr.Zero, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+                if (deviceInfoSet == IntPtr.Zero || deviceInfoSet == new IntPtr(-1))
+                {
+                    return string.Empty;
+                }
+                try
+                {
+                    var paths = new List<string>();
+                    var interfaceData = new SP_DEVICE_INTERFACE_DATA { cbSize = Marshal.SizeOf<SP_DEVICE_INTERFACE_DATA>() };
+                    uint memberIndex = 0;
+                    while (SetupDiEnumDeviceInterfaces(deviceInfoSet, IntPtr.Zero, ref hidGuid, memberIndex, ref interfaceData))
+                    {
+                        SetupDiGetDeviceInterfaceDetail(deviceInfoSet, ref interfaceData, IntPtr.Zero, 0, out uint requiredSize, IntPtr.Zero);
+                        IntPtr detailDataBuffer = Marshal.AllocHGlobal((int)requiredSize);
+                        try
+                        {
+                            Marshal.WriteInt32(detailDataBuffer, IntPtr.Size == 8 ? 8 : 6);
+                            if (SetupDiGetDeviceInterfaceDetail(deviceInfoSet, ref interfaceData, detailDataBuffer, requiredSize, out _, IntPtr.Zero))
+                            {
+                                string devicePath = Marshal.PtrToStringAuto(detailDataBuffer + 4);
+                                string lower = devicePath?.ToLowerInvariant();
+                                if (DeviceNameMatchesVidPid(lower, LEGION_TABLET_VID, LEGION_TABLET_PIDS) ||
+                                    DeviceNameMatchesVidPid(lower, LEGION_GOS_VID, LEGION_GOS_PIDS))
+                                {
+                                    paths.Add(lower);
+                                }
+                            }
+                        }
+                        finally
+                        {
+                            Marshal.FreeHGlobal(detailDataBuffer);
+                        }
+                        memberIndex++;
+                    }
+                    paths.Sort(StringComparer.Ordinal);
+                    return string.Join("|", paths);
+                }
+                finally
+                {
+                    SetupDiDestroyDeviceInfoList(deviceInfoSet);
+                }
+            }
+            catch
+            {
+                return string.Empty;
+            }
         }
 
         private bool IsGoSControllerDevice()
@@ -2636,23 +2706,38 @@ namespace XboxGamingBarHelper.Labs
                             }
                             else
                             {
-                                // Protocol-incompatible hardware (issue #90, Legion Go S):
-                                // candidates keep appearing but every probe rejects them.
-                                // After a few full scans, stretch the retry to minutes —
-                                // the device family isn't going to grow a new HID format
-                                // between scans, and each scan costs ~1s of probe I/O per
-                                // candidate (8 devices on Go S).
+                                // All candidates present but rejected — either
+                                // protocol-incompatible hardware (issue #90, Legion Go S,
+                                // permanent) or controllers powered off / detached on a
+                                // Go 1/Go 2 (transient). Full probing costs ~1s per
+                                // candidate, so back off to a 60s full-probe cadence.
+                                // A cheap path-set check every 10s aborts the backoff as
+                                // soon as the Legion HID interface set changes (controller
+                                // powered on / attached), keeping wake-up latency low.
                                 if (_consecutiveAllRejectedScans >= AllRejectedScansBeforeBackoff)
                                 {
                                     if (!_loggedIncompatibleBackoff)
                                     {
-                                        Logger.Warn($"LegionButtonMonitor: {_consecutiveAllRejectedScans} consecutive scans found only protocol-incompatible Legion HID devices — backing off to {IncompatibleRescanDelayMs / 60000} min rescans");
+                                        Logger.Warn($"LegionButtonMonitor: {_consecutiveAllRejectedScans} consecutive scans rejected every Legion HID device — backing off to {IncompatibleRescanDelayMs / 1000}s full probes with {BackoffPathSetCheckIntervalMs / 1000}s device-set checks");
                                         _loggedIncompatibleBackoff = true;
                                     }
+                                    string pathSetAtBackoff = ComputeLegionHidPathSetSignature();
+                                    int sinceSetCheckMs = 0;
                                     // Sleep in 1s slices so Stop() stays responsive.
                                     for (int slept = 0; slept < IncompatibleRescanDelayMs && isRunning; slept += 1000)
                                     {
                                         Thread.Sleep(1000);
+                                        sinceSetCheckMs += 1000;
+                                        if (sinceSetCheckMs >= BackoffPathSetCheckIntervalMs)
+                                        {
+                                            sinceSetCheckMs = 0;
+                                            string now = ComputeLegionHidPathSetSignature();
+                                            if (!string.Equals(now, pathSetAtBackoff, StringComparison.Ordinal))
+                                            {
+                                                Logger.Info("LegionButtonMonitor: Legion HID device set changed during backoff — retrying full scan now");
+                                                break;
+                                            }
+                                        }
                                     }
                                 }
                                 else
