@@ -108,6 +108,11 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         private int ecCurrentTargetRpm = -1;      // RPM we're actively asserting on the EC
         private int ecLastWrittenRpm = -1;        // last value actually written via EC mailbox
         private DateTime ecLastForcedRewriteUtc = DateTime.MinValue;
+        // Consecutive EC write failures. The PawnIO handle can silently die
+        // across sleep/hibernate; after this many failed ticks the loop
+        // rebuilds the whole access path via LegionGo2EcAccess.Reinitialize().
+        private int ecConsecutiveWriteFailures = 0;
+        private const int EC_WRITE_FAILURES_BEFORE_REINIT = 3;
         private const int EC_ANCHOR_TEMP_DELTA_C = 5;       // recompute target when |temp - anchor| ≥ this
         private const int EC_FORCED_REWRITE_INTERVAL_S = 30; // re-assert override even if target unchanged
 
@@ -2376,6 +2381,46 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             }
         }
 
+        /// <summary>
+        /// Called on system resume. The PawnIO handle backing the EC fan
+        /// override can die across sleep/hibernate (Rodpad's Windows tool
+        /// shipped the same fix on 2026-06-04). Probe the EC path and rebuild
+        /// it proactively so the user's fan curve reasserts within one tick of
+        /// waking instead of waiting for three failed writes. No-op when the
+        /// override loop isn't running.
+        /// </summary>
+        public void RecoverEcFanOverrideAfterResume()
+        {
+            try
+            {
+                if (!fanCurveUnlocked || legionEcAccess == null || ecFanCurveTimer == null)
+                    return;
+
+                bool healthy = legionEcAccess.IsAvailable && legionEcAccess.GetCurrentFanRpm() >= 0;
+                if (!healthy)
+                {
+                    Logger.Warn("Resume: EC fan access unhealthy after wake — reinitializing PawnIO path");
+                    if (!legionEcAccess.Reinitialize())
+                    {
+                        Logger.Warn("Resume: EC access reinit failed; tick-level self-heal will keep retrying");
+                        return;
+                    }
+                }
+
+                // Firmware may have cleared 0xC6C8 during sleep. Force the next
+                // tick to recompute from a fresh anchor and write unconditionally.
+                ecAnchorTempC = int.MinValue;
+                ecLastWrittenRpm = -1;
+                ecLastForcedRewriteUtc = DateTime.MinValue;
+                ecConsecutiveWriteFailures = 0;
+                Logger.Info("Resume: EC fan override state reset — curve reasserts on next tick");
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"RecoverEcFanOverrideAfterResume failed: {ex.Message}");
+            }
+        }
+
         private void EcFanCurveTick(object _)
         {
             try
@@ -2465,10 +2510,31 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                     Logger.Info($"EC fan tick: temp={tempC}°C → wrote {ecCurrentTargetRpm} RPM to 0xC6C8 ({reason}, current={actualRpm})");
                     ecLastWrittenRpm = ecCurrentTargetRpm;
                     ecLastForcedRewriteUtc = DateTime.UtcNow;
+                    ecConsecutiveWriteFailures = 0;
                 }
                 else
                 {
-                    Logger.Warn($"EC fan tick: SetTargetFanRpm({ecCurrentTargetRpm}) failed; will retry next tick");
+                    ecConsecutiveWriteFailures++;
+                    if (ecConsecutiveWriteFailures >= EC_WRITE_FAILURES_BEFORE_REINIT)
+                    {
+                        // Stale PawnIO handle (typically after sleep/hibernate) —
+                        // rebuild the access path instead of failing forever.
+                        Logger.Warn($"EC fan tick: {ecConsecutiveWriteFailures} consecutive write failures — reinitializing EC access path");
+                        ecConsecutiveWriteFailures = 0;
+                        if (legionEcAccess.Reinitialize())
+                        {
+                            Logger.Info("EC fan tick: EC access path rebuilt — forcing immediate rewrite next tick");
+                            ecLastWrittenRpm = -1; // guarantee the next tick writes
+                        }
+                        else
+                        {
+                            Logger.Warn("EC fan tick: EC access reinit failed; will retry after further failures");
+                        }
+                    }
+                    else
+                    {
+                        Logger.Warn($"EC fan tick: SetTargetFanRpm({ecCurrentTargetRpm}) failed ({ecConsecutiveWriteFailures}/{EC_WRITE_FAILURES_BEFORE_REINIT} before reinit); will retry next tick");
+                    }
                 }
             }
             catch (Exception ex)

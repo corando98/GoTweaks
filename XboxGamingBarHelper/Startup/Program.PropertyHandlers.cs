@@ -74,6 +74,11 @@ namespace XboxGamingBarHelper
             // Force refresh hardware sensors (battery values can be stale after hibernation)
             performanceManager?.ForceRefreshHardware();
 
+            // Rebuild the EC fan override path if the PawnIO handle died during
+            // sleep — otherwise the custom fan curve silently stops applying
+            // until three tick-level write failures trigger the self-heal.
+            legionManager?.RecoverEcFanOverrideAfterResume();
+
             // Re-apply current profile settings (TDP, CPU boost, EPP, CPU state)
             CurrentProfile_PropertyChanged(sender, null);
         }

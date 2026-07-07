@@ -55,11 +55,34 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         private const int LPCIO_SLOT_4E_4F = 1;
 
         private readonly object _txLock = new object();
-        private readonly PawnIOWrapper _pawnIO = new PawnIOWrapper();
+        private PawnIOWrapper _pawnIO = new PawnIOWrapper();
         private bool _slotSelected = false;
         private bool _disposed = false;
 
         public bool IsAvailable { get; private set; }
+
+        /// <summary>
+        /// Tears down the PawnIO handle and rebuilds the whole access path
+        /// (connect → load LpcIO.bin → select slot). The driver handle can go
+        /// stale across sleep/hibernate — Rodpad's Windows tool shipped the
+        /// same fix ("custom fan speeds stop working after waking from
+        /// sleep", 2026-06-04 changelog). Call on resume or after repeated
+        /// EC I/O failures. Returns true when the rebuilt path is usable.
+        /// </summary>
+        public bool Reinitialize()
+        {
+            if (_disposed) return false;
+            lock (_txLock)
+            {
+                Logger.Info("LegionGo2EcAccess: reinitializing PawnIO EC access path");
+                try { _pawnIO.Dispose(); }
+                catch (Exception ex) { Logger.Debug($"LegionGo2EcAccess reinit dispose: {ex.Message}"); }
+                _pawnIO = new PawnIOWrapper();
+                _slotSelected = false;
+                IsAvailable = false;
+            }
+            return Initialize();
+        }
 
         /// <summary>
         /// Connects to PawnIO, loads the signed LpcIO.bin module, and selects the
