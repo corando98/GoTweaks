@@ -51,7 +51,8 @@ namespace XboxGamingBarHelper.Services
         /// JSON array the SetupWarnings pipe function carries. Returns "[]"
         /// when everything is healthy. Never throws.
         /// </summary>
-        public static string EvaluateJson(bool isLegionDevice, bool supportsControllerFeatures, bool pawnIOInstalled)
+        public static string EvaluateJson(bool isLegionDevice, bool supportsControllerFeatures, bool pawnIOInstalled,
+                                          bool viiperBackendSelected, bool usbipInstalled)
         {
             try
             {
@@ -77,6 +78,19 @@ namespace XboxGamingBarHelper.Services
                         Id = "pawnio",
                         Message = "PawnIO driver is not installed. Custom TDP and fan control need it.",
                         Action = "pawnio",
+                    });
+                }
+
+                // VIIPER is the default emulation backend since the ViGEm
+                // retirement; without usbip-win2 it stays offline silently, so
+                // surface the prerequisite prominently instead of relying on the
+                // user finding the install card inside the CE tab.
+                if (viiperBackendSelected && !usbipInstalled)
+                {
+                    warnings.Add(new Warning
+                    {
+                        Id = "usbip",
+                        Message = "usbip-win2 driver is not installed. Controller emulation needs it - see the Controller tab to install.",
                     });
                 }
 

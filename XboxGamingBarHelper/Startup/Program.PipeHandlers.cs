@@ -1922,8 +1922,10 @@ namespace XboxGamingBarHelper
                 bool controllerFeatures = (legionManager?.DetectedDevice?.SupportsControllerRemap ?? false)
                                        || (legionManager?.DetectedDevice?.SupportsGyro ?? false);
                 bool pawnIO = performanceManager?.IsPawnIOInstalled ?? true; // assume fine when unknown
+                bool viiperSelected = settingsManager?.EmulationBackend?.Value ?? false;
+                bool usbip = settingsManager?.UsbipInstalled?.Value ?? true; // assume fine when unknown
 
-                string json = Services.SetupHealthService.EvaluateJson(isLegion, controllerFeatures, pawnIO);
+                string json = Services.SetupHealthService.EvaluateJson(isLegion, controllerFeatures, pawnIO, viiperSelected, usbip);
                 if (!force && string.Equals(json, lastSetupWarningsJson, StringComparison.Ordinal)) return;
                 lastSetupWarningsJson = json;
 

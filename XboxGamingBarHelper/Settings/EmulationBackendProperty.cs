@@ -5,7 +5,7 @@ namespace XboxGamingBarHelper.Settings
 {
     /// <summary>
     /// Property to select controller emulation backend.
-    /// Currently a binary toggle: false = Legacy ViGEm (default), true = VIIPER.
+    /// Currently a binary toggle: false = Legacy ViGEm (deprecated), true = VIIPER (default).
     /// Global setting, persisted to LocalSettings.
     /// </summary>
     internal class EmulationBackendProperty : HelperProperty<bool, SettingsManager>
@@ -25,7 +25,25 @@ namespace XboxGamingBarHelper.Settings
             {
                 return value == (int)EmulationBackend.Viiper;
             }
-            return false; // Default to Legacy.
+
+            // No stored choice. The backend key is only written when the user
+            // touches the toggle, so "no key" covers BOTH fresh installs AND
+            // upgraders who used legacy CE under the old legacy-default. The
+            // latter must NOT be silently flipped: they likely lack usbip-win2
+            // and VIIPER would leave their working CE offline. An active CE
+            // toggle (ControllerEmulationEnabled=true) is the tell.
+            if (LocalSettingsHelper.TryGetValue<bool>("ControllerEmulationEnabled", out var ceEnabled) && ceEnabled)
+            {
+                Logger.Info("EmulationBackend: no stored choice but legacy CE is actively enabled — keeping Legacy (upgrade compat)");
+                return false;
+            }
+
+            // Default to VIIPER (ViGEm retirement phase 1, mirroring Handheld
+            // Companion 0.30's move). VIIPER eliminates the ViGEm suspend/resume
+            // input-loss and XInput slot-0 recovery bug classes; without
+            // usbip-win2 it stays offline gracefully and both the CE-tab install
+            // card and the setup-warnings banner point the user at the driver.
+            return true;
         }
 
         private void SaveToSettings()

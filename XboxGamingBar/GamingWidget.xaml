@@ -6027,15 +6027,15 @@
                                                       Toggled="EnableDebugToolsToggle_Toggled"/>
                                     </Grid>
 
-                                    <!-- VIIPER Emulation Backend Toggle (experimental) -->
+                                    <!-- VIIPER Emulation Backend Toggle (default since ViGEm retirement) -->
                                     <Grid Margin="0,16,0,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                            <TextBlock Text="Use VIIPER emulation (Experimental)" FontSize="14" Foreground="#FFC107"/>
-                                            <TextBlock Text="Replaces the legacy ViGEm controller emulation with VIIPER (USBIP-based). Requires usbip-win2." FontSize="11" Foreground="#888888" TextWrapping="Wrap"/>
+                                            <TextBlock Text="Use VIIPER emulation (Default)" FontSize="14" Foreground="#FFC107"/>
+                                            <TextBlock Text="USBIP-based controller emulation. Turning this off falls back to the legacy ViGEm backend (deprecated, will be removed in a future release)." FontSize="11" Foreground="#888888" TextWrapping="Wrap"/>
                                             <!-- Always-visible USBIP status. Driven from helper-side detection
                                                  (XboxGamingBarHelper/Settings/UsbipInstalledProperty.cs) so users
                                                  know the prerequisite state without having to flip the toggle. -->
@@ -6048,7 +6048,7 @@
                                         <ToggleSwitch x:Name="ViiperEmulationToggle"
                                                       Grid.Column="1"
                                                       OnContent="" OffContent=""
-                                                      IsOn="False"/>
+                                                      IsOn="True"/>
                                     </Grid>
 
                                     <!-- USBIP prerequisite card, visible only when VIIPER toggle is on and usbip-win2 is not installed -->
