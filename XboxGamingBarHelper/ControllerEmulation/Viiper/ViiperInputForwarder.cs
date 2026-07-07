@@ -1924,6 +1924,28 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             if ((gp.Buttons & ViiperXInput.DPadLeft) != 0)  buttons |= 0x080000;
             if ((gp.Buttons & ViiperXInput.DPadRight) != 0) buttons |= 0x040000;
 
+            // Landscape Joy-Con SL/SR rail buttons — the two small inner-rail
+            // buttons that become the user's shoulder buttons when holding a
+            // single Joy-Con sideways. NOT L/ZL (those are top-edge buttons
+            // on a real Joy-Con; unreachable in landscape grip).
+            //   joycon-left:  SL=0x200000, SR=0x100000 (left-side buttons byte)
+            //   joycon-right: SL=0x000020, SR=0x000010 (right-side buttons byte)
+            // Source: LeGo2 back paddles, top→SL, bottom→SR.
+            //   left side : Y1 (top) → SL, Y2 (bottom) → SR
+            //   right side: Y3 (top) → SL, M3 (bottom) → SR
+            if (targetType == "joycon-left")
+            {
+                ushort aux = currentAuxButtons;
+                if ((aux & LegionAux.Y1) != 0) buttons |= 0x200000;  // SL
+                if ((aux & LegionAux.Y2) != 0) buttons |= 0x100000;  // SR
+            }
+            else if (targetType == "joycon-right")
+            {
+                ushort aux = currentAuxButtons;
+                if ((aux & LegionAux.Y3) != 0) buttons |= 0x000020;  // SL
+                if ((aux & LegionAux.M3) != 0) buttons |= 0x000010;  // SR
+            }
+
             WriteU32(data, 0, buttons);
 
             WriteI16(data, 4, gp.ThumbLX);
@@ -1931,14 +1953,161 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             WriteI16(data, 8, gp.ThumbRX);
             WriteI16(data, 10, gp.ThumbRY);
 
-            // IMU at bytes 12-23, gyro-first per libviiper switchpro InputState
-            // (GyroXYZ 12-17, AccelXYZ 18-23 — the reverse of ns2pro). WriteSwitchproImu
-            // applies the Joy-Con frame correction (see its summary). Shared by the Pro
-            // Controller and all joycon-* targets (same 24-byte frame).
+            // IMU at bytes 12-23, gyro-first per libviiper switchpro InputState.
+            //
+            // 2026-06-01 — why this transform exists:
+            //
+            // SDL3's HIDAPI Switch driver
+            // (SDL/src/joystick/hidapi/SDL_hidapi_switch.c:2356 SendSensorUpdate)
+            // applies a fixed PlayStation-style remap on gyro AND accel:
+            //   data[0] (SDL_X) = -scale * values[1]   (negated wire Y)
+            //   data[1] (SDL_Y) =  scale * values[2]   (passthrough wire Z)
+            //   data[2] (SDL_Z) = -scale * values[0]   (negated wire X)
+            // expecting a physical Pro Controller held parallel to the ground
+            // (controller frame: BMI's natural axes vs the gameplay-frame the
+            // driver targets).
+            //
+            // The Legion Go 2 is NOT held that way. The user holds it vertically
+            // with the screen facing them — a 90deg-about-pitch rotation off the
+            // Pro Controller's resting orientation. Without an extra frame
+            // correction, Steam would behave as if we were holding a Pro
+            // Controller vertically (unusual gameplay angle), so its gyro→mouse
+            // and motion-aim maps would all feel off-axis.
+            //
+            // Empirically refined live: gyro (-gy, -gx, -gz) on the wire,
+            // accel (-ay, -ax, -az). The Y/Z swap (gy→GyroX, gz→GyroZ) is
+            // the 90deg-about-pitch rotation that maps handheld-vertical to
+            // controller-horizontal; the per-axis negations cancel SDL3's
+            // negations so each physical motion lands on its named SDL axis.
+            // Accel mirrors gyro one-for-one so gravity and the rotation axis
+            // stay perpendicular for Steam's sensor fusion (avoids the
+            // cross-axis bleed we hit on Steam Deck).
+            //
+            // Alt toggle = plain pass-through wire (no SDL inversion / no
+            // handheld→controller rotation). Useful when the downstream
+            // consumer reads the HID report directly without SDL3's Switch
+            // driver in the chain, OR when testing with an actual Pro
+            // Controller-like handheld grip.
             short gx, gy, gz, ax, ay, az;
             if (TryBuildImuCounts(out gx, out gy, out gz, out ax, out ay, out az))
             {
-                WriteSwitchproImu(data, gx, gy, gz, ax, ay, az);
+                bool altConvention = XboxGamingBarHelper.Settings.SettingsManager.GetInstance()?.ViiperAlternateGyroConvention?.Value ?? false;
+                if (altConvention)
+                {
+                    WriteI16(data, 12, gx);
+                    WriteI16(data, 14, gy);
+                    WriteI16(data, 16, gz);
+                    WriteI16(data, 18, ax);
+                    WriteI16(data, 20, ay);
+                    WriteI16(data, 22, az);
+                }
+                else
+                {
+                    // Frame-coherence rule: axis PERMUTATIONS apply to both
+                    // gyro AND accel; pure SIGN FLIPS on rotation polarity
+                    // apply to gyro ONLY (negating accel inverts gravity,
+                    // which cancels the gyro polarity change at the fusion
+                    // layer — net no-op).
+                    //
+                    // Gyro: gy/gz swap (permutation, propagates to accel),
+                    // then gy/gz positive (rotation polarity flips, gyro-only).
+                    // Accel stays at the swapped+negated baseline.
+                    //
+                    // Three Switch-family per-target gyro transforms, all
+                    // sharing the same SDL3 HIDAPI Switch driver chain but
+                    // differing by physical mounting / driver mini-gamepad
+                    // special cases:
+                    //   • switchpro (Pro Controller paired):
+                    //       gyro (gy, -gx, gz)
+                    //   • joycon-pair (combined L+R virtual gamepad):
+                    //       gyro (-gy, +gx, gz) — gx & gy sign flips vs Pro
+                    //   • joycon-left (single Joy-Con mini-gamepad — SDL3
+                    //     applies an extra (X,Z)↔(Z,-X) rotation in
+                    //     HandleMiniControllerStateL, so we pre-swap gx/gz
+                    //     here; ax/az also swap by the permutation rule).
+                    // All accel sign flips (-ay,-ax,-az) shared across modes
+                    // since gravity orientation doesn't change.
+                    short hidGyroX, hidGyroY, hidGyroZ;
+                    short hidAccelX, hidAccelY, hidAccelZ;
+                    switch (targetType)
+                    {
+                        case "joycon-pair":
+                            hidGyroX  = SignedClampToShort(-(int)gy);
+                            hidGyroY  = gx;
+                            hidGyroZ  = gz;
+                            hidAccelX = SignedClampToShort(-(int)ay);
+                            hidAccelY = SignedClampToShort(-(int)ax);
+                            hidAccelZ = SignedClampToShort(-(int)az);
+                            break;
+                        case "joycon-left":
+                            // 2026-06-01 — derived by inverting SDL3's joycon-left
+                            // mini-gamepad transform against the SdlGyroTester
+                            // guided-test mismatches:
+                            //   SDL_X = -wire[12]   SDL_Y = +wire[16]   SDL_Z = +wire[14]
+                            // (Combined PS-frame remap + (X←Z, Z←-X)
+                            // mini-gamepad rotation in SendSensorUpdate.)
+                            //
+                            // After the cyclic shift, ALL three gyro axes need
+                            // to be negated to match the user's source frame
+                            // (sign-flip rule: gyro-only, accel stays — the
+                            // permutation alone keeps gyro/accel frames
+                            // coherent without further accel adjustment).
+                            // Verified live 2026-06-01.
+                            hidGyroX  = SignedClampToShort(-(int)gz);
+                            hidGyroY  = SignedClampToShort(-(int)gy);
+                            hidGyroZ  = SignedClampToShort(-(int)gx);
+                            hidAccelX = az;
+                            hidAccelY = ay;
+                            hidAccelZ = SignedClampToShort(-(int)ax);
+                            break;
+                        case "joycon-right":
+                            // 2026-06-01 — root-cause fix. The LegionMixedGyroMerge
+                            // Right*Sign multipliers only flip signs between
+                            // the left and right gyro chips. They can't fix
+                            // the AXIS PERMUTATION the two chips actually use:
+                            //   • Left chip: pitch on gz, yaw on gx, roll on gy
+                            //     (verified 2539 with left gyro source)
+                            //   • Right chip: pitch on gx, yaw on gy, roll on gz
+                            //     (derived from 2542 joycon-right test summary)
+                            // So the gx/gy/gz values BuildSwitchProInput sees
+                            // when using Right gyro source are in a permuted
+                            // frame compared to Left source. The pure sign
+                            // changes we kept trying couldn't compensate.
+                            //
+                            // For pass-through SDL output, the correct wire is
+                            // (+gx, -gz, +gy) on gyro: SDL3's joycon-right
+                            // mini-gamepad transform (SDL_X=+wire[12],
+                            // SDL_Y=-wire[16], SDL_Z=+wire[14]) then lands
+                            // pitch on +SDL_X, yaw-left on +SDL_Y, roll-right
+                            // on +SDL_Z.
+                            //
+                            // Accel wire matches joycon-left (+az, +ay, -ax):
+                            // SDL3's joycon-right axis flip cancels the source-
+                            // side X-sign difference between the two chips.
+                            hidGyroX  = gx;
+                            hidGyroY  = SignedClampToShort(-(int)gz);
+                            hidGyroZ  = gy;
+                            hidAccelX = az;
+                            hidAccelY = ay;
+                            hidAccelZ = SignedClampToShort(-(int)ax);
+                            break;
+
+                        default:    // switchpro
+                            hidGyroX  = gy;
+                            hidGyroY  = SignedClampToShort(-(int)gx);
+                            hidGyroZ  = gz;
+                            hidAccelX = SignedClampToShort(-(int)ay);
+                            hidAccelY = SignedClampToShort(-(int)ax);
+                            hidAccelZ = SignedClampToShort(-(int)az);
+                            break;
+                    }
+                    WriteI16(data, 12, hidGyroX);
+                    WriteI16(data, 14, hidGyroY);
+                    WriteI16(data, 16, hidGyroZ);
+                    WriteI16(data, 18, hidAccelX);
+                    WriteI16(data, 20, hidAccelY);
+                    WriteI16(data, 22, hidAccelZ);
+                }
             }
             return data;
         }
@@ -2004,6 +2173,9 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             // the DS4 wire which puts gyro first. TryBuildImuCounts returns
             // raw int16 counts in the same BMI160/BMI260 native units that
             // Switch firmware expects, so no scaling factor is needed.
+            //
+            // ns2pro has the opposite IMU layout from legacy switchpro:
+            // AccelXYZ at 12-17, GyroXYZ at 18-23.
             short gx, gy, gz, ax, ay, az;
             if (TryBuildImuCounts(out gx, out gy, out gz, out ax, out ay, out az))
             {
@@ -2109,16 +2281,22 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             short gx, gy, gz, ax, ay, az;
             if (TryBuildImuCounts(out gx, out gy, out gz, out ax, out ay, out az))
             {
-                // Sony gyro frame = the exact routing the SteamDeck path proved correct for
-                // Steam (pitch=+X, yaw=-Z, roll=+Y). Steam is the common consumer, so the same
-                // mapping applies; verified on DS4 + DualSense gyro-to-mouse 2026-05-28. Accel
-                // gets the same transform so the gyro/accel frames stay coherent for fusion.
-                WriteI16(data, 19, gx);                              // gyro pitch (X)
-                WriteI16(data, 21, SignedClampToShort(-(int)gz));    // gyro yaw  <- -Z
-                WriteI16(data, 23, gy);                              // gyro roll <- +Y
+                // 2026-05-31: minimal-delta from upstream — gyro Y/Z signs flipped
+                // (yaw was -gz, now +gz; roll was +gy, now -gy). Accel left
+                // unchanged from upstream's working pattern so we only touch
+                // the two axes that felt inverted with native in-game gyro aim.
+                //
+                // ViiperAlternateGyroConvention inverts gyro Y/Z back to the
+                // upstream pattern (yaw=-gz, roll=+gy) — Steam Input's
+                // gyro-to-mouse mapping sometimes wants the opposite polarity
+                // from native in-game gyro aim. Default false = native-correct.
+                bool altConvention = XboxGamingBarHelper.Settings.SettingsManager.GetInstance()?.ViiperAlternateGyroConvention?.Value ?? false;
+                WriteI16(data, 19, gx);                                                                                   // gyro pitch (X)
+                WriteI16(data, 21, altConvention ? SignedClampToShort(-(int)gz) : gz);                                    // gyro yaw  — default +gz, alt -gz
+                WriteI16(data, 23, altConvention ? gy                           : SignedClampToShort(-(int)gy));          // gyro roll — default -gy, alt +gy
                 WriteI16(data, 25, ScaleDs4Accel(ax));
-                WriteI16(data, 27, ScaleDs4Accel(SignedClampToShort(-(int)az)));  // accel Y-slot <- -Z
-                WriteI16(data, 29, ScaleDs4Accel(ay));               // accel Z-slot <- +Y
+                WriteI16(data, 27, ScaleDs4Accel(SignedClampToShort(-(int)az)));                                          // accel Y-slot <- -Z (unchanged)
+                WriteI16(data, 29, ScaleDs4Accel(ay));                                                                    // accel Z-slot <- +Y (unchanged)
             }
             return data;
         }
@@ -2177,16 +2355,19 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             }
 
             // DSE IMU bytes at offsets 21..32. Same yaw/roll (gy<->gz) frame swap as DS4/DS5.
+            // ViiperAlternateGyroConvention honored same as DS4 builder: default
+            // = native-correct (yaw=+gz, roll=-gy); on = upstream/legacy
+            // (yaw=-gz, roll=+gy) for Steam Input gyro-to-mouse.
             short gx, gy, gz, ax, ay, az;
             if (TryBuildImuCounts(out gx, out gy, out gz, out ax, out ay, out az))
             {
-                // Same SteamDeck-verified Sony gyro frame as DS4 (pitch=+X, yaw=-Z, roll=+Y).
-                WriteI16(data, 21, gx);                              // gyro pitch (X)
-                WriteI16(data, 23, SignedClampToShort(-(int)gz));    // gyro yaw  <- -Z
-                WriteI16(data, 25, gy);                              // gyro roll <- +Y
+                bool altConvention = XboxGamingBarHelper.Settings.SettingsManager.GetInstance()?.ViiperAlternateGyroConvention?.Value ?? false;
+                WriteI16(data, 21, gx);                                                                                   // gyro pitch (X)
+                WriteI16(data, 23, altConvention ? SignedClampToShort(-(int)gz) : gz);                                    // gyro yaw  — default +gz, alt -gz
+                WriteI16(data, 25, altConvention ? gy                           : SignedClampToShort(-(int)gy));          // gyro roll — default -gy, alt +gy
                 WriteI16(data, 27, ScaleDs4Accel(ax));
-                WriteI16(data, 29, ScaleDs4Accel(SignedClampToShort(-(int)az)));  // accel Y-slot <- -Z
-                WriteI16(data, 31, ScaleDs4Accel(ay));               // accel Z-slot <- +Y
+                WriteI16(data, 29, ScaleDs4Accel(SignedClampToShort(-(int)az)));                                          // accel Y-slot <- -Z
+                WriteI16(data, 31, ScaleDs4Accel(ay));                                                                    // accel Z-slot <- +Y
             }
             return data;
         }
@@ -2378,16 +2559,19 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             // Offsets 16..20 stay zero — reserved bytes on DS5 wire.
 
             // IMU at 21..32, same scaling and yaw/roll (gy<->gz) frame swap as DSE/DS4.
+            // ViiperAlternateGyroConvention honored same as DS4 builder: default
+            // = native-correct (yaw=+gz, roll=-gy); on = upstream/legacy
+            // (yaw=-gz, roll=+gy) for Steam Input gyro-to-mouse.
             short gx, gy, gz, ax, ay, az;
             if (TryBuildImuCounts(out gx, out gy, out gz, out ax, out ay, out az))
             {
-                // Same SteamDeck-verified Sony gyro frame as DS4 (pitch=+X, yaw=-Z, roll=+Y).
-                WriteI16(data, 21, gx);                              // gyro pitch (X)
-                WriteI16(data, 23, SignedClampToShort(-(int)gz));    // gyro yaw  <- -Z
-                WriteI16(data, 25, gy);                              // gyro roll <- +Y
+                bool altConvention = XboxGamingBarHelper.Settings.SettingsManager.GetInstance()?.ViiperAlternateGyroConvention?.Value ?? false;
+                WriteI16(data, 21, gx);                                                                                   // gyro pitch (X)
+                WriteI16(data, 23, altConvention ? SignedClampToShort(-(int)gz) : gz);                                    // gyro yaw  — default +gz, alt -gz
+                WriteI16(data, 25, altConvention ? gy                           : SignedClampToShort(-(int)gy));          // gyro roll — default -gy, alt +gy
                 WriteI16(data, 27, ScaleDs4Accel(ax));
-                WriteI16(data, 29, ScaleDs4Accel(SignedClampToShort(-(int)az)));  // accel Y-slot <- -Z
-                WriteI16(data, 31, ScaleDs4Accel(ay));               // accel Z-slot <- +Y
+                WriteI16(data, 29, ScaleDs4Accel(SignedClampToShort(-(int)az)));                                          // accel Y-slot <- -Z
+                WriteI16(data, 31, ScaleDs4Accel(ay));                                                                    // accel Z-slot <- +Y
             }
             return data;
         }
@@ -2553,10 +2737,19 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
         private byte[] BuildSteamDeckInput(ViiperXInputGamepad gp)
         {
             var data = new byte[64];
+            // ValveInReportHeader: unReportVersion=0x0001 LE, ucType=ID_CONTROLLER_DECK_STATE=9,
+            // ucLength=64 (NOT 56 — 56 is the Steam Controller pre-Deck report length).
+            // SDL3's HIDAPI Steam Deck driver gates every report at
+            // src/joystick/hidapi/SDL_hidapi_steamdeck.c:394-397 on
+            //   r == 64 && unReportVersion==1 && ucType==9 && ucLength==64
+            // A wrong ucLength (we previously wrote 0x38=56) silently drops EVERY report,
+            // which is why SDL_GamepadHasSensor returned true (driver bound) but
+            // SDL_GetGamepadSensorData was reading all zeros — the data pipeline was
+            // never receiving a parsed input frame.
             data[0] = 0x01;
             data[1] = 0x00;
             data[2] = 0x09;
-            data[3] = 0x38;
+            data[3] = 0x40;
             // Time-based frame: real elapsed wall-clock in 4ms (Deck tick) units so Steam
             // integrates gyro against true time regardless of our send rate. See the field
             // declaration for why a per-report ++ halves gyro speed on our 125Hz HID.
@@ -2651,33 +2844,30 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             short gx, gy, gz, ax, ay, az;
             if (TryBuildImuCounts(out gx, out gy, out gz, out ax, out ay, out az))
             {
-                // SteamDeck frame correction (#78 / gyro investigation 2026-05-27): the Legion
-                // BMI parser labels axes in the flat-on-PCB frame, but the Steam Deck gyro
-                // convention is the held-vertical gameplay frame — a ~90deg rotation about the
-                // pitch (X) axis that maps (Y,Z) -> (-Z,+Y). Without it, physical roll lands in
-                // Steam's yaw slot. Applied to gyro AND accel together so the IMU vector stays
-                // coherent. Pitch (X) is unchanged.
-                // Accel frame alignment for sensor fusion: the Legion parser negates the GYRO
-                // X/Y (per-side mirror correction) but leaves the ACCEL in raw BMI convention
-                // ("Accel passes through untouched" — LegionButtonMonitor). Steam's Gyro→Joystick
-                // (Deflection) mode FUSES gyro+accel to find gravity, so a mismatched gyro/accel
-                // frame yields a wrong gravity reference → canted/heavy/fast-recentering deflection.
-                // Negate accel X/Y so it shares the gyro's frame.
+                // 2026-06-01 — gyro and accel rotated together so Steam's sensor
+                // fusion sees a coherent frame. Earlier "gyro-only rotation" left
+                // gravity on the wrong device axis vs the rotated gyro frame, so
+                // Steam's gyro calibration attributed part of every physical yaw to
+                // its roll channel (yaw axis didn't align with the accel-derived
+                // "down" vector). Applying the same 90deg-about-X rotation
+                // (Y,Z) -> (-Z,+Y) to both gyro AND accel keeps the gravity vector
+                // and the yaw axis perpendicular, which is what the fusion expects.
                 //
-                // Accel magnitude: the Legion BMI runs at +/-8g (4096 counts/g), but the Steam
-                // Deck wire format is +/-2g (16384 counts/g — HHD virtual/sd/const.py uses
-                // scale=16384/9.80665, InputPlumber's Deck driver uses ACCEL_SCALE=0.0006125 m/s2
-                // ~= 16016 counts/g). A live SDIMU capture (2026-05-28) showed gravity at rest at
-                // ~4017 counts = 0.245g = exactly 1/4 strength. Steam's gyro fusion derives "down"
-                // from this vector, so a quarter-strength gravity made deflection/camera recenter
-                // too fast and feel heavy. Multiply accel by 4 to reach Deck's +/-2g scale.
-                // Gyro is already Deck-native (~16 counts/dps) so it is left unscaled.
-                short wAx = SignedClampToShort(-(int)ax * SteamDeckAccelScale);   // accel X (gyro-frame aligned: -X)
-                short wAy = SignedClampToShort(-(int)az * SteamDeckAccelScale);   // accel Y <- -Z
-                short wAz = SignedClampToShort(-(int)ay * SteamDeckAccelScale);   // accel Z <- +Y, negated to match gyro frame
-                short wGx = gx;                                       // gyro Pitch (X)
-                short wGy = SignedClampToShort(-(int)gz);             // gyro Yaw <- -Z (shares accel Y's -Z frame; verified gyro->mouse 2026-05-28)
-                short wGz = gy;                                       // gyro Roll <- +Y
+                // Toggle ON (ViiperAlternateGyroConvention) flips both back to plain
+                // pass-through (1:1 in SdlGyroTester via SDL3's internal driver remap).
+                //
+                // Accel magnitude: Legion BMI is +/-8g and Deck wire is +/-2g, so
+                // multiply by SteamDeckAccelScale (=4) to reach Deck-native gravity.
+                bool altConvention = XboxGamingBarHelper.Settings.SettingsManager.GetInstance()?.ViiperAlternateGyroConvention?.Value ?? false;
+                int axOut = (int)ax;
+                int ayOut = altConvention ? (int)ay : -(int)az;   // default rotated, alt pass-through
+                int azOut = altConvention ? (int)az :  (int)ay;   // default rotated, alt pass-through
+                short wAx = SignedClampToShort(axOut * SteamDeckAccelScale);
+                short wAy = SignedClampToShort(ayOut * SteamDeckAccelScale);
+                short wAz = SignedClampToShort(azOut * SteamDeckAccelScale);
+                short wGx = gx;
+                short wGy = altConvention ? gy : SignedClampToShort(-(int)gz);  // default rotated yaw=-gz, alt pass-through
+                short wGz = altConvention ? gz : gy;                            // default rotated roll=+gy, alt pass-through
                 WriteI16(data, 24, wAx);
                 WriteI16(data, 26, wAy);
                 WriteI16(data, 28, wAz);
