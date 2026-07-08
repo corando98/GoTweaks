@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10" xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest" xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10" xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities" xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10" xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3" IgnorableNamespaces="uap uap3 mp rescap">
-  <Identity Name="PlayandBuildCustom.10365195AA1EC" Publisher="CN=dg" Version="0.3.2564.0" />
+  <Identity Name="PlayandBuildCustom.10365195AA1EC" Publisher="CN=dg" Version="0.3.2565.0" />
   <mp:PhoneIdentity PhoneProductId="c2dd2cd0-7156-428e-b305-d3dd3505b10d" PhonePublisherId="00000000-0000-0000-0000-000000000000" />
   <Properties>
     <DisplayName>GoTweaks</DisplayName>

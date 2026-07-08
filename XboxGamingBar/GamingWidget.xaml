@@ -4084,13 +4084,17 @@
                                         <TextBlock Text="Driver dependencies"
                                                    FontSize="11"
                                                    Foreground="#AAAAAA"/>
-                                        <TextBlock Text="ViGEmBus powers virtual controllers. HidHide avoids double-input from stock controllers."
+                                        <TextBlock Text="usbip-win2 powers virtual controllers. HidHide avoids double-input from stock controllers."
                                                    FontSize="11"
                                                    Foreground="#888888"
                                                    TextWrapping="Wrap"
                                                    Margin="0,2,0,0"/>
 
-                                        <Grid Margin="0,8,0,0">
+                                        <!-- ViGEmBus row hidden: the ViGEm backend is retired (VIIPER/usbip
+                                             is the only backend). Controls kept for code-behind bindings;
+                                             remove together with InstallViGEmBusProperty in the dead-code
+                                             cleanup pass. -->
+                                        <Grid Margin="0,8,0,0" Visibility="Collapsed">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="Auto"/>
@@ -6027,18 +6031,21 @@
                                                       Toggled="EnableDebugToolsToggle_Toggled"/>
                                     </Grid>
 
-                                    <!-- VIIPER Emulation Backend Toggle (default since ViGEm retirement) -->
+                                    <!-- VIIPER backend info. The Legacy/VIIPER toggle is retired — VIIPER
+                                         is the only emulation backend (ViGEm retirement final). The hidden
+                                         ToggleSwitch stays for the property binding; the helper clamps any
+                                         Legacy value back to VIIPER regardless. -->
                                     <Grid Margin="0,16,0,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                            <TextBlock Text="Use VIIPER emulation (Default)" FontSize="14" Foreground="#FFC107"/>
-                                            <TextBlock Text="USBIP-based controller emulation. Turning this off falls back to the legacy ViGEm backend (deprecated, will be removed in a future release)." FontSize="11" Foreground="#888888" TextWrapping="Wrap"/>
+                                            <TextBlock Text="Controller emulation backend: VIIPER" FontSize="14" Foreground="#FFC107"/>
+                                            <TextBlock Text="USBIP-based virtual controllers. Requires the usbip-win2 driver." FontSize="11" Foreground="#888888" TextWrapping="Wrap"/>
                                             <!-- Always-visible USBIP status. Driven from helper-side detection
                                                  (XboxGamingBarHelper/Settings/UsbipInstalledProperty.cs) so users
-                                                 know the prerequisite state without having to flip the toggle. -->
+                                                 know the prerequisite state at a glance. -->
                                             <TextBlock x:Name="UsbipPrereqStatusLine"
                                                        FontSize="11"
                                                        Margin="0,4,0,0"
@@ -6048,7 +6055,8 @@
                                         <ToggleSwitch x:Name="ViiperEmulationToggle"
                                                       Grid.Column="1"
                                                       OnContent="" OffContent=""
-                                                      IsOn="True"/>
+                                                      IsOn="True"
+                                                      Visibility="Collapsed"/>
                                     </Grid>
 
                                     <!-- USBIP prerequisite card, visible only when VIIPER toggle is on and usbip-win2 is not installed -->
