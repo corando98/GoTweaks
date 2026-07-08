@@ -52,7 +52,7 @@ namespace XboxGamingBarHelper.Services
         /// when everything is healthy. Never throws.
         /// </summary>
         public static string EvaluateJson(bool isLegionDevice, bool supportsControllerFeatures, bool pawnIOInstalled,
-                                          bool viiperBackendSelected, bool usbipInstalled)
+                                          bool usbipNeeded, bool usbipInstalled)
         {
             try
             {
@@ -82,10 +82,11 @@ namespace XboxGamingBarHelper.Services
                 }
 
                 // VIIPER is the default emulation backend since the ViGEm
-                // retirement; without usbip-win2 it stays offline silently, so
+                // retirement, and it also serves the Legion-button Guide route on
+                // every backend; without usbip-win2 both stay offline silently, so
                 // surface the prerequisite prominently instead of relying on the
                 // user finding the install card inside the CE tab.
-                if (viiperBackendSelected && !usbipInstalled)
+                if (usbipNeeded && !usbipInstalled)
                 {
                     warnings.Add(new Warning
                     {

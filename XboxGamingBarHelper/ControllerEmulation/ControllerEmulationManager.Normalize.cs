@@ -888,6 +888,14 @@ namespace XboxGamingBarHelper.ControllerEmulation
 
             StartForwarding();
 
+            // The pad target just (re)connected — possibly changing whether this
+            // legacy pad can carry the Xbox Guide route (Xbox360 target: yes;
+            // DS4: no). Re-run the VIIPER guide-only reconciliation so the Guide
+            // route hands over without waiting for another trigger. Replaces the
+            // retired 500ms ViGEm reconcile poll in LegionButtonMonitor.
+            try { Program.NotifyGuideRouteChanged(); }
+            catch (Exception ex) { Logger.Debug($"StartForwarding NotifyGuideRouteChanged threw: {ex.Message}"); }
+
             if (!hideStockController)
             {
                 suppressionPausedForGameBar = false;
@@ -1071,6 +1079,12 @@ namespace XboxGamingBarHelper.ControllerEmulation
                     // Ignore disposal failures on shutdown.
                 }
                 virtualController = null;
+
+                // Legacy pad gone — if a Legion button maps to Xbox Guide, the
+                // VIIPER guide-only pad must take the route over. Mirrors the
+                // notify in the connect path.
+                try { Program.NotifyGuideRouteChanged(); }
+                catch (Exception ex) { Logger.Debug($"StopForwarding NotifyGuideRouteChanged threw: {ex.Message}"); }
             }
 
             if (hasForwardedLed && !preserveVirtualController)

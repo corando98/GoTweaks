@@ -1922,10 +1922,14 @@ namespace XboxGamingBarHelper
                 bool controllerFeatures = (legionManager?.DetectedDevice?.SupportsControllerRemap ?? false)
                                        || (legionManager?.DetectedDevice?.SupportsGyro ?? false);
                 bool pawnIO = performanceManager?.IsPawnIOInstalled ?? true; // assume fine when unknown
-                bool viiperSelected = settingsManager?.EmulationBackend?.Value ?? false;
+                // usbip is needed when VIIPER is the selected backend OR a Legion
+                // button maps to Xbox Guide (VIIPER's guide-only pad serves that
+                // route on every backend since the ViGEm retirement).
+                bool usbipNeeded = (settingsManager?.EmulationBackend?.Value ?? false)
+                                || (legionButtonMonitor?.HasGuideActionConfigured ?? false);
                 bool usbip = settingsManager?.UsbipInstalled?.Value ?? true; // assume fine when unknown
 
-                string json = Services.SetupHealthService.EvaluateJson(isLegion, controllerFeatures, pawnIO, viiperSelected, usbip);
+                string json = Services.SetupHealthService.EvaluateJson(isLegion, controllerFeatures, pawnIO, usbipNeeded, usbip);
                 if (!force && string.Equals(json, lastSetupWarningsJson, StringComparison.Ordinal)) return;
                 lastSetupWarningsJson = json;
 

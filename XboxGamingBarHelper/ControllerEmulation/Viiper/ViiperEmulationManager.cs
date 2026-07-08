@@ -280,7 +280,14 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
                     return;
                 }
 
-                if (backendOn && !emulationEnabled && LabsHasGuideConfigured())
+                // Guide-only no longer requires backend=VIIPER (ViGEm retirement
+                // phase 2: the dedicated Guide-only ViGEm pad in LegionButtonMonitor
+                // is gone, so this pad serves the Guide route on EVERY backend).
+                // Skip only when the legacy CE's own full pad already owns Guide
+                // (backend=Legacy + CE on + xbox pad plugged) — mirroring the old
+                // NeedsViGEm exclusion so we never run two virtual pads for one route.
+                bool legacyPadOwnsGuide = ControllerEmulationManager.CanHandleExternalGuide();
+                if (LabsHasGuideConfigured() && !legacyPadOwnsGuide)
                 {
                     if (isRunning) StopLocked();
                     StartGuideOnly();
