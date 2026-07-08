@@ -101,7 +101,6 @@ namespace XboxGamingBarHelper.ControllerEmulation
         private byte lastForwardedLedB;
         private bool hasForwardedLed;
 
-        private ViGEmController virtualController;
         private readonly ControllerSuppressionManager suppressionManager;
 
         /// <summary>
@@ -152,7 +151,6 @@ namespace XboxGamingBarHelper.ControllerEmulation
         private int gameBarForegroundConsecutiveTicks;
         private int nonGameBarForegroundConsecutiveTicks;
         private readonly HashSet<string> virtualXboxBridgeDeviceIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        private readonly object virtualControllerSync = new object();
         private readonly object rumbleSync = new object();
         private readonly uint[] lastPacketByController = new uint[4];
         private long lastLegionHidSampleTimestampTicksUtc;
@@ -704,54 +702,18 @@ namespace XboxGamingBarHelper.ControllerEmulation
             return instance?.CanHandleExternalGuideInternal() ?? false;
         }
 
+        // ViGEm retirement: the legacy manager never owns a virtual pad
+        // anymore, so it can never carry the Guide route. Constant-false
+        // keeps the delivery-tier call sites (LegionButtonMonitor) and
+        // ViiperEmulationManager.ReapplyMode's exclusion working unchanged.
         private bool CanHandleExternalGuideInternal()
         {
-            return enabled && mode == 1 && virtualController != null;
+            return false;
         }
 
         private bool TrySetGuideFromExternalInternal(bool pressed)
         {
-            if (!CanHandleExternalGuideInternal())
-            {
-                return false;
-            }
-
-            var controller = virtualController;
-            if (controller == null)
-            {
-                return false;
-            }
-
-            lock (virtualControllerSync)
-            {
-                if (!ReferenceEquals(controller, virtualController))
-                {
-                    return false;
-                }
-
-                bool ok = controller.SetGuide(pressed);
-                if (ok)
-                {
-                    if (pressed && ShouldManageSuppression())
-                    {
-                        if (GuideTriggeredSuppressionPauseEnabled)
-                        {
-                            suppressionPauseUntilTicksUtc = DateTime.UtcNow.AddSeconds(GuideSuppressionPauseSeconds).Ticks;
-                            Logger.Info($"Controller suppression guide pause armed for {GuideSuppressionPauseSeconds}s");
-                            TryPauseSuppressionForForegroundGameBar("guide pressed");
-                        }
-                        else
-                        {
-                            suppressionPauseUntilTicksUtc = 0;
-                            Logger.Debug("Controller suppression guide-triggered unhide skipped (foreground-only test mode)");
-                        }
-                    }
-
-                    Logger.Debug($"Controller emulation guide routed to active virtual controller: pressed={pressed}");
-                }
-
-                return ok;
-            }
+            return false;
         }
 
         private void ResetGyroActivationRuntimeState()

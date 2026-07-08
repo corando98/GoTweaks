@@ -508,200 +508,15 @@ namespace XboxGamingBarHelper.ControllerEmulation
             return (short)Math.Max(short.MinValue, Math.Min(short.MaxValue, Math.Round(raw)));
         }
 
+        // ViGEm retirement: no virtual pad exists on the legacy manager. The
+        // callers of these helpers are themselves unreachable (forwarding loop
+        // deleted), but they still compile — constant null/false keeps them
+        // harmless until the remaining dead callers are swept.
         private int? TryGetVirtualXboxUserIndexSafe()
         {
-            if (virtualController == null)
-            {
-                return null;
-            }
-
-            try
-            {
-                return virtualController.VirtualXboxUserIndex;
-            }
-            catch (Exception ex)
-            {
-                Logger.Debug($"Controller emulation virtual Xbox index read failed: {ex.GetType().Name}: {ex.Message}");
-                return null;
-            }
+            return null;
         }
 
-        private bool SubmitXboxState(
-            ushort buttons,
-            byte leftTrigger,
-            byte rightTrigger,
-            short leftThumbX,
-            short leftThumbY,
-            short rightThumbX,
-            short rightThumbY)
-        {
-            var controller = virtualController;
-            if (controller == null)
-            {
-                return false;
-            }
-
-            lock (virtualControllerSync)
-            {
-                if (!ReferenceEquals(controller, virtualController))
-                {
-                    return false;
-                }
-
-                return controller.SubmitXboxState(
-                    buttons,
-                    leftTrigger,
-                    rightTrigger,
-                    leftThumbX,
-                    leftThumbY,
-                    rightThumbX,
-                    rightThumbY);
-            }
-        }
-
-        private bool SubmitDualShock4StateRaw(
-            ushort buttons,
-            byte leftTrigger,
-            byte rightTrigger,
-            short leftThumbX,
-            short leftThumbY,
-            short rightThumbX,
-            short rightThumbY,
-            short gyroXRaw,
-            short gyroYRaw,
-            short gyroZRaw,
-            short accelXRaw,
-            short accelYRaw,
-            short accelZRaw,
-            bool touchActive,
-            ushort touchX,
-            ushort touchY,
-            bool touchpadButtonPressed = false)
-        {
-            var controller = virtualController;
-            if (controller == null)
-            {
-                return false;
-            }
-
-            lock (virtualControllerSync)
-            {
-                if (!ReferenceEquals(controller, virtualController))
-                {
-                    return false;
-                }
-
-                return controller.SubmitDualShock4StateRaw(
-                    buttons,
-                    leftTrigger,
-                    rightTrigger,
-                    leftThumbX,
-                    leftThumbY,
-                    rightThumbX,
-                    rightThumbY,
-                    gyroXRaw,
-                    gyroYRaw,
-                    gyroZRaw,
-                    accelXRaw,
-                    accelYRaw,
-                    accelZRaw,
-                    touchActive,
-                    touchX,
-                    touchY,
-                    touchpadButtonPressed);
-            }
-        }
-
-        private void OnVirtualControllerRumbleReceived(byte largeMotor, byte smallMotor)
-        {
-            try
-            {
-                if (!enabled || !RequiresVirtualGamepad(mode))
-                {
-                    return;
-                }
-
-                ApplyRumbleProfile(ref largeMotor, ref smallMotor);
-
-                long nowTicksUtc = DateTime.UtcNow.Ticks;
-                lock (rumbleSync)
-                {
-                    bool unchanged = largeMotor == lastRumbleLargeMotor && smallMotor == lastRumbleSmallMotor;
-                    if (unchanged && (nowTicksUtc - lastRumbleDispatchTicksUtc) < RumbleDispatchMinTicks)
-                    {
-                        return;
-                    }
-
-                    lastRumbleLargeMotor = largeMotor;
-                    lastRumbleSmallMotor = smallMotor;
-                    lastRumbleDispatchTicksUtc = nowTicksUtc;
-                }
-
-                // Always forward rumble to the physical controller path only.
-                // Do not mutate Legion EC vibration level from emulation runtime.
-                bool forwarded = TryForwardPhysicalXInputRumble(largeMotor, smallMotor);
-
-                if (!forwarded && (largeMotor > 0 || smallMotor > 0))
-                {
-                    Logger.Debug($"Controller emulation rumble dropped (large={largeMotor}, small={smallMotor})");
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Debug($"Controller emulation rumble handling failed: {ex.Message}");
-            }
-        }
-
-        private void OnVirtualControllerLedReceived(byte red, byte green, byte blue)
-        {
-            try
-            {
-                if (!ledForwardingEnabled)
-                {
-                    return;
-                }
-
-                if (hasForwardedLed && red == lastForwardedLedR && green == lastForwardedLedG && blue == lastForwardedLedB)
-                {
-                    return;
-                }
-
-                Logger.Info($"LED forwarding: ({red},{green},{blue}) to Legion controller");
-
-                lastForwardedLedR = red;
-                lastForwardedLedG = green;
-                lastForwardedLedB = blue;
-                hasForwardedLed = true;
-
-                if (deviceType == SharedDeviceType.LegionGo || deviceType == SharedDeviceType.LegionGo2)
-                {
-                    byte r = red, g = green, b = blue;
-                    System.Threading.Tasks.Task.Run(() =>
-                    {
-                        try
-                        {
-                            using (var controller = new LegionGoController())
-                            {
-                                if (!controller.Connect())
-                                {
-                                    Logger.Warn("Controller emulation LED forwarding: controller not connected");
-                                    return;
-                                }
-                                controller.SetStickLightBoth(StickLightMode.Solid, r, g, b);
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            Logger.Warn($"Controller emulation LED forwarding failed: {ex.Message}");
-                        }
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Warn($"Controller emulation LED callback failed: {ex.Message}");
-            }
-        }
 
         private void RevertLegionLed()
         {
@@ -1018,28 +833,8 @@ namespace XboxGamingBarHelper.ControllerEmulation
                 return false;
             }
 
-            if (!virtualXboxUserIndex.HasValue && mode == 1 && virtualController != null)
-            {
-                int? reportedVirtualIndex = TryGetVirtualXboxUserIndexSafe();
-                if (reportedVirtualIndex.HasValue)
-                {
-                    virtualXboxUserIndex = reportedVirtualIndex;
-                    if (physicalXboxUserIndex.HasValue && physicalXboxUserIndex.Value == virtualXboxUserIndex.Value)
-                    {
-                        physicalXboxUserIndex = null;
-                    }
-
-                    Logger.Info($"Controller emulation virtual Xbox index resolved at runtime: {virtualXboxUserIndex.Value}");
-                }
-            }
-
-            bool virtualIndexUnknown = mode == 1 && virtualController != null && !virtualXboxUserIndex.HasValue;
-            if (virtualIndexUnknown && !physicalXboxUserIndex.HasValue)
-            {
-                // Avoid selecting the virtual Xbox device as physical input while its XInput index
-                // is still being reported by ViGEm. This prevents self-feedback/stuck input loops.
-                return false;
-            }
+            // (ViGEm retirement: no legacy virtual pad exists, so the old
+            // virtual-vs-physical XInput index disambiguation is gone.)
 
             bool hasLockedState = false;
             XINPUT_STATE lockedState = default;

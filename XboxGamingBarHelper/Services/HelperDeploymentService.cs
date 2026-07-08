@@ -111,7 +111,6 @@ namespace XboxGamingBarHelper.Services
             // Managed DLLs
             "LibreHardwareMonitorLib.dll",
             "HidSharp.dll",
-            "Nefarius.ViGEm.Client.dll",
             "RTSSSharedMemoryNET.dll",
             "RAMSPDToolkit-NDD.dll",
             // System dependencies

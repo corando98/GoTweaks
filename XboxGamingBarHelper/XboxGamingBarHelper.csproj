@@ -97,9 +97,6 @@
     <Reference Include="RTSSSharedMemoryNET">
       <HintPath>.\RTSSSharedMemoryNET.dll</HintPath>
     </Reference>
-    <Reference Include="Nefarius.ViGEm.Client">
-      <HintPath>..\packages\Nefarius.ViGEm.Client.1.21.256\lib\netstandard2.0\Nefarius.ViGEm.Client.dll</HintPath>
-    </Reference>
     <Reference Include="Nefarius.Drivers.HidHide">
       <HintPath>..\packages\Nefarius.Drivers.HidHide.1.8.59\lib\netstandard2.0\Nefarius.Drivers.HidHide.dll</HintPath>
     </Reference>
@@ -700,7 +697,6 @@
     <Compile Include="DefaultGameProfiles\DefaultGameProfileService.cs" />
     <Compile Include="DefaultGameProfiles\DefaultGameProfileProperties.cs" />
     <Compile Include="DefaultGameProfiles\DefaultGameProfileManager.cs" />
-    <Compile Include="Labs\ViGEmController.cs" />
     <Compile Include="Labs\LegionButtonMonitor.cs" />
     <Compile Include="Labs\LegionInputButtons.cs" />
     <Compile Include="Labs\LegionLightingManager.cs" />
