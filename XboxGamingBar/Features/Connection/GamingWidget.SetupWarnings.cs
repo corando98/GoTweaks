@@ -43,9 +43,24 @@ namespace XboxGamingBar
                     ? first.Message
                     : $"{first.Message} (+{currentSetupWarnings.Count - 1} more issue{(currentSetupWarnings.Count > 2 ? "s" : "")})";
 
-                bool hasPawnIOAction = currentSetupWarnings.Any(w => w.Action == "pawnio");
-                SetupWarningsActionButton.Content = "Install PawnIO";
-                SetupWarningsActionButton.Visibility = hasPawnIOAction ? Visibility.Visible : Visibility.Collapsed;
+                // One action button; when several warnings carry actions, the
+                // first actionable one wins (the banner cycles as they resolve).
+                var actionable = currentSetupWarnings.FirstOrDefault(w => !string.IsNullOrEmpty(w.Action));
+                if (actionable?.Action == "pawnio")
+                {
+                    SetupWarningsActionButton.Content = "Install PawnIO";
+                    SetupWarningsActionButton.Visibility = Visibility.Visible;
+                }
+                else if (actionable?.Action == "usbip")
+                {
+                    SetupWarningsActionButton.Content = "Install usbip-win2";
+                    SetupWarningsActionButton.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    SetupWarningsActionButton.Visibility = Visibility.Collapsed;
+                }
+                SetupWarningsActionButton.IsEnabled = true;
 
                 SetupWarningsBanner.Visibility = Visibility.Visible;
                 Logger.Info($"[SETUP] Warning banner shown: {key}");
@@ -60,7 +75,8 @@ namespace XboxGamingBar
         {
             try
             {
-                if (currentSetupWarnings.Any(w => w.Action == "pawnio"))
+                var actionable = currentSetupWarnings.FirstOrDefault(w => !string.IsNullOrEmpty(w.Action));
+                if (actionable?.Action == "pawnio")
                 {
                     Logger.Info("[SETUP] Install PawnIO requested from warning banner");
                     installPawnIO?.TriggerInstall();
@@ -69,10 +85,34 @@ namespace XboxGamingBar
                     // Helper restarts itself after a successful install; the next
                     // SetupWarnings push re-evaluates and clears the banner.
                 }
+                else if (actionable?.Action == "usbip")
+                {
+                    Logger.Info("[SETUP] Install usbip-win2 requested from warning banner");
+                    installUsbip?.TriggerInstall();
+                    SetupWarningsActionButton.Content = "Installing...";
+                    SetupWarningsActionButton.IsEnabled = false;
+                    // Helper refreshes UsbipInstalled + re-pushes SetupWarnings when
+                    // the installer exits; the banner updates (or clears) from that.
+                }
             }
             catch (Exception ex)
             {
                 Logger.Warn($"SetupWarningsActionButton_Click failed: {ex.Message}");
+            }
+        }
+
+        private void UsbipInstallButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Logger.Info("[SETUP] Install usbip-win2 requested from CE-tab card");
+                installUsbip?.TriggerInstall();
+                UsbipInstallButton.Content = "Installing...";
+                UsbipInstallButton.IsEnabled = false;
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"UsbipInstallButton_Click failed: {ex.Message}");
             }
         }
 

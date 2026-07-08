@@ -90,7 +90,8 @@ namespace XboxGamingBarHelper.Services
                     warnings.Add(new Warning
                     {
                         Id = "usbip",
-                        Message = "usbip-win2 driver is not installed. Controller emulation needs it - see the Controller tab to install.",
+                        Message = "usbip-win2 driver is not installed. Controller emulation needs it (a reboot may be required after install).",
+                        Action = "usbip",
                     });
                 }
 

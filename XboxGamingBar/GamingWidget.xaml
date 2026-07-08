@@ -6062,11 +6062,23 @@
                                             Margin="0,8,0,0">
                                         <StackPanel>
                                             <TextBlock Text="⚠ usbip-win2 required" FontSize="13" FontWeight="SemiBold" Foreground="#FFC107"/>
-                                            <TextBlock Text="VIIPER emulation needs the usbip-win2 kernel driver. Install it once, reboot, then come back here."
+                                            <TextBlock Text="Controller emulation needs the usbip-win2 kernel driver. Install it once, reboot, then come back here."
                                                        FontSize="11" Foreground="#CCCCCC" TextWrapping="Wrap" Margin="0,4,0,8"/>
-                                            <HyperlinkButton x:Name="UsbipInstallLink"
-                                                             Content="Open usbip-win2 releases"
-                                                             NavigateUri="https://github.com/vadimgrn/usbip-win2/releases"/>
+                                            <StackPanel Orientation="Horizontal">
+                                                <Button x:Name="UsbipInstallButton"
+                                                        Content="Install usbip-win2"
+                                                        Padding="12,4"
+                                                        FontSize="12"
+                                                        Background="#AA8800"
+                                                        Foreground="White"
+                                                        Click="UsbipInstallButton_Click"/>
+                                                <HyperlinkButton x:Name="UsbipInstallLink"
+                                                                 Content="or download manually"
+                                                                 FontSize="11"
+                                                                 Margin="12,0,0,0"
+                                                                 VerticalAlignment="Center"
+                                                                 NavigateUri="https://github.com/vadimgrn/usbip-win2/releases"/>
+                                            </StackPanel>
                                         </StackPanel>
                                     </Border>
 

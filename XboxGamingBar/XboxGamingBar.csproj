@@ -126,6 +126,7 @@
     <Compile Include="Data\ViiperMirrorLightbarToStickProperty.cs" />
     <Compile Include="Data\ViiperStickGyroEnabledProperty.cs" />
     <Compile Include="Data\ViiperJoyconGyroPerHalfProperty.cs" />
+    <Compile Include="Data\InstallUsbipProperty.cs" />
     <Compile Include="Data\SetupWarningsProperty.cs" />
     <Compile Include="Data\ViiperAlternateGyroConventionProperty.cs" />
     <Compile Include="Data\ViiperStickTriggerConfigProperty.cs" />

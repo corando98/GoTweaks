@@ -973,6 +973,7 @@ namespace XboxGamingBar
         private readonly TdpMethodProperty tdpMethod;
         private readonly EmulationBackendProperty emulationBackend;
         private readonly UsbipInstalledProperty usbipInstalled;
+        private readonly InstallUsbipProperty installUsbip;
         private readonly ViiperStringComboProperty viiperDeviceType;
         private readonly ViiperStringComboProperty viiperInputSource;
         private readonly ViiperStringComboProperty viiperGyroSource;
@@ -1678,6 +1679,7 @@ namespace XboxGamingBar
             tdpMethod = new TdpMethodProperty(TdpMethodComboBox, this);
             emulationBackend = new EmulationBackendProperty(ViiperEmulationToggle, this);
             usbipInstalled = new UsbipInstalledProperty();
+            installUsbip = new InstallUsbipProperty(this);
             viiperDeviceType = new ViiperStringComboProperty("xbox360", Shared.Enums.Function.Viiper_DeviceType, ViiperDeviceTypeComboBox, this);
             viiperInputSource = new ViiperStringComboProperty("XInput", Shared.Enums.Function.Viiper_InputSource, ViiperInputSourceComboBox, this);
             viiperGyroSource = new ViiperStringComboProperty("Left", Shared.Enums.Function.Viiper_GyroSource, ViiperGyroSourceComboBox, this);
@@ -1952,6 +1954,7 @@ namespace XboxGamingBar
                 tdpMethod,
                 emulationBackend,
                 usbipInstalled,
+                installUsbip,
                 viiperDeviceType,
                 viiperInputSource,
                 viiperGyroSource,
