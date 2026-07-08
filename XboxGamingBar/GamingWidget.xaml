@@ -8754,18 +8754,20 @@
                                                    Margin="0,8,0,0"/>
                                     </StackPanel>
 
-                                    <!-- ViGEmBus Note -->
+                                    <!-- Guide remap prerequisite note. Since the ViGEm retirement the
+                                         Guide route is served by VIIPER's guide-only pad, which needs
+                                         usbip-win2 (not ViGEmBus). -->
                                     <Border Background="#1A1A2E" CornerRadius="4" Padding="10" Margin="0,16,0,0">
                                         <StackPanel>
-                                            <TextBlock Text="Xbox Guide remap requires ViGEmBus driver"
+                                            <TextBlock Text="Xbox Guide remap requires the usbip-win2 driver"
                                                        FontSize="11" Foreground="#AAAAAA" TextWrapping="Wrap"/>
                                             <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                                 <TextBlock x:Name="ViGEmBusStatusText" Text="Status: Checking..."
                                                            FontSize="11" Foreground="#888888" VerticalAlignment="Center"/>
-                                                <Button x:Name="ViGEmBusInstallButton" Content="Install ViGEmBus"
+                                                <Button x:Name="ViGEmBusInstallButton" Content="Install usbip-win2"
                                                         Style="{StaticResource ModernButtonStyle}"
                                                         FontSize="11" Padding="10,4" Margin="12,0,0,0"
-                                                        Click="ViGEmBusInstallButton_Click"/>
+                                                        Click="LabsUsbipInstallButton_Click"/>
                                             </StackPanel>
                                         </StackPanel>
                                     </Border>

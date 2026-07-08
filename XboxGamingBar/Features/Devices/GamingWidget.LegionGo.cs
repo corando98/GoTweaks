@@ -1782,23 +1782,12 @@ namespace XboxGamingBar
 
         /// <summary>
         /// Updates the ViGEmBus install button state based on driver installation status.
+        /// Only the legacy CE tab's pair remains ViGEmBus-driven — the Labs Guide-remap
+        /// note (ViGEmBusStatusText / ViGEmBusInstallButton, names kept to avoid churn)
+        /// reflects usbip-win2 since the ViGEm retirement; see UpdateLabsUsbipUI.
         /// </summary>
         private void UpdateViGEmBusInstalledUI(bool installed)
         {
-            if (ViGEmBusStatusText != null)
-            {
-                ViGEmBusStatusText.Text = installed ? "Status: Installed" : "Status: Not Installed";
-                ViGEmBusStatusText.Foreground = installed
-                    ? new Windows.UI.Xaml.Media.SolidColorBrush(Windows.UI.Colors.LimeGreen)
-                    : new Windows.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 136, 136, 136));
-            }
-
-            if (ViGEmBusInstallButton != null)
-            {
-                ViGEmBusInstallButton.Content = installed ? "Installed" : "Install ViGEmBus";
-                ViGEmBusInstallButton.IsEnabled = !installed;
-            }
-
             if (ControllerEmulationViGEmBusStatusText != null)
             {
                 ControllerEmulationViGEmBusStatusText.Text = installed ? "ViGEmBus: Installed" : "ViGEmBus: Not Installed";
@@ -1817,7 +1806,9 @@ namespace XboxGamingBar
         }
 
         /// <summary>
-        /// Handles the ViGEmBus install button click.
+        /// Handles the legacy CE tab's ViGEmBus install button click (legacy backend
+        /// only — deprecated, removed together with the legacy CE in the final
+        /// ViGEm cleanup).
         /// </summary>
         private async void ViGEmBusInstallButton_Click(object sender, RoutedEventArgs e)
         {
@@ -1825,22 +1816,10 @@ namespace XboxGamingBar
             {
                 Logger.Info("ViGEmBusInstallButton clicked - triggering ViGEmBus installation");
 
-                // Update button to show installing state
-                if (ViGEmBusInstallButton != null)
-                {
-                    ViGEmBusInstallButton.Content = "Installing...";
-                    ViGEmBusInstallButton.IsEnabled = false;
-                }
-
                 if (ControllerEmulationViGEmBusInstallButton != null)
                 {
                     ControllerEmulationViGEmBusInstallButton.Content = "Installing...";
                     ControllerEmulationViGEmBusInstallButton.IsEnabled = false;
-                }
-
-                if (ViGEmBusStatusText != null)
-                {
-                    ViGEmBusStatusText.Text = "Status: Installing...";
                 }
 
                 if (ControllerEmulationViGEmBusStatusText != null)
@@ -1858,24 +1837,59 @@ namespace XboxGamingBar
             {
                 Logger.Error($"Error during ViGEmBus installation: {ex.Message}");
                 // Reset button state on error
-                if (ViGEmBusInstallButton != null)
-                {
-                    ViGEmBusInstallButton.Content = "Install ViGEmBus";
-                    ViGEmBusInstallButton.IsEnabled = true;
-                }
                 if (ControllerEmulationViGEmBusInstallButton != null)
                 {
                     ControllerEmulationViGEmBusInstallButton.Content = "Install ViGEmBus";
                     ControllerEmulationViGEmBusInstallButton.IsEnabled = true;
                 }
-                if (ViGEmBusStatusText != null)
-                {
-                    ViGEmBusStatusText.Text = "Status: Error";
-                }
                 if (ControllerEmulationViGEmBusStatusText != null)
                 {
                     ControllerEmulationViGEmBusStatusText.Text = "ViGEmBus: Error";
                 }
+            }
+        }
+
+        /// <summary>
+        /// Labs Guide-remap prerequisite: usbip-win2 status + one-click install.
+        /// Drives the repurposed ViGEmBusStatusText / ViGEmBusInstallButton pair
+        /// in the Labs section (control names kept from the ViGEm era).
+        /// </summary>
+        private void UpdateLabsUsbipUI(bool installed)
+        {
+            if (ViGEmBusStatusText != null)
+            {
+                ViGEmBusStatusText.Text = installed ? "Status: Installed" : "Status: Not Installed";
+                ViGEmBusStatusText.Foreground = installed
+                    ? new Windows.UI.Xaml.Media.SolidColorBrush(Windows.UI.Colors.LimeGreen)
+                    : new Windows.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 136, 136, 136));
+            }
+
+            if (ViGEmBusInstallButton != null)
+            {
+                ViGEmBusInstallButton.Content = installed ? "Installed" : "Install usbip-win2";
+                ViGEmBusInstallButton.IsEnabled = !installed;
+            }
+        }
+
+        private void LabsUsbipInstallButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Logger.Info("Labs usbip install button clicked - triggering usbip-win2 installation");
+                installUsbip?.TriggerInstall();
+                if (ViGEmBusInstallButton != null)
+                {
+                    ViGEmBusInstallButton.Content = "Installing...";
+                    ViGEmBusInstallButton.IsEnabled = false;
+                }
+                if (ViGEmBusStatusText != null)
+                {
+                    ViGEmBusStatusText.Text = "Status: Installing...";
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error during usbip installation: {ex.Message}");
             }
         }
 

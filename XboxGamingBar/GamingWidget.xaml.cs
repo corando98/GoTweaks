@@ -1716,7 +1716,7 @@ namespace XboxGamingBar
                 ViiperGuideButtonModeComboBox.SelectionChanged += (s, e) => UpdateViiperLegionLDisabledHint();
             // Show USBIP install card only when VIIPER toggle is on AND driver is missing
             emulationBackend.PropertyChanged += (s, e) => { UpdateUsbipCardVisibility(); UpdateViiperConfigVisibility(); UpdateViiperLegionLDisabledHint(); UpdateQuickSettingsTileStates(); UpdateViiperStickGyroSectionVisibility(); };
-            usbipInstalled.PropertyChanged += (s, e) => UpdateUsbipCardVisibility();
+            usbipInstalled.PropertyChanged += (s, e) => { UpdateUsbipCardVisibility(); UpdateLabsUsbipUI(usbipInstalled.Value); };
             // Show Steam sub-device picker only when a Steam device type is selected
             viiperDeviceType.PropertyChanged += (s, e) => { UpdateViiperConfigVisibility(); UpdateQuickSettingsTileStates(); UpdateViiperStickGyroSectionVisibility(); };
             // Re-evaluate sub-device-dependent panels (e.g. Joy-Con Pair per-half gyro) when the Nintendo sub-device changes.
