@@ -1,0 +1,15 @@
+# Build outputs
+[Bb]in/
+[Oo]bj/
+AppPackages/
+BundleArtifacts/
+packages/
+dist/
+.vs/
+*.user
+*.assets.cache
+build.*.log
+
+# Local-only artifacts
+*_TemporaryKey.pfx
+nuget.exe
