@@ -24,23 +24,23 @@ namespace XboxGamingBarHelper.AMD
         private const string AMD_PERFORMANCE_PROFILE_KEY_NAME = "MetricsProfile";
 
         // ADLX stuff
-        private readonly ADLX_RESULT adlxInitializeResult;
-        private readonly ADLXHelper adlxHelper;
-        private readonly IADLXSystem adlxSystemSevices;
-        private readonly IADLXDisplayServices adlxDisplayServices;
-        private readonly IADLXGPU adlxInternalGPU;
-        private readonly IADLXGPU adlxDedicatedGPU;
-        private readonly IADLXGPU adlxSecondDedicatedGPU;
-        private readonly IADLX3DSettingsServices2 adlx3DSettingsServices;
+        private ADLX_RESULT adlxInitializeResult;
+        private ADLXHelper adlxHelper;
+        private IADLXSystem adlxSystemSevices;
+        private IADLXDisplayServices adlxDisplayServices;
+        private IADLXGPU adlxInternalGPU;
+        private IADLXGPU adlxDedicatedGPU;
+        private IADLXGPU adlxSecondDedicatedGPU;
+        private IADLX3DSettingsServices2 adlx3DSettingsServices;
 
         // AMD Settings.
-        private readonly AMDRadeonSuperResolutionSetting amdRadeonSuperResolutionSetting;
+        private AMDRadeonSuperResolutionSetting amdRadeonSuperResolutionSetting;
         public AMDRadeonSuperResolutionSetting AMDRadeonSuperResolutionSetting
         {
             get { return amdRadeonSuperResolutionSetting; }
         }
 
-        private readonly AMDFluidMotionFrameSetting amdFluidMotionFrameSetting;
+        private AMDFluidMotionFrameSetting amdFluidMotionFrameSetting;
         public AMDFluidMotionFrameSetting AMDFluidMotionFrameSetting
         {
             get { return amdFluidMotionFrameSetting; }
@@ -49,7 +49,7 @@ namespace XboxGamingBarHelper.AMD
         // ADLX 1.5+: AFMF 2.x extended controls (Algorithm / SearchMode / PerformanceMode
         // / FastMotionResponse). Null on drivers that don't implement
         // IADLX3DAMDFluidMotionFrames1 — callers must IsAvailable-check before reading.
-        private readonly AMDFluidMotionFrameSettingV1 amdFluidMotionFrameSettingV1;
+        private AMDFluidMotionFrameSettingV1 amdFluidMotionFrameSettingV1;
         public AMDFluidMotionFrameSettingV1 AMDFluidMotionFrameSettingV1
         {
             get { return amdFluidMotionFrameSettingV1; }
@@ -65,229 +65,229 @@ namespace XboxGamingBarHelper.AMD
             get { return amdVariableGraphicsMemorySetting; }
         }
 
-        private readonly AMDRadeonAntiLagSetting amdRadeonAntiLagSetting;
+        private AMDRadeonAntiLagSetting amdRadeonAntiLagSetting;
         public AMDRadeonAntiLagSetting AMDRadeonAntiLagSetting
         {
             get { return amdRadeonAntiLagSetting; }
         }
 
-        private readonly AMDRadeonBoostSetting amdRadeonBoostSetting;
+        private AMDRadeonBoostSetting amdRadeonBoostSetting;
         public AMDRadeonBoostSetting AMDRadeonBoostSetting
         {
             get { return amdRadeonBoostSetting; }
         }
 
-        private readonly AMDRadeonChillSetting amdRadeonChillSetting;
+        private AMDRadeonChillSetting amdRadeonChillSetting;
         public AMDRadeonChillSetting AMDRadeonChillSetting
         {
             get { return amdRadeonChillSetting; }
         }
 
-        private readonly AMDImageSharpeningSetting amdImageSharpeningSetting;
+        private AMDImageSharpeningSetting amdImageSharpeningSetting;
         public AMDImageSharpeningSetting AMDImageSharpeningSetting
         {
             get { return amdImageSharpeningSetting; }
         }
 
-        private readonly AMDDisplayCustomColorSetting amdDisplayCustomColorSetting;
+        private AMDDisplayCustomColorSetting amdDisplayCustomColorSetting;
         public AMDDisplayCustomColorSetting AMDDisplayCustomColorSetting
         {
             get { return amdDisplayCustomColorSetting; }
         }
 
-        private readonly AMD3DSettingsChangedListener amd3DSettingsChangedListener;
+        private AMD3DSettingsChangedListener amd3DSettingsChangedListener;
         public AMD3DSettingsChangedListener AMD3DSettingsChangedListener
         {
             get { return amd3DSettingsChangedListener; }
         }
 
         // AMD Properties.
-        private readonly AMDRadeonSuperResolutionSupportedProperty amdRadeonSuperResolutionSupported;
+        private AMDRadeonSuperResolutionSupportedProperty amdRadeonSuperResolutionSupported;
         public AMDRadeonSuperResolutionSupportedProperty AMDRadeonSuperResolutionSupported
         {
             get { return amdRadeonSuperResolutionSupported; }
         }
 
-        private readonly AMDRadeonSuperResolutionEnabledProperty amdRadeonSuperResolutionEnabled;
+        private AMDRadeonSuperResolutionEnabledProperty amdRadeonSuperResolutionEnabled;
         public AMDRadeonSuperResolutionEnabledProperty AMDRadeonSuperResolutionEnabled
         {
             get { return amdRadeonSuperResolutionEnabled; }
         }
 
-        private readonly AMDRadeonSuperResolutionSharpnessProperty amdRadeonSuperResolutionSharpness;
+        private AMDRadeonSuperResolutionSharpnessProperty amdRadeonSuperResolutionSharpness;
         public AMDRadeonSuperResolutionSharpnessProperty AMDRadeonSuperResolutionSharpness
         {
             get { return amdRadeonSuperResolutionSharpness; }
         }
 
-        private readonly AMDFluidMotionFrameSupportedProperty amdFluidMotionFrameSupported;
+        private AMDFluidMotionFrameSupportedProperty amdFluidMotionFrameSupported;
         public AMDFluidMotionFrameSupportedProperty AMDFluidMotionFrameSupported
         {
             get { return amdFluidMotionFrameSupported; }
         }
 
-        private readonly AMDFluidMotionFrameEnabledProperty amdFluidMotionFrameEnabled;
+        private AMDFluidMotionFrameEnabledProperty amdFluidMotionFrameEnabled;
         public AMDFluidMotionFrameEnabledProperty AMDFluidMotionFrameEnabled
         {
             get { return amdFluidMotionFrameEnabled; }
         }
 
-        private readonly AMDFluidMotionFrameV1SupportedProperty amdFluidMotionFrameV1Supported;
+        private AMDFluidMotionFrameV1SupportedProperty amdFluidMotionFrameV1Supported;
         public AMDFluidMotionFrameV1SupportedProperty AMDFluidMotionFrameV1Supported
         {
             get { return amdFluidMotionFrameV1Supported; }
         }
 
-        private readonly AMDFluidMotionFrameAlgorithmProperty amdFluidMotionFrameAlgorithm;
+        private AMDFluidMotionFrameAlgorithmProperty amdFluidMotionFrameAlgorithm;
         public AMDFluidMotionFrameAlgorithmProperty AMDFluidMotionFrameAlgorithm
         {
             get { return amdFluidMotionFrameAlgorithm; }
         }
 
-        private readonly AMDFluidMotionFrameSearchModeProperty amdFluidMotionFrameSearchMode;
+        private AMDFluidMotionFrameSearchModeProperty amdFluidMotionFrameSearchMode;
         public AMDFluidMotionFrameSearchModeProperty AMDFluidMotionFrameSearchMode
         {
             get { return amdFluidMotionFrameSearchMode; }
         }
 
-        private readonly AMDFluidMotionFramePerformanceModeProperty amdFluidMotionFramePerformanceMode;
+        private AMDFluidMotionFramePerformanceModeProperty amdFluidMotionFramePerformanceMode;
         public AMDFluidMotionFramePerformanceModeProperty AMDFluidMotionFramePerformanceMode
         {
             get { return amdFluidMotionFramePerformanceMode; }
         }
 
-        private readonly AMDFluidMotionFrameFastMotionResponseProperty amdFluidMotionFrameFastMotionResponse;
+        private AMDFluidMotionFrameFastMotionResponseProperty amdFluidMotionFrameFastMotionResponse;
         public AMDFluidMotionFrameFastMotionResponseProperty AMDFluidMotionFrameFastMotionResponse
         {
             get { return amdFluidMotionFrameFastMotionResponse; }
         }
 
-        private readonly AMDRadeonAntiLagSupportedProperty amdRadeonAntiLagSupported;
+        private AMDRadeonAntiLagSupportedProperty amdRadeonAntiLagSupported;
         public AMDRadeonAntiLagSupportedProperty AMDRadeonAntiLagSupported
         {
             get { return amdRadeonAntiLagSupported; }
         }
 
-        private readonly AMDRadeonAntiLagEnabledProperty amdRadeonAntiLagEnabled;
+        private AMDRadeonAntiLagEnabledProperty amdRadeonAntiLagEnabled;
         public AMDRadeonAntiLagEnabledProperty AMDRadeonAntiLagEnabled
         {
             get { return amdRadeonAntiLagEnabled; }
         }
 
-        private readonly AMDRadeonBoostSupportedProperty amdRadeonBoostSupported;
+        private AMDRadeonBoostSupportedProperty amdRadeonBoostSupported;
         public AMDRadeonBoostSupportedProperty AMDRadeonBoostSupported
         {
             get { return amdRadeonBoostSupported; }
         }
 
-        private readonly AMDRadeonBoostEnabledProperty amdRadeonBoostEnabled;
+        private AMDRadeonBoostEnabledProperty amdRadeonBoostEnabled;
         public AMDRadeonBoostEnabledProperty AMDRadeonBoostEnabled
         {
             get { return amdRadeonBoostEnabled; }
         }
 
-        private readonly AMDRadeonBoostResolutionProperty amdRadeonBoostResolution;
+        private AMDRadeonBoostResolutionProperty amdRadeonBoostResolution;
         public AMDRadeonBoostResolutionProperty AMDRadeonBoostResolution
         {
             get { return amdRadeonBoostResolution; }
         }
 
-        private readonly AMDRadeonChillSupportedProperty amdRadeonChillSupported;
+        private AMDRadeonChillSupportedProperty amdRadeonChillSupported;
         public AMDRadeonChillSupportedProperty AMDRadeonChillSupported
         {
             get { return amdRadeonChillSupported; }
         }
 
-        private readonly AMDRadeonChillEnabledProperty amdRadeonChillEnabled;
+        private AMDRadeonChillEnabledProperty amdRadeonChillEnabled;
         public AMDRadeonChillEnabledProperty AMDRadeonChillEnabled
         {
             get { return amdRadeonChillEnabled; }
         }
 
-        private readonly AMDRadeonChillMinFPSProperty amdRadeonChillMinFPS;
+        private AMDRadeonChillMinFPSProperty amdRadeonChillMinFPS;
         public AMDRadeonChillMinFPSProperty AMDRadeonChillMinFPS
         {
             get { return amdRadeonChillMinFPS; }
         }
 
-        private readonly AMDRadeonChillMaxFPSProperty amdRadeonChillMaxFPS;
+        private AMDRadeonChillMaxFPSProperty amdRadeonChillMaxFPS;
         public AMDRadeonChillMaxFPSProperty AMDRadeonChillMaxFPS
         {
             get { return amdRadeonChillMaxFPS; }
         }
 
-        private readonly AMDImageSharpeningSupportedProperty amdImageSharpeningSupported;
+        private AMDImageSharpeningSupportedProperty amdImageSharpeningSupported;
         public AMDImageSharpeningSupportedProperty AMDImageSharpeningSupported
         {
             get { return amdImageSharpeningSupported; }
         }
 
-        private readonly AMDImageSharpeningEnabledProperty amdImageSharpeningEnabled;
+        private AMDImageSharpeningEnabledProperty amdImageSharpeningEnabled;
         public AMDImageSharpeningEnabledProperty AMDImageSharpeningEnabled
         {
             get { return amdImageSharpeningEnabled; }
         }
 
-        private readonly AMDImageSharpeningSharpnessProperty amdImageSharpeningSharpness;
+        private AMDImageSharpeningSharpnessProperty amdImageSharpeningSharpness;
         public AMDImageSharpeningSharpnessProperty AMDImageSharpeningSharpness
         {
             get { return amdImageSharpeningSharpness; }
         }
 
         // Display Color Properties
-        private readonly AMDDisplayBrightnessSupportedProperty amdDisplayBrightnessSupported;
+        private AMDDisplayBrightnessSupportedProperty amdDisplayBrightnessSupported;
         public AMDDisplayBrightnessSupportedProperty AMDDisplayBrightnessSupported
         {
             get { return amdDisplayBrightnessSupported; }
         }
 
-        private readonly AMDDisplayBrightnessProperty amdDisplayBrightness;
+        private AMDDisplayBrightnessProperty amdDisplayBrightness;
         public AMDDisplayBrightnessProperty AMDDisplayBrightness
         {
             get { return amdDisplayBrightness; }
         }
 
-        private readonly AMDDisplayContrastSupportedProperty amdDisplayContrastSupported;
+        private AMDDisplayContrastSupportedProperty amdDisplayContrastSupported;
         public AMDDisplayContrastSupportedProperty AMDDisplayContrastSupported
         {
             get { return amdDisplayContrastSupported; }
         }
 
-        private readonly AMDDisplayContrastProperty amdDisplayContrast;
+        private AMDDisplayContrastProperty amdDisplayContrast;
         public AMDDisplayContrastProperty AMDDisplayContrast
         {
             get { return amdDisplayContrast; }
         }
 
-        private readonly AMDDisplaySaturationSupportedProperty amdDisplaySaturationSupported;
+        private AMDDisplaySaturationSupportedProperty amdDisplaySaturationSupported;
         public AMDDisplaySaturationSupportedProperty AMDDisplaySaturationSupported
         {
             get { return amdDisplaySaturationSupported; }
         }
 
-        private readonly AMDDisplaySaturationProperty amdDisplaySaturation;
+        private AMDDisplaySaturationProperty amdDisplaySaturation;
         public AMDDisplaySaturationProperty AMDDisplaySaturation
         {
             get { return amdDisplaySaturation; }
         }
 
-        private readonly AMDDisplayTemperatureSupportedProperty amdDisplayTemperatureSupported;
+        private AMDDisplayTemperatureSupportedProperty amdDisplayTemperatureSupported;
         public AMDDisplayTemperatureSupportedProperty AMDDisplayTemperatureSupported
         {
             get { return amdDisplayTemperatureSupported; }
         }
 
-        private readonly AMDDisplayTemperatureProperty amdDisplayTemperature;
+        private AMDDisplayTemperatureProperty amdDisplayTemperature;
         public AMDDisplayTemperatureProperty AMDDisplayTemperature
         {
             get { return amdDisplayTemperature; }
         }
 
-        private readonly InputInjector inputInjector;
-        private readonly InjectedInputKeyboardInfo[] turnAMDOverlayOnOffKeyboardCombo;
-        private readonly InjectedInputKeyboardInfo[] changeAMDOverlayLevelKeyboardCombo;
-        private readonly List<Tuple<int, int>> amdOverlayLevelList;
-        private readonly Dictionary<int, int> amdOverlayLevelMap;
+        private InputInjector inputInjector;
+        private InjectedInputKeyboardInfo[] turnAMDOverlayOnOffKeyboardCombo;
+        private InjectedInputKeyboardInfo[] changeAMDOverlayLevelKeyboardCombo;
+        private List<Tuple<int, int>> amdOverlayLevelList;
+        private Dictionary<int, int> amdOverlayLevelMap;
 
         private long lastUpdate;
 
@@ -296,10 +296,25 @@ namespace XboxGamingBarHelper.AMD
         // access violation in unmanaged code, not a catchable exception).
         private volatile bool _disposed;
 
+        // Hard ceiling for the whole ADLX init. Certain AMD driver builds hang
+        // forever inside a native ADLX probe with no way to interrupt the call
+        // (issue #90: GetAMDFluidMotionFrames wedges on the Legion Go S / Z2 Go
+        // driver). Running init on a watchdog thread and abandoning it past this
+        // timeout lets the rest of the helper (Legion tab, TDP, everything
+        // non-AMD) come up instead of the whole manager-init wave wedging.
+        private const int AdlxInitTimeoutMs = 20000;
+        private volatile bool adlxInitTimedOut;
+
         public AMDManager() : base()
         {
-            try
-            {
+            RunAdlxInitWithWatchdog();
+            // Always run — fills any property the init left null (timeout,
+            // exception, or a probe that hung partway).
+            EnsureAmdPropertyDefaults();
+        }
+
+        private void InitializeAdlxCore()
+        {
                 Logger.Info("Initializing ADLX...");
 
                 // Log DLL search path info for debugging
@@ -764,9 +779,40 @@ namespace XboxGamingBarHelper.AMD
                 amdOverlayLevelMap.Add(amdOverlayLevel.Item1, amdOverlayLevel.Item2);
             }
             lastUpdate = 0;
-            }
-            catch (Exception ex)
+        }
+
+        /// <summary>
+        /// Runs InitializeAdlxCore on a background thread with a hard timeout so
+        /// a native ADLX probe hang (issue #90) can't wedge the manager-init
+        /// wave. On timeout the thread is abandoned (a hung native call can't be
+        /// safely aborted) and we proceed with ADLX_FAIL; the process keeps the
+        /// dangling thread until exit, but the helper comes up.
+        /// </summary>
+        private void RunAdlxInitWithWatchdog()
+        {
+            Exception adlxException = null;
+            var adlxThread = new System.Threading.Thread(() =>
             {
+                try { InitializeAdlxCore(); }
+                catch (Exception ex) { adlxException = ex; }
+            })
+            {
+                IsBackground = true,
+                Name = "AMDManager-ADLXInit",
+            };
+
+            adlxThread.Start();
+            if (!adlxThread.Join(AdlxInitTimeoutMs))
+            {
+                adlxInitTimedOut = true;
+                adlxInitializeResult = ADLX_RESULT.ADLX_FAIL;
+                Logger.Error($"ADLX init did not complete within {AdlxInitTimeoutMs}ms — abandoning the init thread (likely a native driver probe hang, e.g. Legion Go S / Z2 Go FMF, issue #90). AMD features disabled; the helper continues so the Legion tab, TDP, and everything non-AMD still work.");
+                return;
+            }
+
+            if (adlxException != null)
+            {
+                var ex = adlxException;
                 Logger.Error($"ADLX initialization failed with exception: {ex.Message}");
                 Logger.Error($"Exception type: {ex.GetType().FullName}");
 
@@ -791,8 +837,18 @@ namespace XboxGamingBarHelper.AMD
                 }
 
                 adlxInitializeResult = ADLX_RESULT.ADLX_FAIL;
+            }
+        }
 
-                // Initialize properties with default/disabled values
+        /// <summary>
+        /// Fills every AMD property field the init left null with a
+        /// disabled/default value. Called unconditionally after init (success,
+        /// exception, or timeout) so the Program.cs property list never
+        /// registers a null — a null there NRE'd on every pipe Get after the
+        /// #90 hang. Idempotent via null-coalescing.
+        /// </summary>
+        private void EnsureAmdPropertyDefaults()
+        {
                 amdRadeonSuperResolutionSupported = amdRadeonSuperResolutionSupported ?? new AMDRadeonSuperResolutionSupportedProperty(false, this);
                 amdRadeonSuperResolutionEnabled = amdRadeonSuperResolutionEnabled ?? new AMDRadeonSuperResolutionEnabledProperty(false, this);
                 amdRadeonSuperResolutionSharpness = amdRadeonSuperResolutionSharpness ?? new AMDRadeonSuperResolutionSharpnessProperty(0, this);
@@ -818,7 +874,15 @@ namespace XboxGamingBarHelper.AMD
                 amdDisplaySaturation = amdDisplaySaturation ?? new AMDDisplaySaturationProperty(0, this);
                 amdDisplayTemperatureSupported = amdDisplayTemperatureSupported ?? new AMDDisplayTemperatureSupportedProperty(false, this);
                 amdDisplayTemperature = amdDisplayTemperature ?? new AMDDisplayTemperatureProperty(0, this);
-            }
+
+                // AFMF 2.x extended-control properties. If init hung at the FMF
+                // probe (issue #90) these were never constructed; Program.cs
+                // registers them for pipe routing so a null NREs on Get.
+                amdFluidMotionFrameV1Supported = amdFluidMotionFrameV1Supported ?? new AMDFluidMotionFrameV1SupportedProperty(false, this);
+                amdFluidMotionFrameAlgorithm = amdFluidMotionFrameAlgorithm ?? new AMDFluidMotionFrameAlgorithmProperty(0, this);
+                amdFluidMotionFrameSearchMode = amdFluidMotionFrameSearchMode ?? new AMDFluidMotionFrameSearchModeProperty(0, this);
+                amdFluidMotionFramePerformanceMode = amdFluidMotionFramePerformanceMode ?? new AMDFluidMotionFramePerformanceModeProperty(0, this);
+                amdFluidMotionFrameFastMotionResponse = amdFluidMotionFrameFastMotionResponse ?? new AMDFluidMotionFrameFastMotionResponseProperty(0, this);
         }
 
         private void AmdRadeonChillEnabled(object sender, System.ComponentModel.PropertyChangedEventArgs e)
