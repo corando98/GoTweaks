@@ -518,6 +518,7 @@
     <Compile Include="Services\LenovoDriverCheckService.cs" />
     <Compile Include="Services\GoTweaksUpdateService.cs" />
     <Compile Include="Services\SetupHealthService.cs" />
+    <Compile Include="Services\UninstallService.cs" />
     <Compile Include="Services\ScheduledTaskService.cs" />
     <Compile Include="Services\SystemRestoreService.cs" />
     <Compile Include="IPC\NamedPipeServer.cs" />

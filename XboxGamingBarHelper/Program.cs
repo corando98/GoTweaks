@@ -413,6 +413,19 @@ namespace XboxGamingBarHelper
                 return;
             }
 
+            // Uninstall restoration mode: stop peers, clear our HidHide rules,
+            // sweep phantom pads, remove the scheduled task + deployed copy,
+            // optionally uninstall the driver stack (--remove-drivers), then EXIT.
+            // Runnable from the deployed helper even after the MSIX package is
+            // gone — this is what Uninstall-GoTweaks.ps1 invokes.
+            if (args.Contains("--uninstall"))
+            {
+                Logger.Info("=== Uninstall Mode ===");
+                Services.UninstallService.Run(removeDrivers: args.Contains("--remove-drivers"));
+                LogManager.Flush();
+                return;
+            }
+
             // Check for setup mode FIRST (before anything else)
             // Setup mode: deploy files, create scheduled task, run task, then EXIT
             // The task launches the elevated helper which will connect to the widget.
