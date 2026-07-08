@@ -685,27 +685,27 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             isRunning = true;
             Logger.Info($"VIIPER emulation manager started (bus={activeBusId}, dev={activeDeviceId}, sec={activeSecondaryDeviceId}, type={activeDeviceType}, xinput={xinputIdx})");
 
-            // Tell Labs/LegionButtonMonitor to tear down the dedicated Guide-only ViGEm
-            // pad now that VIIPER will deliver the Guide press through its emulated
-            // device. This MUST happen after forwarder.Start because ForceReconcileGuideRoute
-            // -> EnsureViGEmController -> NeedsViGEm checks ViiperInputForwarder.CanHandleExternalGuide(),
-            // which only returns true once the forwarder's running flag is set inside Start().
-            // Pre-Start NotifyGuideRouteChanged was a no-op for this reason (build 2101 verified
-            // in helper_2026-04-29_21.log: 21:17:09.8126 DetectPhysicalXInputIndex picks slot 0,
-            // 21:17:10.1545 Released dedicated ViGEm controller — disposal lagged 0.34s).
+            // Re-run guide-route reconciliation now that the full forwarder owns
+            // Guide delivery — this tears down our own guide-only pad if it was
+            // running (ReapplyMode: full mode stops guide-only). MUST happen
+            // after forwarder.Start because the delivery tier checks
+            // ViiperInputForwarder.CanHandleExternalGuide(), which only returns
+            // true once the forwarder's running flag is set inside Start().
             Program.NotifyGuideRouteChanged();
 
-            // The Labs ViGEm pad lived on its own XInput user-index slot. Detection above
-            // ran while that pad was still occupying a slot, so the picked index can be
-            // the about-to-be-disposed pad rather than the physical Legion. After
-            // NotifyGuideRouteChanged disposes the pad, re-probe XInput so the forwarder
-            // re-pins to the slot that's actually connected. Without this re-pin: rumbleErr
-            // floods, xinputFresh=1 then errors (build 2100/2101 logs).
+            // The guide-only pad lived on its own XInput user-index slot.
+            // Detection above ran while that pad may still have occupied a slot,
+            // so the picked index can be the about-to-be-disposed pad rather
+            // than the physical Legion. After NotifyGuideRouteChanged disposes
+            // it, re-probe XInput so the forwarder re-pins to the slot that's
+            // actually connected. Without this re-pin: rumbleErr floods,
+            // xinputFresh=1 then errors (build 2100/2101 logs, ViGEm era — the
+            // slot-occupancy mechanics are identical for the VIIPER pad).
             System.Threading.Thread.Sleep(150);
             uint repinnedIdx = ViiperInputForwarder.DetectPhysicalXInputIndex();
             if (repinnedIdx != xinputIdx)
             {
-                Logger.Info($"VIIPER post-Start re-pin: physicalIndex {xinputIdx} -> {repinnedIdx} (Labs ViGEm pad slot freed)");
+                Logger.Info($"VIIPER post-Start re-pin: physicalIndex {xinputIdx} -> {repinnedIdx} (guide-only pad slot freed)");
                 forwarder.UpdatePhysicalIndex(repinnedIdx);
             }
             return true;

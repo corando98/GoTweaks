@@ -233,8 +233,6 @@ namespace XboxGamingBar
                             UpdateDAServiceStatus(); // Immediate update
                             daServiceStatusTimer.Start();
                         }
-                        // Request ViGEmBus status for button remap section
-                        RequestViGEmBusStatus();
                         // Force remap UI refresh when Legion tab becomes active.
                         RefreshLegionEnhancedRemapUi();
                         break;

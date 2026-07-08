@@ -94,35 +94,9 @@ namespace XboxGamingBar
             });
         }
 
-        private async void RequestViGEmBusStatus()
-        {
-            if (!App.IsConnected)
-                return;
-
-            // Request ViGEmBus installed status from helper
-            try
-            {
-                var request = new Windows.Foundation.Collections.ValueSet();
-                request.Add("Command", (int)Command.Get);
-                request.Add("Function", (int)Function.ViGEmBusInstalled);
-                var response = await App.SendMessageAsync(request);
-
-                // Handle response - helper returns "Content" with bool value
-                if (response != null)
-                {
-                    if (response.TryGetValue("Content", out object installedObj))
-                    {
-                        bool installed = Convert.ToBoolean(installedObj);
-                        UpdateViGEmBusInstalledUI(installed);
-                        Logger.Debug($"ViGEmBus status received: {installed}");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Failed to request ViGEmBus status: {ex.Message}");
-            }
-        }
+        // (RequestViGEmBusStatus removed — ViGEm backend retired. The Labs
+        // Guide-remap prerequisite line reflects usbip-win2 via UpdateLabsUsbipUI,
+        // driven by the UsbipInstalled property push.)
 
         private async void RequestHidHideStatus()
         {
@@ -152,7 +126,6 @@ namespace XboxGamingBar
 
         private void RequestControllerEmulationDriverStatus()
         {
-            RequestViGEmBusStatus();
             RequestHidHideStatus();
         }
 

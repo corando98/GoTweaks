@@ -998,8 +998,6 @@ namespace XboxGamingBar
         private readonly PawnIOInstalledProperty pawnIOInstalled;
         private readonly InstallPawnIOProperty installPawnIO;
         private readonly SetupWarningsProperty setupWarnings;
-        private readonly ViGEmBusInstalledProperty vigemBusInstalled;
-        private readonly InstallViGEmBusProperty installViGEmBus;
         private readonly HidHideInstalledProperty hidHideInstalled;
         private readonly InstallHidHideProperty installHidHide;
         private readonly AutoHibernateEnabledProperty autoHibernateEnabled;
@@ -1727,8 +1725,6 @@ namespace XboxGamingBar
             pawnIOInstalled = new PawnIOInstalledProperty(this);
             installPawnIO = new InstallPawnIOProperty(this);
             setupWarnings = new SetupWarningsProperty(this) { OnWarningsChanged = OnSetupWarningsChanged };
-            vigemBusInstalled = new ViGEmBusInstalledProperty(this);
-            installViGEmBus = new InstallViGEmBusProperty(this);
             hidHideInstalled = new HidHideInstalledProperty(this);
             installHidHide = new InstallHidHideProperty(this);
             autoHibernateEnabled = new AutoHibernateEnabledProperty(AutoHibernateToggle, this);
@@ -1737,7 +1733,6 @@ namespace XboxGamingBar
             // Set up callbacks for TDP method availability
             winRing0Available.SetAvailabilityCallback(UpdateWinRing0Visibility);
             pawnIOInstalled.SetInstalledCallback(UpdatePawnIOInstalledUI);
-            vigemBusInstalled.SetInstalledCallback(UpdateViGEmBusInstalledUI);
             hidHideInstalled.SetInstalledCallback(UpdateHidHideInstalledUI);
 
             // AutoTDP properties
@@ -1979,8 +1974,6 @@ namespace XboxGamingBar
                 pawnIOInstalled,
                 installPawnIO,
                 setupWarnings,
-                vigemBusInstalled,
-                installViGEmBus,
                 hidHideInstalled,
                 installHidHide,
                 autoHibernateEnabled,

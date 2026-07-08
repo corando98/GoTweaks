@@ -705,7 +705,6 @@
     <Compile Include="Labs\LegionInputButtons.cs" />
     <Compile Include="Labs\LegionLightingManager.cs" />
     <Compile Include="Labs\GoTweaksHapticManager.cs" />
-    <Compile Include="Labs\ViGEmBusProperties.cs" />
     <Compile Include="Labs\HidHideProperties.cs" />
     <Compile Include="Icons\GameIconHelper.cs" />
   </ItemGroup>

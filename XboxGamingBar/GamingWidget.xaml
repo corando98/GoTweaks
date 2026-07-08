@@ -4090,29 +4090,7 @@
                                                    TextWrapping="Wrap"
                                                    Margin="0,2,0,0"/>
 
-                                        <!-- ViGEmBus row hidden: the ViGEm backend is retired (VIIPER/usbip
-                                             is the only backend). Controls kept for code-behind bindings;
-                                             remove together with InstallViGEmBusProperty in the dead-code
-                                             cleanup pass. -->
-                                        <Grid Margin="0,8,0,0" Visibility="Collapsed">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock x:Name="ControllerEmulationViGEmBusStatusText"
-                                                       Text="ViGEmBus: Checking..."
-                                                       FontSize="11"
-                                                       Foreground="#888888"
-                                                       VerticalAlignment="Center"/>
-                                            <Button x:Name="ControllerEmulationViGEmBusInstallButton"
-                                                    Grid.Column="1"
-                                                    Content="Install ViGEmBus"
-                                                    Style="{StaticResource ModernButtonStyle}"
-                                                    FontSize="11"
-                                                    Padding="10,4"
-                                                    Margin="12,0,0,0"
-                                                    Click="ViGEmBusInstallButton_Click"/>
-                                        </Grid>
+                                        <!-- (ViGEmBus dependency row removed — ViGEm backend retired.) -->
 
                                         <Grid Margin="0,8,0,0">
                                             <Grid.ColumnDefinitions>

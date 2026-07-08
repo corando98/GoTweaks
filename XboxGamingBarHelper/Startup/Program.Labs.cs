@@ -752,16 +752,11 @@ namespace XboxGamingBarHelper
 
         /// <summary>
         /// Called when a controller-emulation backend (VIIPER or legacy) changes state.
-        /// Pokes the LegionButtonMonitor so it tears down the dedicated Guide-only ViGEm
-        /// pad immediately when emulation takes over, and rebuilds it when emulation goes
-        /// away — no ~500 ms wait for the next reconcile tick.
+        /// Re-runs VIIPER's guide-only reconciliation (ReapplyMode) — the sole
+        /// owner of the Guide route since the ViGEm retirement.
         /// </summary>
         internal static void NotifyGuideRouteChanged()
         {
-            // Order matters when CE toggles ON: ViiperEmulationManager.OnGuideRouteChanged
-            // may transition guide-only → full (or guide-only → stopped), which itself
-            // re-enters NotifyGuideRouteChanged. Calling Viiper first lets that re-entry
-            // collapse before Labs decides whether it still needs its dedicated ViGEm pad.
             try
             {
                 viiperEmulationManager?.OnGuideRouteChanged();
@@ -769,15 +764,6 @@ namespace XboxGamingBarHelper
             catch (Exception ex)
             {
                 Logger.Warn($"Labs: viiperEmulationManager.OnGuideRouteChanged threw: {ex.Message}");
-            }
-
-            try
-            {
-                legionButtonMonitor?.ForceReconcileGuideRoute();
-            }
-            catch (Exception ex)
-            {
-                Logger.Warn($"Labs: NotifyGuideRouteChanged threw: {ex.Message}");
             }
         }
 
@@ -1012,7 +998,6 @@ namespace XboxGamingBarHelper
 
                     // Remember state before configuration
                     bool wasRunning = monitor.IsRunning;
-                    bool neededViGEmBefore = monitor.NeedsViGEm;
 
                     // Configure the button on the unified monitor
                     // This just updates internal flags - the monitor loop will pick up changes on next iteration
@@ -1041,53 +1026,31 @@ namespace XboxGamingBarHelper
                         }
                     );
 
-                    // Check if ViGEm requirements changed (need to restart monitor to add/remove ViGEm controller)
-                    bool needsViGEmNow = monitor.NeedsViGEm;
-                    bool vigemRequirementChanged = neededViGEmBefore != needsViGEmNow;
-
-                    // Handle different scenarios
+                    // Handle different scenarios. (ViGEm retirement: the old
+                    // restart-on-pad-requirement-change branch is gone — button
+                    // config is always hot-applied while running; Guide delivery
+                    // rides VIIPER which reconciles itself via NotifyGuideRouteChanged.)
                     if (!monitor.HasAnyButtonConfigured)
                     {
-                        // No buttons configured - restart for battery-only mode if it was running with buttons
-                        if (wasRunning && neededViGEmBefore)
-                        {
-                            // Was running with ViGEm for buttons, restart for battery-only
-                            Logger.Info($"Labs: Legion {button} button disabled, restarting monitor for battery-only mode");
-                            monitor.Stop();
-                            monitor.StartForBatteryMonitoring();
-                        }
-                        else if (!wasRunning)
+                        if (!wasRunning)
                         {
                             // Monitor wasn't running, start for battery monitoring
                             monitor.StartForBatteryMonitoring();
                         }
-                        // else: already running for battery-only, no change needed
+                        // else: already running - buttons off, battery monitoring continues
                         Logger.Info($"Labs: Legion {button} button disabled, no buttons configured - battery monitoring continues");
                         return true;
-                    }
-                    else if (wasRunning && vigemRequirementChanged)
-                    {
-                        // ViGEm requirement changed - need to restart monitor
-                        Logger.Info($"Labs: ViGEm requirement changed ({neededViGEmBefore} -> {needsViGEmNow}), restarting monitor");
-                        monitor.Stop();
-                        if (!monitor.Start())
-                        {
-                            string errorReason = needsViGEmNow ? "ViGEmBus not installed or " : "";
-                            Logger.Error($"Labs: Failed to restart Legion button monitoring ({errorReason}controller not found)");
-                            return false;
-                        }
                     }
                     else if (!wasRunning)
                     {
                         // Monitor wasn't running - start it
                         if (!monitor.Start())
                         {
-                            string errorReason = needsViGEmNow ? "ViGEmBus not installed or " : "";
-                            Logger.Error($"Labs: Failed to start Legion button monitoring ({errorReason}controller not found)");
+                            Logger.Error($"Labs: Failed to start Legion button monitoring (controller not found)");
                             return false;
                         }
                     }
-                    // else: Monitor was running and ViGEm requirement didn't change - config is hot-applied
+                    // else: Monitor was running - config is hot-applied
 
                     string actionName = !enabled ? "Disabled" :
                                        actionType == 0 ? "Xbox Guide" :
@@ -1124,7 +1087,6 @@ namespace XboxGamingBarHelper
 
                     // Remember state before configuration
                     bool wasRunning = monitor.IsRunning;
-                    bool neededViGEmBefore = monitor.NeedsViGEm;
 
                     // Configure the scroll wheel action on the unified monitor
                     monitor.ConfigureScrollWheel(
@@ -1152,50 +1114,27 @@ namespace XboxGamingBarHelper
                         }
                     );
 
-                    // Check if ViGEm requirements changed
-                    bool needsViGEmNow = monitor.NeedsViGEm;
-                    bool vigemRequirementChanged = neededViGEmBefore != needsViGEmNow;
-
-                    // Handle different scenarios
+                    // Handle different scenarios. (ViGEm retirement: no more
+                    // restart-on-pad-requirement-change — config hot-applies.)
                     if (!monitor.HasAnyButtonConfigured && !monitor.HasAnyScrollConfigured)
                     {
-                        // No buttons or scroll configured - restart for battery-only mode if it was running
-                        if (wasRunning && neededViGEmBefore)
-                        {
-                            Logger.Info($"Labs: Scroll {direction} disabled, no buttons/scroll configured - restarting for battery-only");
-                            monitor.Stop();
-                            monitor.StartForBatteryMonitoring();
-                        }
-                        else if (!wasRunning)
+                        if (!wasRunning)
                         {
                             monitor.StartForBatteryMonitoring();
                         }
                         Logger.Info($"Labs: Scroll {direction} disabled - battery monitoring continues");
                         return true;
                     }
-                    else if (wasRunning && vigemRequirementChanged)
-                    {
-                        // ViGEm requirement changed - need to restart monitor
-                        Logger.Info($"Labs: ViGEm requirement changed ({neededViGEmBefore} -> {needsViGEmNow}), restarting monitor");
-                        monitor.Stop();
-                        if (!monitor.Start())
-                        {
-                            string errorReason = needsViGEmNow ? "ViGEmBus not installed or " : "";
-                            Logger.Error($"Labs: Failed to restart monitoring ({errorReason}controller not found)");
-                            return false;
-                        }
-                    }
                     else if (!wasRunning)
                     {
                         // Monitor wasn't running - start it
                         if (!monitor.Start())
                         {
-                            string errorReason = needsViGEmNow ? "ViGEmBus not installed or " : "";
-                            Logger.Error($"Labs: Failed to start monitoring ({errorReason}controller not found)");
+                            Logger.Error($"Labs: Failed to start monitoring (controller not found)");
                             return false;
                         }
                     }
-                    // else: Monitor was running and ViGEm requirement didn't change - config is hot-applied
+                    // else: Monitor was running - config is hot-applied
 
                     string actionName = !enabled ? "Disabled" :
                                        actionType == 0 ? "Xbox Guide" :

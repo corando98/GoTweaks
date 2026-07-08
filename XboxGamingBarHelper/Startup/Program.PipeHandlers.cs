@@ -1095,46 +1095,10 @@ namespace XboxGamingBarHelper
                         Logger.Info($"Pipe: Auto Hibernate mode set to: {mode} ({(mode == 0 ? "Always" : mode == 1 ? "AC Only" : "DC Only")})");
                     }
                 }
-                // ViGEmBus: Check installed status
-                else if (functionValue == (int)Function.ViGEmBusInstalled)
-                {
-                    bool installed = XboxGamingBarHelper.Labs.ViGEmBusHelper.IsInstalled();
-                    response = new global::Windows.Foundation.Collections.ValueSet();
-                    response.Add(nameof(Function), functionValue);
-                    response.Add("Content", installed);
-                    response.Add("UpdatedTime", DateTimeOffset.Now.ToUnixTimeMilliseconds());
-                    Logger.Info($"Pipe: ViGEmBus installed status: {installed}");
-                }
-                // ViGEmBus: Install request - only install when explicitly requested with Set command and "install" content
-                else if (functionValue == (int)Function.InstallViGEmBus)
-                {
-                    // Check if this is a Set command with "install" content
-                    bool shouldInstall = request.Command == Shared.Enums.Command.Set && request.Content == "install";
-
-                    if (!shouldInstall)
-                    {
-                        Logger.Debug("Pipe: InstallViGEmBus - Ignoring non-install request (Get or empty content)");
-                        return;
-                    }
-
-                    Logger.Info("Pipe: ViGEmBus installation requested from widget");
-                    _ = Task.Run(() =>
-                    {
-                        bool success = XboxGamingBarHelper.Labs.ViGEmBusHelper.Install();
-                        bool installed = XboxGamingBarHelper.Labs.ViGEmBusHelper.IsInstalled();
-                        // Send updated status via pipe
-                        var updateMsg = new Shared.IPC.PipeMessage
-                        {
-                            Command = Shared.Enums.Command.Set,
-                            Function = Function.ViGEmBusInstalled,
-                            Content = installed.ToString()
-                        };
-                        SendPipeMessage(updateMsg);
-                        Logger.Info($"Pipe: ViGEmBus installation complete, sent updated status: {installed}");
-                    });
-                    response = new global::Windows.Foundation.Collections.ValueSet();
-                    response.Add("Content", true); // Acknowledge request started
-                }
+                // (ViGEmBusInstalled / InstallViGEmBus handlers removed — ViGEm
+                // backend retired. The Function enum entries stay so the wire
+                // values of later entries don't shift; unknown functions from
+                // any stale sender are simply ignored.)
                 // HidHide: Check installed status
                 else if (functionValue == (int)Function.HidHideInstalled)
                 {

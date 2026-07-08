@@ -230,7 +230,6 @@ namespace XboxGamingBarHelper.Labs
         // Track when output reports are sent to skip button detection (prevents false triggers)
         private DateTime _lastOutputReportTime = DateTime.MinValue;
         private const int OUTPUT_REPORT_IGNORE_MS = 100;  // Ignore button reads for 100ms after output
-        private const int GUIDE_ROUTE_RECONCILE_INTERVAL_MS = 500;
 
         // Detected device info
         private ushort _detectedVid = 0;
@@ -258,7 +257,6 @@ namespace XboxGamingBarHelper.Labs
         private const int AllRejectedScansBeforeBackoff = 3;
         internal const int IncompatibleRescanDelayMs = 60 * 1000;      // 60s full-probe cadence
         private const int BackoffPathSetCheckIntervalMs = 10 * 1000;   // cheap set check cadence
-        private DateTime _lastGuideRouteReconcileTimeUtc = DateTime.MinValue;
 
         // Cached device path for faster reconnection (persisted to settings)
         private static string _cachedDevicePath = null;
@@ -1100,28 +1098,9 @@ namespace XboxGamingBarHelper.Labs
         }
 
         /// <summary>
-        /// ViGEm retirement (phase 2): the dedicated Guide-only ViGEm pad is gone.
-        /// The Guide route is now always served by VIIPER — either the full input
-        /// forwarder or ViiperEmulationManager's guide-only pad, which since phase 2
-        /// starts regardless of the backend selector whenever a Guide action is
-        /// configured and no full pad owns the route. These methods remain as
-        /// no-op shims because Program.NotifyGuideRouteChanged still calls them;
-        /// VIIPER's own OnGuideRouteChanged does the real reconciliation.
-        /// </summary>
-        public void ForceReconcileGuideRoute()
-        {
-            // Intentionally empty — see summary.
-        }
-
-        private void ReconcileGuideRoute()
-        {
-            // Intentionally empty — see summary.
-        }
-
-        /// <summary>
         /// Get whether any user-mapped action is configured to fire the Xbox Guide button.
         /// Exposed so ViiperEmulationManager can decide whether to spin up its Guide-only
-        /// virtual pad when the master Controller-Emulation toggle is off but backend=VIIPER.
+        /// virtual pad (sole owner of the Guide route since the ViGEm retirement).
         /// </summary>
         public bool HasGuideActionConfigured =>
             (legionLEnabled && legionLActionType == LegionButtonAction.XboxGuide) ||
@@ -1129,15 +1108,6 @@ namespace XboxGamingBarHelper.Labs
             (scrollUpEnabled && scrollUpActionType == LegionButtonAction.XboxGuide) ||
             (scrollDownEnabled && scrollDownActionType == LegionButtonAction.XboxGuide) ||
             (scrollClickEnabled && scrollClickActionType == LegionButtonAction.XboxGuide);
-
-        /// <summary>
-        /// ViGEm retirement (phase 2): constant false. The dedicated Guide-only
-        /// ViGEm pad no longer exists — VIIPER guide-only serves the route on
-        /// every backend. Kept so Program.Labs' "restart monitor when the pad
-        /// requirement changes" logic stays inert without a rewrite; remove
-        /// together with those call sites in the final ViGEm cleanup.
-        /// </summary>
-        public bool NeedsViGEm => false;
 
         /// <summary>
         /// Get whether any button is configured.
@@ -1164,12 +1134,6 @@ namespace XboxGamingBarHelper.Labs
         /// Get whether the controller is in detached/uninitialized mode.
         /// </summary>
         public bool IsDetachedMode => isDetachedMode;
-
-        /// <summary>
-        /// Check if ViGEm controller needs to be (re)initialized based on current configuration.
-        /// Returns true if we need ViGEm but don't have a controller, or have one but don't need it.
-        /// </summary>
-        public bool NeedsViGEmRestart => false; // ViGEm retirement: pad no longer exists
 
         /// <summary>
         /// Start monitoring the configured Legion buttons (L and/or R).
@@ -2538,8 +2502,6 @@ namespace XboxGamingBarHelper.Labs
                     loopIteration++;
                     try
                     {
-                        ReconcileGuideRoute();
-
                         // If no valid handle, try to reconnect
                         if (hidHandle == null || hidHandle.IsInvalid)
                         {
