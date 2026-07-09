@@ -408,21 +408,19 @@ namespace XboxGamingBar
         {
             Logger.Info("App launched");
 
-            // #94 item 2: the Game Bar widget lives on this app's MAIN view.
-            // A desktop launch (Start menu / taskbar) while the widget is
-            // active would fall through to Window.Current.Activate() below and
-            // present the widget's own window as a normal desktop window —
-            // and closing that window then suspends the whole process, leaving
-            // Game Bar's overlay pointing at a dead view ("Something went
-            // wrong with this widget"). Repro: open widget in Game Bar → open
-            // the app → close the app. While the widget owns the view, a
-            // desktop launch is a no-op.
-            if (gamingXboxGameBarWidget != null)
-            {
-                Logger.Info("App launched while Game Bar widget is active — leaving the widget's window untouched (use Win+G)");
-                return;
-            }
-
+            // #94 item 2 (desktop app + Game Bar widget coexistence): the
+            // widget has its OWN CoreWindow, so this launch targets a separate
+            // main view and both UIs genuinely coexist. The remaining wart is
+            // OS policy, not ours: while the desktop window is up the overlay
+            // is closed, so the widget view is invisible — closing the desktop
+            // window leaves zero visible views and Windows terminates the
+            // process (log: "App suspending", PreviousExecutionState=
+            // ClosedByUser). Game Bar then briefly shows "Something went wrong
+            // with this widget" and relaunches us with IsLaunchActivation=true
+            // (verified in widget_2026-07-09_09.log: clean recreate 14s after
+            // the close). An earlier attempt to no-op this launch while the
+            // widget is active just hung the launch on its splash screen —
+            // the window is created by the shell before OnLaunched runs.
             Frame rootFrame = Window.Current.Content as Frame;
 
             // Do not repeat app initialization when the Window already has content,
