@@ -179,6 +179,7 @@ namespace XboxGamingBarHelper.Labs
         private bool _hasWriteAccess = false;  // Track if we have write access for heartbeat
         private bool _highQualityGyroConfigured = false;
         private readonly object _hidLock = new object();  // Lock for HID operations to prevent race conditions
+        private readonly object startStopLock = new object();  // #94: serialize Start/StartForBatteryMonitoring (see Start)
         private Thread monitorThread;
         private volatile bool isRunning = false;
         private volatile bool isDisposed = false;
@@ -1142,14 +1143,29 @@ namespace XboxGamingBarHelper.Labs
         /// </summary>
         public bool Start()
         {
-            if (isRunning)
-                return true;
-
-            // Check if we have any button or scroll configured
-            if (!HasAnyButtonConfigured && !HasAnyScrollConfigured)
+            // #94: Start/StartForBatteryMonitoring used to check isRunning,
+            // run the slow HID scan (seconds when controllers answer with the
+            // wrong report format), and only then set isRunning — so the L
+            // config, R config, and battery-monitor startup calls arriving
+            // within ~400ms of each other each passed the check and spawned
+            // their own MonitorLoop. Two loops = doubled scans/reads and the
+            // "helper at constant CPU until reboot" report. Serialize the
+            // whole start under a lock and claim isRunning before the scan.
+            lock (startStopLock)
             {
-                Logger.Warn("LegionButtonMonitor: No buttons or scroll configured, not starting");
-                return false;
+                if (isRunning)
+                    return true;
+
+                // Check if we have any button or scroll configured
+                if (!HasAnyButtonConfigured && !HasAnyScrollConfigured)
+                {
+                    Logger.Warn("LegionButtonMonitor: No buttons or scroll configured, not starting");
+                    return false;
+                }
+
+                // Claim the running slot before the (slow) device scan so a
+                // concurrent caller bails at the isRunning check above.
+                isRunning = true;
             }
 
             // Try to find and open Legion controller HID device
@@ -1161,7 +1177,6 @@ namespace XboxGamingBarHelper.Labs
             }
 
             // Start monitoring thread - it will handle reconnection if controller not found
-            isRunning = true;
             monitorThread = new Thread(MonitorLoop)
             {
                 IsBackground = true,
@@ -1203,6 +1218,11 @@ namespace XboxGamingBarHelper.Labs
         /// </summary>
         public void Stop()
         {
+            // Under the same lock as Start so a concurrent Start can't
+            // interleave with the teardown (MonitorLoop never takes this
+            // lock, so the Join below can't deadlock).
+            lock (startStopLock)
+            {
             if (!isRunning)
                 return;
 
@@ -1248,6 +1268,7 @@ namespace XboxGamingBarHelper.Labs
             _highQualityGyroConfigured = false;
 
             Logger.Info("LegionButtonMonitor: Stopped");
+            }
         }
 
         /// <summary>
@@ -1257,8 +1278,14 @@ namespace XboxGamingBarHelper.Labs
         /// <returns>True if successfully started</returns>
         public bool StartForBatteryMonitoring()
         {
-            if (isRunning)
-                return true;
+            // Same start race as Start() — see the #94 comment there.
+            lock (startStopLock)
+            {
+                if (isRunning)
+                    return true;
+
+                isRunning = true;
+            }
 
             // Try to find and open Legion controller HID device
             // Even if not found initially, start the monitor thread which will retry
@@ -1269,7 +1296,6 @@ namespace XboxGamingBarHelper.Labs
             }
 
             // Start monitoring thread - it will handle reconnection if controller not found
-            isRunning = true;
             monitorThread = new Thread(MonitorLoop)
             {
                 IsBackground = true,
