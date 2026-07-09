@@ -159,14 +159,24 @@ namespace XboxGamingBarHelper.Windows
                 return false;
             }
 
-            // Plain SW_HIDE only. Do NOT minimize first: ApplicationFrameHost
-            // processes minimize asynchronously and completing it re-presents
-            // the window as minimized-in-taskbar, overriding the hide (2577
-            // field test). SW_HIDE alone removes the window (2576 field test);
-            // the shell just leaves the taskbar BUTTON behind, which DeleteTab
-            // retires. Re-hide after a short settle in case the frame host
-            // flushes a pending state transition over the first hide.
+            // ApplicationFrameHost fights external state changes: an instant
+            // hide gets re-presented when the frame host re-syncs to its
+            // still-alive CoreWindow (2578 field test), and hide-right-after-
+            // minimize loses the race against the async minimize transition
+            // (2577 field test). The sequence that sticks: minimize, WAIT for
+            // the transition to complete (IsIconic), then hide the settled
+            // window — the frame host has no pending transition left to replay
+            // over it. DeleteTab retires the taskbar button (2576 field test).
+            ShowWindow(hWnd, SW_MINIMIZE);
+            for (int waited = 0; waited < 1000 && !IsIconic(hWnd); waited += 50)
+            {
+                System.Threading.Thread.Sleep(50);
+            }
+
             ShowWindow(hWnd, SW_HIDE);
+
+            // Give the hide a moment, then re-assert once if the frame host
+            // replayed anything over it.
             System.Threading.Thread.Sleep(150);
             if (IsWindowVisible(hWnd))
             {
