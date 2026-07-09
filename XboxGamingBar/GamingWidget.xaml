@@ -6285,9 +6285,12 @@
                                                        FontSize="11"
                                                        Foreground="#888888"/>
                                         </StackPanel>
+                                        <!-- No IsOn="True" here: the XAML default fired Toggled during
+                                             InitializeComponent and stomped a stored False on every
+                                             launch (#94 "unchecking doesn't stick"). The stored value
+                                             (default true) is applied by CheckForUpdatesOnStartupAsync. -->
                                         <ToggleSwitch x:Name="AutoUpdateCheckToggle"
                                                       Grid.Column="1"
-                                                      IsOn="True"
                                                       Style="{StaticResource ModernToggleStyle}"
                                                       Toggled="AutoUpdateCheckToggle_Toggled"/>
                                     </Grid>
