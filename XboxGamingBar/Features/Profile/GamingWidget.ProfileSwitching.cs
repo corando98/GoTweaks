@@ -322,6 +322,18 @@ namespace XboxGamingBar
             Logger.Info($"Saving profile {profileName}: TDP={profile.TDP}W");
             SaveProfileToStorage(profileName, profile);
 
+            // Per-state profile edited → refresh the helper's AC/DC cache so it
+            // applies the new values on transitions without the widget awake.
+            // GetProfile returned the same instance SendPowerSourceProfileValues
+            // reads, so the in-memory pair is already up to date; only the pipe
+            // sync was missing (#94 item 3: AutoTDP edits in a game AC/DC
+            // profile never reached the helper until the next reconnect).
+            if (profileName == "AC" || profileName == "DC"
+                || profileName.EndsWith("_AC") || profileName.EndsWith("_DC"))
+            {
+                SendPowerSourceProfileValuesToHelper();
+            }
+
             // Update profile display
             UpdateProfileDisplay();
         }

@@ -48,6 +48,12 @@ namespace XboxGamingBarHelper
             // these into FPSLimitEnabled+FPSLimitValue; we collapse on the wire.
             public static int? AcFpsLimit = null;
             public static int? DcFpsLimit = null;
+
+            // AutoTDP per-state (#94 item 3).
+            public static bool? AcAutoTdp = null;
+            public static bool? DcAutoTdp = null;
+            public static int? AcAutoTdpFps = null;
+            public static int? DcAutoTdpFps = null;
         }
 
         // Tracks last observed isOnAC so we can skip the (relatively expensive) plan-switch
@@ -135,6 +141,10 @@ namespace XboxGamingBarHelper
                 PowerSourceProfileState.DcOsPowerMode = ParseInt("DcOsPowerMode");
                 PowerSourceProfileState.AcFpsLimit = ParseInt("AcFpsLimit");
                 PowerSourceProfileState.DcFpsLimit = ParseInt("DcFpsLimit");
+                PowerSourceProfileState.AcAutoTdp = ParseBool("AcAutoTdp");
+                PowerSourceProfileState.DcAutoTdp = ParseBool("DcAutoTdp");
+                PowerSourceProfileState.AcAutoTdpFps = ParseInt("AcAutoTdpFps");
+                PowerSourceProfileState.DcAutoTdpFps = ParseInt("DcAutoTdpFps");
 
                 Logger.Info($"Applied PowerSourceProfileValues "
                     + $"(AC: tdp={PowerSourceProfileState.AcTdp?.ToString() ?? "-"}W, "
@@ -222,7 +232,7 @@ namespace XboxGamingBarHelper
             // they've also enabled the Power-Source-Profile power-plan auto-switch.
             try
             {
-                if (performanceManager == null || performanceManager.IsAutoTDPActive)
+                if (performanceManager == null)
                 {
                     return;
                 }
@@ -231,6 +241,51 @@ namespace XboxGamingBarHelper
                 if (dgpActive)
                 {
                     Logger.Debug("Helper-side AC/DC handler: skipping AC/DC apply — DGP is active");
+                    return;
+                }
+
+                // 2-pre) Per-state AutoTDP (#94 item 3). MUST run before the
+                // IsAutoTDPActive gate below: when AutoTDP is currently running and
+                // the new power state wants it off, the old gate returned without
+                // ever disabling it — an AC-on/DC-off split could never switch off
+                // helper-side, and the widget-side switch only runs while the widget
+                // is awake (Game Bar suspends it whenever the overlay closes).
+                // Ordering rules (see RestoreGlobalProfileSettings):
+                //  - disable AutoTDP and clear IsAutoTDPActive BEFORE the TDP apply
+                //    below, or TDPProperty.NotifyPropertyChanged skips the hardware
+                //    write;
+                //  - ForceSetValue so the widget's toggle gets the pipe push even if
+                //    a stale widget-side value matches.
+                bool? perStateAutoTdp = isOnAC ? PowerSourceProfileState.AcAutoTdp : PowerSourceProfileState.DcAutoTdp;
+                if (perStateAutoTdp.HasValue && autoTDPManager != null)
+                {
+                    int? perStateAutoTdpFps = isOnAC ? PowerSourceProfileState.AcAutoTdpFps : PowerSourceProfileState.DcAutoTdpFps;
+                    if (perStateAutoTdp.Value && perStateAutoTdpFps.HasValue && perStateAutoTdpFps.Value > 0
+                        && autoTDPManager.TargetFPS != null
+                        && perStateAutoTdpFps.Value != autoTDPManager.TargetFPS.Value)
+                    {
+                        Logger.Info($"Helper-side AC/DC handler: applying AutoTDP target FPS {perStateAutoTdpFps.Value} from per-state {(isOnAC ? "AC" : "DC")} profile");
+                        autoTDPManager.TargetFPS.SetValue(perStateAutoTdpFps.Value);
+                    }
+
+                    if (autoTDPManager.Enabled != null && perStateAutoTdp.Value != autoTDPManager.Enabled.Value)
+                    {
+                        Logger.Info($"Helper-side AC/DC handler: applying AutoTDP={perStateAutoTdp.Value} from per-state {(isOnAC ? "AC" : "DC")} profile");
+                        autoTDPManager.Enabled.ForceSetValue(perStateAutoTdp.Value);
+                    }
+
+                    if (!perStateAutoTdp.Value && performanceManager.IsAutoTDPActive)
+                    {
+                        // Only the AutoTDP tick clears this; do it now so the TDP
+                        // apply below isn't skipped.
+                        performanceManager.IsAutoTDPActive = false;
+                    }
+                }
+
+                if (performanceManager.IsAutoTDPActive)
+                {
+                    // AutoTDP stays active for this power state — it overwrites TDP
+                    // every tick, so skip the static per-state applies below.
                     return;
                 }
 

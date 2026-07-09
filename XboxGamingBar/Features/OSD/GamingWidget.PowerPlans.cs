@@ -350,6 +350,15 @@ namespace XboxGamingBar
                 jsonObj["AcFpsLimit"] = Windows.Data.Json.JsonValue.CreateNumberValue(ac.FPSLimitEnabled ? ac.FPSLimitValue : 0);
                 jsonObj["DcFpsLimit"] = Windows.Data.Json.JsonValue.CreateNumberValue(dc.FPSLimitEnabled ? dc.FPSLimitValue : 0);
 
+                // AutoTDP per-state (#94 item 3): without these the helper had no way
+                // to follow a game profile whose AC and DC sides differ on AutoTDP —
+                // the widget-side switch only runs while the widget is awake, and Game
+                // Bar suspends it whenever the overlay closes.
+                jsonObj["AcAutoTdp"] = Windows.Data.Json.JsonValue.CreateBooleanValue(ac.AutoTDPEnabled);
+                jsonObj["DcAutoTdp"] = Windows.Data.Json.JsonValue.CreateBooleanValue(dc.AutoTDPEnabled);
+                jsonObj["AcAutoTdpFps"] = Windows.Data.Json.JsonValue.CreateNumberValue(ac.AutoTDPTargetFPS);
+                jsonObj["DcAutoTdpFps"] = Windows.Data.Json.JsonValue.CreateNumberValue(dc.AutoTDPTargetFPS);
+
                 var request = new Windows.Foundation.Collections.ValueSet
                 {
                     { "Command", (int)Shared.Enums.Command.Set },
