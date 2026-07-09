@@ -89,6 +89,7 @@ namespace XboxGamingBarHelper.Windows
 
         private const int SW_HIDE = 0;
         private const int SW_SHOW = 5;
+        private const int SW_MINIMIZE = 6;
         private const int SW_RESTORE = 9;
 
         /// <summary>
@@ -120,11 +121,35 @@ namespace XboxGamingBarHelper.Windows
             return found;
         }
 
+        // ITaskbarList lets us explicitly retire the taskbar button of a hidden
+        // UWP frame window — the shell often keeps the button alive after a
+        // bare SW_HIDE (observed on 2576: window hidden, button remained).
+        [ComImport]
+        [Guid("56FDF344-FD6D-11d0-958A-006097C9A090")]
+        [ClassInterface(ClassInterfaceType.None)]
+        private class TaskbarListInstance
+        {
+        }
+
+        [ComImport]
+        [Guid("56FDF342-FD6D-11d0-958A-006097C9A090")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface ITaskbarList
+        {
+            void HrInit();
+            void AddTab(IntPtr hwnd);
+            void DeleteTab(IntPtr hwnd);
+            void ActivateTab(IntPtr hwnd);
+            void SetActiveAlt(IntPtr hwnd);
+        }
+
         /// <summary>
         /// Hides the desktop app window entirely (no taskbar entry). Used by the
         /// widget's close-to-tray path (#94): the UWP process can't hide its own
         /// window, and closing it instead suspends the whole process — killing
         /// the Game Bar widget. Restore via <see cref="ShowAppFrameWindow"/>.
+        /// Minimize-then-hide plus an explicit taskbar DeleteTab, because a bare
+        /// SW_HIDE leaves the UWP frame window's taskbar button behind.
         /// </summary>
         public static bool HideAppFrameWindow(string title)
         {
@@ -134,7 +159,22 @@ namespace XboxGamingBarHelper.Windows
                 return false;
             }
 
-            return ShowWindow(hWnd, SW_HIDE);
+            ShowWindow(hWnd, SW_MINIMIZE);
+            bool hidden = ShowWindow(hWnd, SW_HIDE);
+
+            try
+            {
+                var taskbar = (ITaskbarList)new TaskbarListInstance();
+                taskbar.HrInit();
+                taskbar.DeleteTab(hWnd);
+                Marshal.ReleaseComObject(taskbar);
+            }
+            catch
+            {
+                // Cosmetic only — the window is hidden either way.
+            }
+
+            return hidden;
         }
 
         /// <summary>
