@@ -407,6 +407,22 @@ namespace XboxGamingBar
         protected override void OnLaunched(LaunchActivatedEventArgs e)
         {
             Logger.Info("App launched");
+
+            // #94 item 2: the Game Bar widget lives on this app's MAIN view.
+            // A desktop launch (Start menu / taskbar) while the widget is
+            // active would fall through to Window.Current.Activate() below and
+            // present the widget's own window as a normal desktop window —
+            // and closing that window then suspends the whole process, leaving
+            // Game Bar's overlay pointing at a dead view ("Something went
+            // wrong with this widget"). Repro: open widget in Game Bar → open
+            // the app → close the app. While the widget owns the view, a
+            // desktop launch is a no-op.
+            if (gamingXboxGameBarWidget != null)
+            {
+                Logger.Info("App launched while Game Bar widget is active — leaving the widget's window untouched (use Win+G)");
+                return;
+            }
+
             Frame rootFrame = Window.Current.Content as Frame;
 
             // Do not repeat app initialization when the Window already has content,
