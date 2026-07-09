@@ -61,8 +61,14 @@ namespace XboxGamingBar.IPC
         private bool _isConnected;
         private int _lastError; // Track last Win32 error for diagnostics
 
-        // Request/response tracking
-        private int _nextRequestId = 1;
+        // Request/response tracking. Seeded per process (task #12): the
+        // desktop app and the Game Bar widget run as separate processes, and
+        // both connect to the helper. The helper routes responses back to the
+        // requesting client by RequestId, so the two clients' id ranges must
+        // never overlap — a random 14-bit base shifted high gives each process
+        // 65k+ requests of headroom (no int overflow) with a collision chance
+        // of 1 in 16384.
+        private int _nextRequestId = new Random().Next(1, 1 << 14) << 16;
         private readonly ConcurrentDictionary<int, TaskCompletionSource<ValueSet>> _pendingRequests =
             new ConcurrentDictionary<int, TaskCompletionSource<ValueSet>>();
 

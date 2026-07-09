@@ -1,10 +1,13 @@
 using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Pipes;
-using System.Runtime.InteropServices;
+using System.Linq;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using NLog;
@@ -12,8 +15,15 @@ using NLog;
 namespace XboxGamingBarHelper.IPC
 {
     /// <summary>
-    /// Named Pipe server for IPC with the widget.
+    /// Named Pipe server for IPC with the widget(s).
     /// Uses proper ACLs to allow UWP apps to connect (even when helper is elevated).
+    ///
+    /// Multi-client (task #12): with the desktop app and the Game Bar widget
+    /// split into separate processes, BOTH connect here. Property pushes are
+    /// broadcast to every client (which keeps the two UIs in sync for free);
+    /// request responses are routed back to the client that sent the request
+    /// via a RequestId → client map, so no call site had to change. Widget-side
+    /// RequestIds are seeded per process so two clients can't collide.
     /// </summary>
     public class NamedPipeServer : IDisposable
     {
@@ -30,34 +40,66 @@ namespace XboxGamingBarHelper.IPC
         /// </summary>
         public static readonly string FullPipePath = $"\\\\.\\pipe\\{PipeName}";
 
-        private NamedPipeServerStream _pipeServer;
-        private StreamReader _reader;
-        private StreamWriter _writer;
-        private readonly object _writeLock = new object();
+        /// <summary>
+        /// Widget + desktop app + one spare for reconnect churn.
+        /// </summary>
+        private const int MaxClients = 4;
+
+        private sealed class ClientConnection
+        {
+            public int Id;
+            public NamedPipeServerStream Stream;
+            public StreamReader Reader;
+            public StreamWriter Writer;
+            public readonly object WriteLock = new object();
+        }
+
+        private readonly List<ClientConnection> _clients = new List<ClientConnection>();
+        private readonly object _clientsLock = new object();
+        private int _nextClientId;
+
+        // RequestId → client that sent it, so SendMessage can route the
+        // response without any call-site changes. Bounded: entries are removed
+        // when the response goes out, and the queue prunes leaks from requests
+        // that never get a reply.
+        private readonly ConcurrentDictionary<int, ClientConnection> _pendingRequestClients = new ConcurrentDictionary<int, ClientConnection>();
+        private readonly ConcurrentQueue<int> _pendingRequestOrder = new ConcurrentQueue<int>();
+        private const int MaxPendingRequestEntries = 512;
+
+        private static readonly Regex RequestIdRegex = new Regex(@"""RequestId""\s*:\s*(\d+)", RegexOptions.Compiled);
+
         private CancellationTokenSource _cancellationTokenSource;
         private Task _listenerTask;
         private bool _isDisposed;
-        private bool _isConnected;
 
         /// <summary>
-        /// Event raised when a message is received from the widget
+        /// Event raised when a message is received from a widget client
         /// </summary>
         public event EventHandler<PipeMessageEventArgs> MessageReceived;
 
         /// <summary>
-        /// Event raised when the widget connects
+        /// Event raised when a widget client connects
         /// </summary>
         public event EventHandler Connected;
 
         /// <summary>
-        /// Event raised when the widget disconnects
+        /// Event raised when a widget client disconnects
         /// </summary>
         public event EventHandler Disconnected;
 
         /// <summary>
-        /// Whether a client is currently connected
+        /// Whether at least one client is currently connected
         /// </summary>
-        public bool IsConnected => _isConnected && _pipeServer?.IsConnected == true;
+        public bool IsConnected
+        {
+            get
+            {
+                lock (_clientsLock)
+                {
+                    return _clients.Any(c => c.Stream?.IsConnected == true);
+                }
+            }
+        }
 
         /// <summary>
         /// Starts the pipe server and begins listening for connections
@@ -71,7 +113,7 @@ namespace XboxGamingBarHelper.IPC
             }
 
             _cancellationTokenSource = new CancellationTokenSource();
-            _listenerTask = Task.Run(() => ListenLoop(_cancellationTokenSource.Token));
+            _listenerTask = Task.Run(() => AcceptLoop(_cancellationTokenSource.Token));
             Logger.Info($"Named pipe server started: {FullPipePath}");
         }
 
@@ -83,12 +125,16 @@ namespace XboxGamingBarHelper.IPC
             Logger.Info("Stopping pipe server...");
             _cancellationTokenSource?.Cancel();
 
-            try
+            List<ClientConnection> clients;
+            lock (_clientsLock)
             {
-                // Force disconnect to unblock WaitForConnection
-                _pipeServer?.Dispose();
+                clients = new List<ClientConnection>(_clients);
+                _clients.Clear();
             }
-            catch { }
+            foreach (var client in clients)
+            {
+                CloseClient(client, notify: false);
+            }
 
             try
             {
@@ -101,90 +147,142 @@ namespace XboxGamingBarHelper.IPC
         }
 
         /// <summary>
-        /// Sends a message to the connected widget
+        /// Sends a message to widget clients. Messages carrying a RequestId we
+        /// saw arrive from a specific client are routed back to that client
+        /// only (request/response); everything else is broadcast to all
+        /// connected clients (property pushes — keeps multiple UIs in sync).
         /// </summary>
         public bool SendMessage(string message)
         {
-            if (!IsConnected)
+            // Response routing: match the RequestId back to its source client.
+            var match = RequestIdRegex.Match(message);
+            if (match.Success
+                && int.TryParse(match.Groups[1].Value, out int requestId)
+                && requestId > 0
+                && _pendingRequestClients.TryRemove(requestId, out var sourceClient))
+            {
+                if (SendToClient(sourceClient, message))
+                {
+                    return true;
+                }
+                // Source client died before its response — nothing useful to do.
+                Logger.Debug($"Response for request {requestId} dropped (client {sourceClient.Id} gone)");
+                return false;
+            }
+
+            // Broadcast path.
+            List<ClientConnection> clients;
+            lock (_clientsLock)
+            {
+                clients = new List<ClientConnection>(_clients);
+            }
+
+            if (clients.Count == 0)
             {
                 Logger.Debug("Cannot send message - not connected");
                 return false;
             }
 
+            bool anySent = false;
+            foreach (var client in clients)
+            {
+                anySent |= SendToClient(client, message);
+            }
+            return anySent;
+        }
+
+        private bool SendToClient(ClientConnection client, string message)
+        {
+            if (client?.Stream?.IsConnected != true)
+            {
+                return false;
+            }
+
             try
             {
-                lock (_writeLock)
+                lock (client.WriteLock)
                 {
-                    _writer?.WriteLine(message);
-                    _writer?.Flush();
+                    client.Writer?.WriteLine(message);
+                    client.Writer?.Flush();
                 }
                 return true;
             }
             catch (Exception ex)
             {
-                Logger.Error($"Error sending message: {ex.Message}");
-                HandleDisconnection();
+                Logger.Error($"Error sending message to client {client.Id}: {ex.Message}");
+                RemoveClient(client);
                 return false;
             }
         }
 
         /// <summary>
-        /// Main listen loop - accepts connections and reads messages
+        /// Accept loop — keeps a listening pipe instance available and spawns a
+        /// read task per connected client.
         /// </summary>
-        private void ListenLoop(CancellationToken cancellationToken)
+        private void AcceptLoop(CancellationToken cancellationToken)
         {
             while (!cancellationToken.IsCancellationRequested)
             {
+                NamedPipeServerStream pipe = null;
                 try
                 {
-                    // Create pipe with security that allows UWP apps
-                    CreatePipeWithSecurity();
-
+                    pipe = CreatePipeWithSecurity();
                     Logger.Info("Waiting for widget connection...");
-                    _pipeServer.WaitForConnection();
+                    pipe.WaitForConnection();
 
                     if (cancellationToken.IsCancellationRequested)
+                    {
+                        pipe.Dispose();
                         break;
+                    }
 
-                    _isConnected = true;
-                    _reader = new StreamReader(_pipeServer, Encoding.UTF8);
-                    _writer = new StreamWriter(_pipeServer, Encoding.UTF8) { AutoFlush = false };
+                    var client = new ClientConnection
+                    {
+                        Id = Interlocked.Increment(ref _nextClientId),
+                        Stream = pipe,
+                        Reader = new StreamReader(pipe, Encoding.UTF8),
+                        Writer = new StreamWriter(pipe, Encoding.UTF8) { AutoFlush = false },
+                    };
 
-                    Logger.Info("Widget connected via named pipe");
+                    int clientCount;
+                    lock (_clientsLock)
+                    {
+                        _clients.Add(client);
+                        clientCount = _clients.Count;
+                    }
+
+                    Logger.Info($"Widget connected via named pipe (client {client.Id}, {clientCount} connected)");
                     Connected?.Invoke(this, EventArgs.Empty);
 
-                    // Read messages until disconnection
-                    ReadMessages(cancellationToken);
+                    Task.Run(() => ReadMessages(client, cancellationToken));
                 }
                 catch (OperationCanceledException)
                 {
+                    try { pipe?.Dispose(); } catch { }
                     break;
                 }
                 catch (IOException ex)
                 {
-                    Logger.Debug($"Pipe IO error (likely disconnect): {ex.Message}");
+                    Logger.Debug($"Pipe IO error while accepting (likely shutdown): {ex.Message}");
+                    try { pipe?.Dispose(); } catch { }
                 }
                 catch (Exception ex)
                 {
-                    Logger.Error($"Pipe server error: {ex.Message}");
-                }
-                finally
-                {
-                    HandleDisconnection();
-                }
-
-                // Brief delay before accepting new connection
-                if (!cancellationToken.IsCancellationRequested)
-                {
-                    Thread.Sleep(100);
+                    Logger.Error($"Pipe server accept error: {ex.Message}");
+                    try { pipe?.Dispose(); } catch { }
+                    // Brief delay so a persistent failure can't spin the loop.
+                    if (!cancellationToken.IsCancellationRequested)
+                    {
+                        Thread.Sleep(500);
+                    }
                 }
             }
         }
 
         /// <summary>
-        /// Creates the named pipe server with security that allows UWP apps to connect
+        /// Creates a named pipe server instance with security that allows UWP apps to connect
         /// </summary>
-        private void CreatePipeWithSecurity()
+        private NamedPipeServerStream CreatePipeWithSecurity()
         {
             // Create security that allows:
             // 1. Current user (full control)
@@ -220,11 +318,10 @@ namespace XboxGamingBarHelper.IPC
                 // S-1-15-2-2 may not exist on older Windows versions
             }
 
-            // Use the NamedPipeServerStream constructor with PipeSecurity (available in .NET Framework)
-            _pipeServer = new NamedPipeServerStream(
+            return new NamedPipeServerStream(
                 PipeName,
                 PipeDirection.InOut,
-                1, // maxNumberOfServerInstances
+                MaxClients,
                 PipeTransmissionMode.Byte,
                 PipeOptions.Asynchronous,
                 4096, // inBufferSize
@@ -233,25 +330,26 @@ namespace XboxGamingBarHelper.IPC
         }
 
         /// <summary>
-        /// Reads messages from the connected client
+        /// Reads messages from one connected client
         /// </summary>
-        private void ReadMessages(CancellationToken cancellationToken)
+        private void ReadMessages(ClientConnection client, CancellationToken cancellationToken)
         {
             try
             {
-                while (!cancellationToken.IsCancellationRequested && _pipeServer.IsConnected)
+                while (!cancellationToken.IsCancellationRequested && client.Stream.IsConnected)
                 {
-                    var line = _reader.ReadLine();
+                    var line = client.Reader.ReadLine();
                     if (line == null)
                     {
                         // Client disconnected
-                        Logger.Info("Widget disconnected (end of stream)");
+                        Logger.Info($"Widget client {client.Id} disconnected (end of stream)");
                         break;
                     }
 
                     if (!string.IsNullOrWhiteSpace(line))
                     {
-                        Logger.Debug($"Received: {line.Substring(0, Math.Min(100, line.Length))}...");
+                        Logger.Debug($"Received from client {client.Id}: {line.Substring(0, Math.Min(100, line.Length))}...");
+                        TrackRequestSource(client, line);
                         MessageReceived?.Invoke(this, new PipeMessageEventArgs(line));
                     }
                 }
@@ -260,27 +358,70 @@ namespace XboxGamingBarHelper.IPC
             {
                 // Normal disconnection
             }
+            catch (ObjectDisposedException)
+            {
+                // Closed during shutdown
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Pipe client {client.Id} read error: {ex.Message}");
+            }
+            finally
+            {
+                RemoveClient(client);
+            }
         }
 
         /// <summary>
-        /// Handles client disconnection
+        /// Remembers which client a RequestId came from so SendMessage can
+        /// route the response. Bounded against requests that never get replies.
         /// </summary>
-        private void HandleDisconnection()
+        private void TrackRequestSource(ClientConnection client, string message)
         {
-            if (!_isConnected) return;
+            var match = RequestIdRegex.Match(message);
+            if (!match.Success || !int.TryParse(match.Groups[1].Value, out int requestId) || requestId <= 0)
+            {
+                return;
+            }
 
-            _isConnected = false;
-            Logger.Info("Widget disconnected");
+            _pendingRequestClients[requestId] = client;
+            _pendingRequestOrder.Enqueue(requestId);
+            while (_pendingRequestOrder.Count > MaxPendingRequestEntries && _pendingRequestOrder.TryDequeue(out int stale))
+            {
+                // Only remove if it's still the stale entry (a response may have
+                // already removed it; an id reuse would have re-added it).
+                _pendingRequestClients.TryRemove(stale, out _);
+            }
+        }
 
-            try { _reader?.Dispose(); } catch { }
-            try { _writer?.Dispose(); } catch { }
-            try { _pipeServer?.Dispose(); } catch { }
+        private void RemoveClient(ClientConnection client)
+        {
+            bool removed;
+            lock (_clientsLock)
+            {
+                removed = _clients.Remove(client);
+            }
 
-            _reader = null;
-            _writer = null;
-            _pipeServer = null;
+            if (!removed)
+            {
+                return;
+            }
 
-            Disconnected?.Invoke(this, EventArgs.Empty);
+            CloseClient(client, notify: true);
+        }
+
+        private void CloseClient(ClientConnection client, bool notify)
+        {
+            Logger.Info($"Widget client {client.Id} disconnected");
+
+            try { client.Reader?.Dispose(); } catch { }
+            try { client.Writer?.Dispose(); } catch { }
+            try { client.Stream?.Dispose(); } catch { }
+
+            if (notify)
+            {
+                Disconnected?.Invoke(this, EventArgs.Empty);
+            }
         }
 
         public void Dispose()
