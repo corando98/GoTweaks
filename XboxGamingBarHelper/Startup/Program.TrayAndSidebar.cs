@@ -49,7 +49,7 @@ namespace XboxGamingBarHelper
 
             try
             {
-                _trayIndicator = new HelperTrayIndicator(OnTrayRestartRequested, OnTrayExitRequested);
+                _trayIndicator = new HelperTrayIndicator(OnTrayRestartRequested, OnTrayExitRequested, OnTrayOpenAppRequested);
                 if (_trayIndicator.Start())
                 {
                     Logger.Info("Tray indicator started");
@@ -105,6 +105,33 @@ namespace XboxGamingBarHelper
             finally
             {
                 _trayIndicator = null;
+            }
+        }
+
+        private static void OnTrayOpenAppRequested()
+        {
+            Logger.Info("Tray: Open GoTweaks requested");
+            try
+            {
+                // Re-show the (possibly tray-hidden, #94) desktop window if the
+                // app view exists; otherwise launch the app fresh.
+                if (Windows.User32.ShowAppFrameWindow("GoTweaks"))
+                {
+                    Logger.Info("Tray: existing GoTweaks window shown");
+                    return;
+                }
+
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = @"shell:appsFolder\PlayandBuildCustom.10365195AA1EC_8edemd50ez3gg!App",
+                    UseShellExecute = false,
+                });
+                Logger.Info("Tray: launched GoTweaks app");
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"Tray: Open GoTweaks failed: {ex.Message}");
             }
         }
 
@@ -218,16 +245,43 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
         {
             private readonly Action _onRestartRequested;
             private readonly Action _onExitRequested;
+            private readonly Action _onOpenAppRequested;
             private readonly ManualResetEventSlim _startupSignal = new ManualResetEventSlim(false);
             private Thread _uiThread;
             private Exception _startupException;
             private uint _threadId;
             private bool _disposed;
 
-            internal HelperTrayIndicator(Action onRestartRequested, Action onExitRequested)
+            internal HelperTrayIndicator(Action onRestartRequested, Action onExitRequested, Action onOpenAppRequested)
             {
                 _onRestartRequested = onRestartRequested;
                 _onExitRequested = onExitRequested;
+                _onOpenAppRequested = onOpenAppRequested;
+            }
+
+            /// <summary>
+            /// Loads the GoTweaks logo (embedded multi-size .ico) for the tray.
+            /// Falls back to the generic application icon if anything goes wrong.
+            /// </summary>
+            private static global::System.Drawing.Icon LoadTrayIcon()
+            {
+                try
+                {
+                    var asm = global::System.Reflection.Assembly.GetExecutingAssembly();
+                    using (var stream = asm.GetManifestResourceStream("XboxGamingBarHelper.Resources.GoTweaksTray.ico"))
+                    {
+                        if (stream != null)
+                        {
+                            return new global::System.Drawing.Icon(stream);
+                        }
+                    }
+                    Logger.Warn("Tray icon resource not found, using generic icon");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warn($"Tray icon load failed, using generic icon: {ex.Message}");
+                }
+                return global::System.Drawing.SystemIcons.Application;
             }
 
             internal bool Start()
@@ -256,21 +310,28 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
                 {
                     using (var menu = new global::System.Windows.Forms.ContextMenuStrip())
                     {
+                        var openItem = new global::System.Windows.Forms.ToolStripMenuItem("Open GoTweaks");
+                        openItem.Font = new global::System.Drawing.Font(openItem.Font, global::System.Drawing.FontStyle.Bold);
+                        openItem.Click += (sender, args) => _onOpenAppRequested?.Invoke();
+
                         var restartItem = new global::System.Windows.Forms.ToolStripMenuItem("Restart");
                         restartItem.Click += (sender, args) => _onRestartRequested?.Invoke();
 
                         var exitItem = new global::System.Windows.Forms.ToolStripMenuItem("Exit");
                         exitItem.Click += (sender, args) => _onExitRequested?.Invoke();
 
+                        menu.Items.Add(openItem);
+                        menu.Items.Add(new global::System.Windows.Forms.ToolStripSeparator());
                         menu.Items.Add(restartItem);
                         menu.Items.Add(new global::System.Windows.Forms.ToolStripSeparator());
                         menu.Items.Add(exitItem);
 
                         using (var notifyIcon = new global::System.Windows.Forms.NotifyIcon())
                         {
-                            notifyIcon.Text = "GoTweaks Helper";
-                            notifyIcon.Icon = global::System.Drawing.SystemIcons.Application;
+                            notifyIcon.Text = "GoTweaks";
+                            notifyIcon.Icon = LoadTrayIcon();
                             notifyIcon.ContextMenuStrip = menu;
+                            notifyIcon.DoubleClick += (sender, args) => _onOpenAppRequested?.Invoke();
                             notifyIcon.Visible = true;
 
                             _startupSignal.Set();

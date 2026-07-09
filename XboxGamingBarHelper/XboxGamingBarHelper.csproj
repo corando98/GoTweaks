@@ -781,6 +781,7 @@
   <ItemGroup>
     <!-- PawnIO modules embedded as resources (like ZenStates-Core) -->
     <EmbeddedResource Include="Resources\PawnIO\RyzenSMU.bin" />
+    <EmbeddedResource Include="Resources\GoTweaksTray.ico" />
     <!-- Signed LpcIO module from namazso/PawnIO.Modules 0.2.5. Exposes Super-IO
          port indexed access (0x2e/0x2f or 0x4e/0x4f) — used to drive the Legion
          Go 2 EC mailbox protocol for direct fan RPM override (Rodpad-style). -->

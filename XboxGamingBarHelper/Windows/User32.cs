@@ -84,22 +84,25 @@ namespace XboxGamingBarHelper.Windows
         [DllImport("user32.dll")]
         private static extern bool IsIconic(IntPtr hWnd);
 
-        private const int SW_MINIMIZE = 6;
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        private const int SW_HIDE = 0;
+        private const int SW_SHOW = 5;
+        private const int SW_RESTORE = 9;
 
         /// <summary>
-        /// Minimizes the visible ApplicationFrameHost window whose title matches
-        /// <paramref name="title"/> exactly. Used by the widget's close-to-minimize
-        /// path (#94): the UWP process can't minimize its own window, and closing
-        /// it instead suspends the whole process — killing the Game Bar widget.
-        /// The Game Bar-hosted widget window is not an ApplicationFrameWindow, so
-        /// the class filter keeps this from touching it.
+        /// Finds the ApplicationFrameHost window whose title matches
+        /// <paramref name="title"/> exactly. The Game Bar-hosted widget window
+        /// is not an ApplicationFrameWindow, so the class filter keeps these
+        /// helpers from ever touching it (#94).
         /// </summary>
-        public static bool MinimizeAppFrameWindow(string title)
+        private static IntPtr FindAppFrameWindow(string title, bool visibleOnly)
         {
             IntPtr found = IntPtr.Zero;
             EnumWindows((hWnd, lParam) =>
             {
-                if (!IsWindowVisible(hWnd) || IsIconic(hWnd)) return true;
+                if (visibleOnly && !IsWindowVisible(hWnd)) return true;
 
                 var classBuf = new StringBuilder(64);
                 if (GetClassName(hWnd, classBuf, classBuf.Capacity) == 0) return true;
@@ -114,13 +117,43 @@ namespace XboxGamingBarHelper.Windows
                 found = hWnd;
                 return false; // stop enumeration
             }, 0);
+            return found;
+        }
 
-            if (found == IntPtr.Zero)
+        /// <summary>
+        /// Hides the desktop app window entirely (no taskbar entry). Used by the
+        /// widget's close-to-tray path (#94): the UWP process can't hide its own
+        /// window, and closing it instead suspends the whole process — killing
+        /// the Game Bar widget. Restore via <see cref="ShowAppFrameWindow"/>.
+        /// </summary>
+        public static bool HideAppFrameWindow(string title)
+        {
+            IntPtr hWnd = FindAppFrameWindow(title, visibleOnly: true);
+            if (hWnd == IntPtr.Zero)
             {
                 return false;
             }
 
-            return ShowWindow(found, SW_MINIMIZE);
+            return ShowWindow(hWnd, SW_HIDE);
+        }
+
+        /// <summary>
+        /// Re-shows (and foregrounds) a desktop app window previously hidden by
+        /// <see cref="HideAppFrameWindow"/>, or restores it if minimized.
+        /// Returns false when no such window exists (app view never created —
+        /// caller should launch the app instead).
+        /// </summary>
+        public static bool ShowAppFrameWindow(string title)
+        {
+            IntPtr hWnd = FindAppFrameWindow(title, visibleOnly: false);
+            if (hWnd == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            ShowWindow(hWnd, IsIconic(hWnd) ? SW_RESTORE : SW_SHOW);
+            SetForegroundWindow(hWnd);
+            return true;
         }
 
         // UWP child-window resolution: ApplicationFrameHost.exe hosts the visible frame for

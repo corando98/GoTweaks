@@ -464,10 +464,25 @@ namespace XboxGamingBar
                 // Ensure the current window is active
                 Window.Current.Activate();
 
+                // If the window was hidden to the tray (#94), UWP Activate()
+                // alone won't un-hide the Win32-level SW_HIDE — ask the helper
+                // to re-show it. Harmless no-op when it wasn't hidden.
+                if (IsConnected && PipeClient != null)
+                {
+                    try
+                    {
+                        PipeClient.SendValueSet(new ValueSet { { "ShowAppWindow", true } });
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warn($"ShowAppWindow request on launch failed: {ex.Message}");
+                    }
+                }
+
                 // #94: with the confirmAppClose capability, X on this desktop
                 // window raises CloseRequested instead of terminating outright.
-                // While a Game Bar widget is alive we consolidate (close) just
-                // this view, so the process — and the widget — survive.
+                // While a Game Bar widget is alive we hide this window to the
+                // tray, so the process — and the widget — survive.
                 if (!desktopCloseRequestedRegistered)
                 {
                     SystemNavigationManagerPreview.GetForCurrentView().CloseRequested += DesktopView_CloseRequested;
@@ -552,22 +567,23 @@ namespace XboxGamingBar
             var deferral = e.GetDeferral();
             try
             {
-                // MINIMIZE instead of close. Closing (even via
+                // HIDE-TO-TRAY instead of close. Closing (even via
                 // TryConsolidateAsync) leaves zero visible views — the widget's
                 // Game Bar-hosted view doesn't count — and Windows suspends the
                 // process, revoking extended execution with SystemPolicy at the
-                // same instant (verified on 2574). A minimized window is the one
-                // state our keep-alive ExtendedExecutionSession is designed to
-                // survive, so the process keeps running and the widget stays
-                // connected. The UWP view can't minimize itself; the full-trust
-                // helper does it via ShowWindow on our ApplicationFrameHost
-                // window.
+                // same instant (verified on 2574). A hidden/minimized window is
+                // the state our keep-alive ExtendedExecutionSession is designed
+                // to survive, so the process keeps running and the widget stays
+                // connected. The UWP view can't hide itself; the full-trust
+                // helper does it via ShowWindow(SW_HIDE) on our
+                // ApplicationFrameHost window. Restored from the helper's tray
+                // icon ("Open GoTweaks" / double-click) or a Start relaunch.
                 if (IsConnected && PipeClient != null)
                 {
                     e.Handled = true;
-                    var message = new ValueSet { { "MinimizeAppWindow", true } };
+                    var message = new ValueSet { { "HideAppWindow", true } };
                     PipeClient.SendValueSet(message);
-                    Logger.Info("Desktop window close intercepted while widget active: requested minimize via helper");
+                    Logger.Info("Desktop window close intercepted while widget active: requested hide-to-tray via helper");
                 }
                 else
                 {

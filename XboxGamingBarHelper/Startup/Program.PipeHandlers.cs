@@ -162,22 +162,40 @@ namespace XboxGamingBarHelper
                     return;
                 }
 
-                // Minimize the desktop app window instead of letting it close
-                // (#94: closing the last visible window suspends the UWP process
-                // and kills the active Game Bar widget; the widget can't minimize
-                // its own window, so it asks us).
-                if (pipeMsg.Extra.ContainsKey("MinimizeAppWindow"))
+                // Hide the desktop app window to the tray instead of letting it
+                // close (#94: closing the last visible window suspends the UWP
+                // process and kills the active Game Bar widget; the widget can't
+                // hide its own window, so it asks us). Restored from the tray
+                // icon's "Open GoTweaks" or by relaunching the app.
+                if (pipeMsg.Extra.ContainsKey("HideAppWindow"))
                 {
-                    bool minimized = false;
+                    bool hidden = false;
                     try
                     {
-                        minimized = User32.MinimizeAppFrameWindow("GoTweaks");
+                        hidden = User32.HideAppFrameWindow("GoTweaks");
                     }
                     catch (Exception ex)
                     {
-                        Logger.Warn($"Pipe: MinimizeAppWindow threw: {ex.Message}");
+                        Logger.Warn($"Pipe: HideAppWindow threw: {ex.Message}");
                     }
-                    Logger.Info($"Pipe: MinimizeAppWindow request — minimized={minimized}");
+                    Logger.Info($"Pipe: HideAppWindow request — hidden={hidden}");
+                    return;
+                }
+
+                // Re-show a previously hidden desktop app window (sent by the
+                // widget's OnLaunched so a Start-menu relaunch un-hides it).
+                if (pipeMsg.Extra.ContainsKey("ShowAppWindow"))
+                {
+                    bool shown = false;
+                    try
+                    {
+                        shown = User32.ShowAppFrameWindow("GoTweaks");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warn($"Pipe: ShowAppWindow threw: {ex.Message}");
+                    }
+                    Logger.Info($"Pipe: ShowAppWindow request — shown={shown}");
                     return;
                 }
 
