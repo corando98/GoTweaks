@@ -739,7 +739,11 @@ namespace XboxGamingBarHelper.Performance
             pawnIOAvailableProperty = new TdpMethodAvailableProperty(pawnIOAvailable, Function.TdpMethod_PawnIOAvailable, this);
             pawnIOInstalledProperty = new TdpMethodAvailableProperty(pawnIOInstalled, Function.TdpMethod_PawnIOInstalled, this);
             installPawnIOProperty = new InstallPawnIOProperty(this);
-            Logger.Info($"TDP method availability: PawnIO={pawnIOAvailable}, PawnIOInstalled={pawnIOInstalled}");
+            // pawnIOAvailable is always false here — InitializePawnIO() runs
+            // after manager init (Program.cs) and logs "PawnIO availability
+            // updated" with the real value. Label this line accordingly so a
+            // "PawnIO=False" at startup isn't misread as a broken install.
+            Logger.Info($"TDP method availability (pre-init snapshot): PawnIO={pawnIOAvailable}, PawnIOInstalled={pawnIOInstalled} — final availability logged after InitializePawnIO");
         }
 
         /// <summary>
@@ -1406,11 +1410,30 @@ namespace XboxGamingBarHelper.Performance
                     case TdpMethod.PawnIO:
                         if (pawnIOAvailable && ryzenSmuService != null && ryzenSmuService.IsInitialized)
                         {
+                            if (legionDetected)
+                            {
+                                // #94 (Marctraider): SMU writes on Legion devices get
+                                // re-asserted by the embedded controller within seconds —
+                                // his log shows SetAllLimits(35W) "succeeding" while the
+                                // EC kept SPL at 25W. The write is accepted by the SMU
+                                // but the platform owns the power table.
+                                Logger.Warn("PawnIO TDP method selected on a Legion device: the Lenovo EC typically re-asserts its own power limits over SMU writes within seconds. Lenovo WMI is the supported method on this hardware.");
+                            }
                             Logger.Info($"Using PawnIO/RyzenSMU to set TDP (SPL={spl}W, SPPT={sppt}W, FPPT={fppt}W)");
                             if (ryzenSmuService.SetAllLimits(spl, sppt, fppt))
                             {
-                                Logger.Info($"PawnIO: TDP set successfully");
-                                // Update current limits for OSD display (PawnIO can't read back values)
+                                Logger.Info($"PawnIO: TDP set commands accepted");
+                                if (legionDetected && legionManager != null)
+                                {
+                                    // On Legion hardware the WMI read shows what the EC
+                                    // actually enforces — let the verification read fill
+                                    // Current* so the OSD/widget report the truth instead
+                                    // of echoing the requested values.
+                                    ScheduleVerificationRead();
+                                    return;
+                                }
+                                // No independent read-back path on non-Legion hardware —
+                                // assume the requested values took effect.
                                 CurrentSPL = spl;
                                 CurrentSPPT = sppt;
                                 CurrentFPPT = fppt;
