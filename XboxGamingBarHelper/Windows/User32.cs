@@ -87,19 +87,9 @@ namespace XboxGamingBarHelper.Windows
         [DllImport("user32.dll")]
         private static extern bool SetForegroundWindow(IntPtr hWnd);
 
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
-
-        private const int SW_HIDE = 0;
         private const int SW_SHOW = 5;
         private const int SW_MINIMIZE = 6;
         private const int SW_RESTORE = 9;
-        private const int GWL_EXSTYLE = -20;
-        private const int WS_EX_TOOLWINDOW = 0x00000080;
-        private const int WS_EX_APPWINDOW = 0x00040000;
 
         /// <summary>
         /// Finds the ApplicationFrameHost window whose title matches
@@ -130,35 +120,20 @@ namespace XboxGamingBarHelper.Windows
             return found;
         }
 
-        // ITaskbarList lets us explicitly retire the taskbar button of a hidden
-        // UWP frame window — the shell often keeps the button alive after a
-        // bare SW_HIDE (observed on 2576: window hidden, button remained).
-        [ComImport]
-        [Guid("56FDF344-FD6D-11d0-958A-006097C9A090")]
-        [ClassInterface(ClassInterfaceType.None)]
-        private class TaskbarListInstance
-        {
-        }
-
-        [ComImport]
-        [Guid("56FDF342-FD6D-11d0-958A-006097C9A090")]
-        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-        private interface ITaskbarList
-        {
-            void HrInit();
-            void AddTab(IntPtr hwnd);
-            void DeleteTab(IntPtr hwnd);
-            void ActivateTab(IntPtr hwnd);
-            void SetActiveAlt(IntPtr hwnd);
-        }
-
         /// <summary>
-        /// Hides the desktop app window entirely (no taskbar entry). Used by the
-        /// widget's close-to-tray path (#94): the UWP process can't hide its own
-        /// window, and closing it instead suspends the whole process — killing
-        /// the Game Bar widget. Restore via <see cref="ShowAppFrameWindow"/>.
-        /// Minimize-then-hide plus an explicit taskbar DeleteTab, because a bare
-        /// SW_HIDE leaves the UWP frame window's taskbar button behind.
+        /// Minimizes the desktop app window. Used by the widget's close path
+        /// (#94): the UWP process can't minimize its own window, and closing it
+        /// instead suspends the whole process — killing the Game Bar widget.
+        /// Restore via <see cref="ShowAppFrameWindow"/>.
+        ///
+        /// Why minimize and not hide-to-tray: the 2576–2580 field-test ladder
+        /// tried SW_HIDE, settled-minimize-then-hide, WS_EX_TOOLWINDOW styling,
+        /// and ITaskbarList.DeleteTab — every variant ends with
+        /// ApplicationFrameHost re-presenting the window, because it re-syncs
+        /// its frame to the still-alive CoreWindow (alive by design: the
+        /// keep-alive session is what saves the widget). Minimize is the one
+        /// externally-applied state it respects. True close-to-tray needs the
+        /// app and widget split into separate processes (multi-instance).
         /// </summary>
         public static bool HideAppFrameWindow(string title)
         {
@@ -168,38 +143,7 @@ namespace XboxGamingBarHelper.Windows
                 return false;
             }
 
-            // ApplicationFrameHost fights external ShowWindow manipulation
-            // while its CoreWindow is alive (which ours always is — the
-            // keep-alive session is what saves the widget): plain hides get
-            // re-presented (2578/2579), minimize sticks but keeps a taskbar
-            // button (2577/2579). So make the SHELL exclude the window
-            // instead: WS_EX_TOOLWINDOW windows never get taskbar buttons —
-            // a styling rule the frame host doesn't override. Minimize (which
-            // sticks), wait for the transition, then flip the style and hide.
-            ShowWindow(hWnd, SW_MINIMIZE);
-            for (int waited = 0; waited < 1000 && !IsIconic(hWnd); waited += 50)
-            {
-                System.Threading.Thread.Sleep(50);
-            }
-
-            int exStyle = GetWindowLong(hWnd, GWL_EXSTYLE);
-            SetWindowLong(hWnd, GWL_EXSTYLE, (exStyle | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW);
-
-            ShowWindow(hWnd, SW_HIDE);
-
-            try
-            {
-                var taskbar = (ITaskbarList)new TaskbarListInstance();
-                taskbar.HrInit();
-                taskbar.DeleteTab(hWnd);
-                Marshal.ReleaseComObject(taskbar);
-            }
-            catch
-            {
-                // Cosmetic only — the tool-window style already removes the button.
-            }
-
-            return true;
+            return ShowWindow(hWnd, SW_MINIMIZE);
         }
 
         /// <summary>
@@ -214,13 +158,6 @@ namespace XboxGamingBarHelper.Windows
             if (hWnd == IntPtr.Zero)
             {
                 return false;
-            }
-
-            // Undo the tray-hide styling so the taskbar button comes back.
-            int exStyle = GetWindowLong(hWnd, GWL_EXSTYLE);
-            if ((exStyle & WS_EX_TOOLWINDOW) != 0)
-            {
-                SetWindowLong(hWnd, GWL_EXSTYLE, (exStyle & ~WS_EX_TOOLWINDOW) | WS_EX_APPWINDOW);
             }
 
             ShowWindow(hWnd, IsIconic(hWnd) ? SW_RESTORE : SW_SHOW);
