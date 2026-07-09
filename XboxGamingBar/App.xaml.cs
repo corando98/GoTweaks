@@ -552,25 +552,41 @@ namespace XboxGamingBar
             var deferral = e.GetDeferral();
             try
             {
-                // Close only this view. The process keeps running, the widget
-                // view stays intact, and reopening Game Bar resumes it with no
-                // "Something went wrong" (that card only appears after the
-                // process is terminated out from under Game Bar).
-                e.Handled = true;
-                bool consolidated = await ApplicationView.GetForCurrentView().TryConsolidateAsync();
-                Logger.Info($"Desktop window close intercepted while widget active: consolidated={consolidated}");
-                if (!consolidated)
+                // MINIMIZE instead of close. Closing (even via
+                // TryConsolidateAsync) leaves zero visible views — the widget's
+                // Game Bar-hosted view doesn't count — and Windows suspends the
+                // process, revoking extended execution with SystemPolicy at the
+                // same instant (verified on 2574). A minimized window is the one
+                // state our keep-alive ExtendedExecutionSession is designed to
+                // survive, so the process keeps running and the widget stays
+                // connected. The UWP view can't minimize itself; the full-trust
+                // helper does it via ShowWindow on our ApplicationFrameHost
+                // window.
+                if (IsConnected && PipeClient != null)
                 {
-                    // This view is the process's primary view and can't be
-                    // consolidated (app was launched before the widget).
-                    // Better to close normally — Game Bar relaunches the
-                    // widget — than to leave a window that refuses to close.
-                    e.Handled = false;
+                    e.Handled = true;
+                    var message = new ValueSet { { "MinimizeAppWindow", true } };
+                    PipeClient.SendValueSet(message);
+                    Logger.Info("Desktop window close intercepted while widget active: requested minimize via helper");
+                }
+                else
+                {
+                    // No helper to minimize us — fall back to consolidating the
+                    // view. The process will suspend and Game Bar will relaunch
+                    // the widget (pre-2573 behavior), which beats a window that
+                    // refuses to close.
+                    e.Handled = true;
+                    bool consolidated = await ApplicationView.GetForCurrentView().TryConsolidateAsync();
+                    Logger.Info($"Desktop window close intercepted (helper unavailable): consolidated={consolidated}");
+                    if (!consolidated)
+                    {
+                        e.Handled = false;
+                    }
                 }
             }
             catch (Exception ex)
             {
-                Logger.Warn($"CloseRequested consolidation threw: {ex.Message}; closing normally");
+                Logger.Warn($"CloseRequested handling threw: {ex.Message}; closing normally");
                 e.Handled = false;
             }
             finally

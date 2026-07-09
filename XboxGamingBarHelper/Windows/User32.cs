@@ -78,6 +78,51 @@ namespace XboxGamingBarHelper.Windows
         [DllImport("user32.dll")]
         private static extern bool IsWindowVisible(IntPtr hWnd);
 
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        [DllImport("user32.dll")]
+        private static extern bool IsIconic(IntPtr hWnd);
+
+        private const int SW_MINIMIZE = 6;
+
+        /// <summary>
+        /// Minimizes the visible ApplicationFrameHost window whose title matches
+        /// <paramref name="title"/> exactly. Used by the widget's close-to-minimize
+        /// path (#94): the UWP process can't minimize its own window, and closing
+        /// it instead suspends the whole process — killing the Game Bar widget.
+        /// The Game Bar-hosted widget window is not an ApplicationFrameWindow, so
+        /// the class filter keeps this from touching it.
+        /// </summary>
+        public static bool MinimizeAppFrameWindow(string title)
+        {
+            IntPtr found = IntPtr.Zero;
+            EnumWindows((hWnd, lParam) =>
+            {
+                if (!IsWindowVisible(hWnd) || IsIconic(hWnd)) return true;
+
+                var classBuf = new StringBuilder(64);
+                if (GetClassName(hWnd, classBuf, classBuf.Capacity) == 0) return true;
+                if (classBuf.ToString() != "ApplicationFrameWindow") return true;
+
+                int len = GetWindowTextLength(hWnd);
+                if (len <= 0) return true;
+                var titleBuf = new StringBuilder(len + 1);
+                GetWindowText(hWnd, titleBuf, titleBuf.Capacity);
+                if (titleBuf.ToString() != title) return true;
+
+                found = hWnd;
+                return false; // stop enumeration
+            }, 0);
+
+            if (found == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            return ShowWindow(found, SW_MINIMIZE);
+        }
+
         // UWP child-window resolution: ApplicationFrameHost.exe hosts the visible frame for
         // packaged (MSIX/UWP) apps. The window we see via GetForegroundWindow is the frame
         // host's, so GetWindowThreadProcessId returns ApplicationFrameHost's PID, not the

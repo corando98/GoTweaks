@@ -32,6 +32,7 @@ using XboxGamingBarHelper.Settings;
 using XboxGamingBarHelper.Systems;
 using XboxGamingBarHelper.AutoTDP;
 using XboxGamingBarHelper.DefaultGameProfiles;
+using XboxGamingBarHelper.Windows;
 using XboxGamingBarHelper.Labs;
 using Shared.Enums;
 
@@ -158,6 +159,25 @@ namespace XboxGamingBarHelper
                         Logger.Error($"Pipe: Failed to hibernate: {ex.Message}");
                         SendPipeAck(pipeMsg.RequestId, false);
                     }
+                    return;
+                }
+
+                // Minimize the desktop app window instead of letting it close
+                // (#94: closing the last visible window suspends the UWP process
+                // and kills the active Game Bar widget; the widget can't minimize
+                // its own window, so it asks us).
+                if (pipeMsg.Extra.ContainsKey("MinimizeAppWindow"))
+                {
+                    bool minimized = false;
+                    try
+                    {
+                        minimized = User32.MinimizeAppFrameWindow("GoTweaks");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warn($"Pipe: MinimizeAppWindow threw: {ex.Message}");
+                    }
+                    Logger.Info($"Pipe: MinimizeAppWindow request — minimized={minimized}");
                     return;
                 }
 
