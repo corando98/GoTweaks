@@ -87,10 +87,19 @@ namespace XboxGamingBarHelper.Windows
         [DllImport("user32.dll")]
         private static extern bool SetForegroundWindow(IntPtr hWnd);
 
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
         private const int SW_HIDE = 0;
         private const int SW_SHOW = 5;
         private const int SW_MINIMIZE = 6;
         private const int SW_RESTORE = 9;
+        private const int GWL_EXSTYLE = -20;
+        private const int WS_EX_TOOLWINDOW = 0x00000080;
+        private const int WS_EX_APPWINDOW = 0x00040000;
 
         /// <summary>
         /// Finds the ApplicationFrameHost window whose title matches
@@ -159,29 +168,24 @@ namespace XboxGamingBarHelper.Windows
                 return false;
             }
 
-            // ApplicationFrameHost fights external state changes: an instant
-            // hide gets re-presented when the frame host re-syncs to its
-            // still-alive CoreWindow (2578 field test), and hide-right-after-
-            // minimize loses the race against the async minimize transition
-            // (2577 field test). The sequence that sticks: minimize, WAIT for
-            // the transition to complete (IsIconic), then hide the settled
-            // window — the frame host has no pending transition left to replay
-            // over it. DeleteTab retires the taskbar button (2576 field test).
+            // ApplicationFrameHost fights external ShowWindow manipulation
+            // while its CoreWindow is alive (which ours always is — the
+            // keep-alive session is what saves the widget): plain hides get
+            // re-presented (2578/2579), minimize sticks but keeps a taskbar
+            // button (2577/2579). So make the SHELL exclude the window
+            // instead: WS_EX_TOOLWINDOW windows never get taskbar buttons —
+            // a styling rule the frame host doesn't override. Minimize (which
+            // sticks), wait for the transition, then flip the style and hide.
             ShowWindow(hWnd, SW_MINIMIZE);
             for (int waited = 0; waited < 1000 && !IsIconic(hWnd); waited += 50)
             {
                 System.Threading.Thread.Sleep(50);
             }
 
-            ShowWindow(hWnd, SW_HIDE);
+            int exStyle = GetWindowLong(hWnd, GWL_EXSTYLE);
+            SetWindowLong(hWnd, GWL_EXSTYLE, (exStyle | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW);
 
-            // Give the hide a moment, then re-assert once if the frame host
-            // replayed anything over it.
-            System.Threading.Thread.Sleep(150);
-            if (IsWindowVisible(hWnd))
-            {
-                ShowWindow(hWnd, SW_HIDE);
-            }
+            ShowWindow(hWnd, SW_HIDE);
 
             try
             {
@@ -192,10 +196,10 @@ namespace XboxGamingBarHelper.Windows
             }
             catch
             {
-                // Cosmetic only — the window is hidden either way.
+                // Cosmetic only — the tool-window style already removes the button.
             }
 
-            return !IsWindowVisible(hWnd);
+            return true;
         }
 
         /// <summary>
@@ -210,6 +214,13 @@ namespace XboxGamingBarHelper.Windows
             if (hWnd == IntPtr.Zero)
             {
                 return false;
+            }
+
+            // Undo the tray-hide styling so the taskbar button comes back.
+            int exStyle = GetWindowLong(hWnd, GWL_EXSTYLE);
+            if ((exStyle & WS_EX_TOOLWINDOW) != 0)
+            {
+                SetWindowLong(hWnd, GWL_EXSTYLE, (exStyle & ~WS_EX_TOOLWINDOW) | WS_EX_APPWINDOW);
             }
 
             ShowWindow(hWnd, IsIconic(hWnd) ? SW_RESTORE : SW_SHOW);
