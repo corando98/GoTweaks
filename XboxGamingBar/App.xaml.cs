@@ -4,6 +4,7 @@ using System;
 using System.Threading.Tasks;
 using Windows.ApplicationModel;
 using Windows.ApplicationModel.Activation;
+using Windows.ApplicationModel.ExtendedExecution;
 using Windows.Foundation.Collections;
 using Windows.UI.Core.Preview;
 using Windows.UI.ViewManagement;
@@ -277,6 +278,9 @@ namespace XboxGamingBar
                             Logger.Info($"GamingWidget navigated: {gamingWidget?.GetHashCode()}");
 
                             Window.Current.Closed += GamingWidgetWindow_Closed;
+
+                            // Keep the process alive while the widget exists (#94).
+                            _ = EnsureWidgetKeepAliveSessionAsync("widget launch activation");
                         }
                         catch (Exception ex)
                         {
@@ -337,6 +341,9 @@ namespace XboxGamingBar
                             Window.Current.Closed -= GamingWidgetWindow_Closed; // Remove if already registered
                             Window.Current.Closed += GamingWidgetWindow_Closed;
 
+                            // Keep the process alive while the widget exists (#94).
+                            _ = EnsureWidgetKeepAliveSessionAsync("widget upgrade activation");
+
                             Logger.Info("Calling Window.Current.Activate() for upgrade...");
                             Window.Current.Activate();
                             Logger.Info("Successfully upgraded from app mode to Game Bar widget mode.");
@@ -391,6 +398,8 @@ namespace XboxGamingBar
             gamingXboxGameBarWidget = null;
             gamingWidget = null;
             Window.Current.Closed -= GamingWidgetWindow_Closed;
+            // No widget left to keep alive — let normal suspend policy apply.
+            ReleaseWidgetKeepAliveSession("widget window closed");
         }
 
         private void GamingSettingsWidgetWindow_Closed(object sender, Windows.UI.Core.CoreWindowEventArgs e)
@@ -468,6 +477,68 @@ namespace XboxGamingBar
         }
 
         private bool desktopCloseRequestedRegistered;
+
+        // #94: UWP does not count the Game Bar-hosted widget view as visible,
+        // so whenever our last desktop window goes away the process suspends —
+        // and if the overlay is displaying the widget at that moment, Game Bar
+        // watches its widget's process suspend mid-session and shows
+        // "Something went wrong with this widget". An ExtendedExecutionSession
+        // ("run while minimized") held while a widget is alive prevents that
+        // suspend. Revocation (battery saver / resource pressure) degrades to
+        // the old behavior: suspend, error card, Game Bar relaunches us.
+        private ExtendedExecutionSession widgetKeepAliveSession;
+
+        private async Task EnsureWidgetKeepAliveSessionAsync(string reason)
+        {
+            if (widgetKeepAliveSession != null)
+            {
+                return;
+            }
+
+            try
+            {
+                var session = new ExtendedExecutionSession
+                {
+                    Reason = ExtendedExecutionReason.Unspecified,
+                    Description = "Keep the Game Bar widget connected while no desktop window is visible",
+                };
+                session.Revoked += WidgetKeepAliveSession_Revoked;
+                var result = await session.RequestExtensionAsync();
+                if (result == ExtendedExecutionResult.Allowed)
+                {
+                    widgetKeepAliveSession = session;
+                    Logger.Info($"Widget keep-alive extended execution granted ({reason})");
+                }
+                else
+                {
+                    session.Dispose();
+                    Logger.Warn($"Widget keep-alive extended execution DENIED ({reason}) — widget will suspend when no window is visible");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"Widget keep-alive extended execution request threw ({reason}): {ex.Message}");
+            }
+        }
+
+        private void WidgetKeepAliveSession_Revoked(object sender, ExtendedExecutionRevokedEventArgs args)
+        {
+            Logger.Warn($"Widget keep-alive extended execution revoked: {args.Reason} — widget may suspend until re-granted");
+            try { widgetKeepAliveSession?.Dispose(); } catch { }
+            widgetKeepAliveSession = null;
+        }
+
+        private void ReleaseWidgetKeepAliveSession(string reason)
+        {
+            if (widgetKeepAliveSession == null)
+            {
+                return;
+            }
+
+            try { widgetKeepAliveSession.Dispose(); } catch { }
+            widgetKeepAliveSession = null;
+            Logger.Info($"Widget keep-alive extended execution released ({reason})");
+        }
 
         private async void DesktopView_CloseRequested(object sender, SystemNavigationCloseRequestedPreviewEventArgs e)
         {
