@@ -5,6 +5,8 @@ using System.Threading.Tasks;
 using Windows.ApplicationModel;
 using Windows.ApplicationModel.Activation;
 using Windows.Foundation.Collections;
+using Windows.UI.Core.Preview;
+using Windows.UI.ViewManagement;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Navigation;
@@ -452,6 +454,57 @@ namespace XboxGamingBar
                 }
                 // Ensure the current window is active
                 Window.Current.Activate();
+
+                // #94: with the confirmAppClose capability, X on this desktop
+                // window raises CloseRequested instead of terminating outright.
+                // While a Game Bar widget is alive we consolidate (close) just
+                // this view, so the process — and the widget — survive.
+                if (!desktopCloseRequestedRegistered)
+                {
+                    SystemNavigationManagerPreview.GetForCurrentView().CloseRequested += DesktopView_CloseRequested;
+                    desktopCloseRequestedRegistered = true;
+                }
+            }
+        }
+
+        private bool desktopCloseRequestedRegistered;
+
+        private async void DesktopView_CloseRequested(object sender, SystemNavigationCloseRequestedPreviewEventArgs e)
+        {
+            // No widget alive → this is a plain desktop app close; let it through.
+            if (gamingXboxGameBarWidget == null)
+            {
+                Logger.Info("Desktop window close: no active widget, closing normally");
+                return;
+            }
+
+            var deferral = e.GetDeferral();
+            try
+            {
+                // Close only this view. The process keeps running, the widget
+                // view stays intact, and reopening Game Bar resumes it with no
+                // "Something went wrong" (that card only appears after the
+                // process is terminated out from under Game Bar).
+                e.Handled = true;
+                bool consolidated = await ApplicationView.GetForCurrentView().TryConsolidateAsync();
+                Logger.Info($"Desktop window close intercepted while widget active: consolidated={consolidated}");
+                if (!consolidated)
+                {
+                    // This view is the process's primary view and can't be
+                    // consolidated (app was launched before the widget).
+                    // Better to close normally — Game Bar relaunches the
+                    // widget — than to leave a window that refuses to close.
+                    e.Handled = false;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"CloseRequested consolidation threw: {ex.Message}; closing normally");
+                e.Handled = false;
+            }
+            finally
+            {
+                deferral.Complete();
             }
         }
 
