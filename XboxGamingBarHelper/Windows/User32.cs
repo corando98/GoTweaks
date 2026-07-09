@@ -159,8 +159,19 @@ namespace XboxGamingBarHelper.Windows
                 return false;
             }
 
-            ShowWindow(hWnd, SW_MINIMIZE);
-            bool hidden = ShowWindow(hWnd, SW_HIDE);
+            // Plain SW_HIDE only. Do NOT minimize first: ApplicationFrameHost
+            // processes minimize asynchronously and completing it re-presents
+            // the window as minimized-in-taskbar, overriding the hide (2577
+            // field test). SW_HIDE alone removes the window (2576 field test);
+            // the shell just leaves the taskbar BUTTON behind, which DeleteTab
+            // retires. Re-hide after a short settle in case the frame host
+            // flushes a pending state transition over the first hide.
+            ShowWindow(hWnd, SW_HIDE);
+            System.Threading.Thread.Sleep(150);
+            if (IsWindowVisible(hWnd))
+            {
+                ShowWindow(hWnd, SW_HIDE);
+            }
 
             try
             {
@@ -174,7 +185,7 @@ namespace XboxGamingBarHelper.Windows
                 // Cosmetic only — the window is hidden either way.
             }
 
-            return hidden;
+            return !IsWindowVisible(hWnd);
         }
 
         /// <summary>
