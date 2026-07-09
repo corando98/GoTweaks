@@ -85,5 +85,47 @@ namespace XboxGamingBarHelper.Windows
         /// <returns>True if successful, false otherwise.</returns>
         [DllImport("powrprof.dll", SetLastError = true)]
         public static extern bool SetSuspendState(bool bHibernate, bool bForce, bool bWakeupEventsDisabled);
+
+        // --- Suspend/resume notifications (Modern Standby aware) ---
+        //
+        // SystemEvents.PowerModeChanged (WM_POWERBROADCAST) is unreliable under
+        // S0 Modern Standby — on affected machines (issue #94, LTSC 24H2 +
+        // Legion Go 2) neither Suspend/Resume nor StatusChange are delivered
+        // around a standby cycle. PowerRegisterSuspendResumeNotification with
+        // DEVICE_NOTIFY_CALLBACK is the Modern-Standby-aware path: the kernel
+        // invokes the callback directly (no message pump) for both classic S3
+        // sleep and S0 standby transitions.
+
+        public const uint DEVICE_NOTIFY_CALLBACK = 2;
+
+        // WM_POWERBROADCAST event types delivered to the callback.
+        public const int PBT_APMSUSPEND = 0x0004;
+        public const int PBT_APMRESUMESUSPEND = 0x0007;
+        public const int PBT_APMRESUMEAUTOMATIC = 0x0012;
+
+        /// <summary>
+        /// DEVICE_NOTIFY_CALLBACK_ROUTINE. Keep the delegate instance rooted
+        /// (stored in a field) for the lifetime of the registration — the
+        /// kernel holds only the native thunk, and a collected delegate means
+        /// a crash on the next power transition.
+        /// </summary>
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+        public delegate int DeviceNotifyCallbackRoutine(IntPtr context, int type, IntPtr setting);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS
+        {
+            public DeviceNotifyCallbackRoutine Callback;
+            public IntPtr Context;
+        }
+
+        [DllImport("powrprof.dll", SetLastError = false)]
+        public static extern uint PowerRegisterSuspendResumeNotification(
+            uint flags,
+            ref DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS recipient,
+            out IntPtr registrationHandle);
+
+        [DllImport("powrprof.dll", SetLastError = false)]
+        public static extern uint PowerUnregisterSuspendResumeNotification(IntPtr registrationHandle);
     }
 }

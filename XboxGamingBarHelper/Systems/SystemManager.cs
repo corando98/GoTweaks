@@ -33,6 +33,20 @@ namespace XboxGamingBarHelper.Systems
 
         private global::Windows.System.Power.PowerSupplyStatus lastPowerSupplyStatus = global::Windows.System.Power.PowerSupplyStatus.NotPresent;
         private bool hasSeenInitialPowerSupplyStatus = false;
+
+        // #94: SystemEvents.PowerModeChanged is unreliable under S0 Modern
+        // Standby (LTSC 24H2 + Legion Go 2 logs show NO StatusChange/Resume
+        // around standby cycles). Two independent backstops:
+        //  - a slow poll of PowerManager.PowerSupplyStatus that converges the
+        //    AC/DC state within one interval no matter which events fired;
+        //  - PowerRegisterSuspendResumeNotification, the Modern-Standby-aware
+        //    kernel callback, driving the same resume path as SystemEvents.
+        private System.Timers.Timer powerStatusPollTimer;
+        private const double PowerStatusPollIntervalMs = 10000;
+        private PowrProf.DeviceNotifyCallbackRoutine suspendResumeCallback; // rooted for the registration lifetime
+        private IntPtr suspendResumeNotificationHandle = IntPtr.Zero;
+        private long lastResumeInvokeTicksUtc;
+        private static readonly long ResumeDedupeWindowTicks = TimeSpan.FromSeconds(5).Ticks;
         private static readonly string[] IgnoredProcesses =
         {
             // Windows shell and system processes - never games
@@ -303,6 +317,132 @@ namespace XboxGamingBarHelper.Systems
             SystemEvents.PowerModeChanged += SystemEvents_PowerModeChanged;
             // Subscribe to display change events for dock/undock detection
             SystemEvents.DisplaySettingsChanged += SystemEvents_DisplaySettingsChanged;
+
+            // #94 backstop 1: poll the power supply status so AC/DC state
+            // converges even when no StatusChange event is delivered (plug or
+            // unplug during Modern Standby, LTSC event delivery gaps).
+            powerStatusPollTimer = new System.Timers.Timer(PowerStatusPollIntervalMs);
+            powerStatusPollTimer.Elapsed += (s, args) => CheckPowerSupplyStatusChange("poll");
+            powerStatusPollTimer.AutoReset = true;
+            powerStatusPollTimer.Start();
+
+            // #94 backstop 2: Modern-Standby-aware suspend/resume callback.
+            RegisterSuspendResumeNotification();
+        }
+
+        private void RegisterSuspendResumeNotification()
+        {
+            try
+            {
+                suspendResumeCallback = OnSuspendResumeNotification;
+                var subscribeParams = new PowrProf.DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS
+                {
+                    Callback = suspendResumeCallback,
+                    Context = IntPtr.Zero,
+                };
+                uint result = PowrProf.PowerRegisterSuspendResumeNotification(
+                    PowrProf.DEVICE_NOTIFY_CALLBACK,
+                    ref subscribeParams,
+                    out suspendResumeNotificationHandle);
+                if (result == 0)
+                {
+                    Logger.Info("Suspend/resume notification registered (Modern Standby aware)");
+                }
+                else
+                {
+                    Logger.Warn($"PowerRegisterSuspendResumeNotification failed with {result}; relying on SystemEvents + polling only");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"Suspend/resume notification registration threw: {ex.Message}");
+            }
+        }
+
+        private int OnSuspendResumeNotification(IntPtr context, int type, IntPtr setting)
+        {
+            // Kernel callback thread — keep the work identical to the
+            // SystemEvents path and let HandleResume dedupe the two sources.
+            try
+            {
+                switch (type)
+                {
+                    case PowrProf.PBT_APMSUSPEND:
+                        Logger.Info($"System is going to sleep (kernel notification) at: {DateTime.Now}");
+                        break;
+                    case PowrProf.PBT_APMRESUMEAUTOMATIC:
+                    case PowrProf.PBT_APMRESUMESUSPEND:
+                        HandleResume("kernel notification");
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"Suspend/resume kernel callback threw: {ex.Message}");
+            }
+            return 0;
+        }
+
+        private void HandleResume(string source)
+        {
+            // Both SystemEvents.Resume and the kernel callback can fire for the
+            // same wake (classic S3 machines deliver both) — run the resume
+            // work once per wake.
+            long now = DateTime.UtcNow.Ticks;
+            long last = System.Threading.Interlocked.Read(ref lastResumeInvokeTicksUtc);
+            if (now - last < ResumeDedupeWindowTicks)
+            {
+                Logger.Debug($"Resume ({source}) within dedupe window; already handled");
+                return;
+            }
+            System.Threading.Interlocked.Exchange(ref lastResumeInvokeTicksUtc, now);
+
+            Logger.Info($"System resumed from sleep/hibernate ({source}) at: {DateTime.Now}");
+            ResumeFromSleep?.Invoke(this);
+            // Refresh display settings in case display changed during sleep
+            RefreshDisplaySettings();
+            // AC/DC may have changed while asleep with no StatusChange event
+            // (issue #94: unplug during Modern Standby left the helper on the
+            // stale power source until the next real transition).
+            CheckPowerSupplyStatusChange("resume");
+        }
+
+        /// <summary>
+        /// Compares the live PowerSupplyStatus against the last observed value
+        /// and raises PowerSourceChanged on a real AC↔DC transition. Shared by
+        /// the StatusChange event, the resume path, and the poll timer, so the
+        /// dedupe baseline stays consistent regardless of which source sees the
+        /// change first.
+        /// </summary>
+        private void CheckPowerSupplyStatusChange(string source)
+        {
+            try
+            {
+                var currentStatus = global::Windows.System.Power.PowerManager.PowerSupplyStatus;
+                lock (this)
+                {
+                    if (!hasSeenInitialPowerSupplyStatus)
+                    {
+                        lastPowerSupplyStatus = currentStatus;
+                        hasSeenInitialPowerSupplyStatus = true;
+                        Logger.Debug($"Initial power supply status captured ({source}): {currentStatus}");
+                        return;
+                    }
+
+                    if (currentStatus == lastPowerSupplyStatus)
+                    {
+                        return;
+                    }
+
+                    Logger.Info($"AC/DC transition ({source}): {lastPowerSupplyStatus} -> {currentStatus}");
+                    lastPowerSupplyStatus = currentStatus;
+                }
+                PowerSourceChanged?.Invoke(this, currentStatus);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"Power supply status check ({source}) threw: {ex.Message}");
+            }
         }
 
         private void SystemEvents_PowerModeChanged(object sender, PowerModeChangedEventArgs e)
@@ -310,10 +450,7 @@ namespace XboxGamingBarHelper.Systems
             switch (e.Mode)
             {
                 case PowerModes.Resume:
-                    Logger.Info($"System resumed from sleep/hibernate at: {DateTime.Now}");
-                    ResumeFromSleep?.Invoke(this);
-                    // Refresh display settings in case display changed during sleep
-                    RefreshDisplaySettings();
+                    HandleResume("SystemEvents");
                     break;
                 case PowerModes.Suspend:
                     Logger.Info($"System is going to sleep/hibernate at: {DateTime.Now}");
@@ -322,26 +459,7 @@ namespace XboxGamingBarHelper.Systems
                     // StatusChange fires on AC/DC line transitions AND on battery percentage
                     // changes. Dedupe against the last observed PowerSupplyStatus so we only
                     // raise PowerSourceChanged on actual AC↔DC transitions.
-                    try
-                    {
-                        var currentStatus = global::Windows.System.Power.PowerManager.PowerSupplyStatus;
-                        if (!hasSeenInitialPowerSupplyStatus)
-                        {
-                            lastPowerSupplyStatus = currentStatus;
-                            hasSeenInitialPowerSupplyStatus = true;
-                            Logger.Debug($"Initial power supply status captured: {currentStatus}");
-                        }
-                        else if (currentStatus != lastPowerSupplyStatus)
-                        {
-                            Logger.Info($"AC/DC transition: {lastPowerSupplyStatus} -> {currentStatus}");
-                            lastPowerSupplyStatus = currentStatus;
-                            PowerSourceChanged?.Invoke(this, currentStatus);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Warn($"PowerModeChanged StatusChange handler threw: {ex.Message}");
-                    }
+                    CheckPowerSupplyStatusChange("event");
                     break;
             }
         }
