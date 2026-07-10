@@ -124,7 +124,9 @@ namespace XboxGamingBarHelper
                 Process.Start(new ProcessStartInfo
                 {
                     FileName = "explorer.exe",
-                    Arguments = @"shell:appsFolder\PlayandBuildCustom.10365195AA1EC_8edemd50ez3gg!App",
+                    // DesktopApp = the user-facing app identity (task #12 take 2);
+                    // "App" is the hidden widget host.
+                    Arguments = @"shell:appsFolder\PlayandBuildCustom.10365195AA1EC_8edemd50ez3gg!DesktopApp",
                     UseShellExecute = false,
                 });
                 Logger.Info("Tray: launched GoTweaks app");

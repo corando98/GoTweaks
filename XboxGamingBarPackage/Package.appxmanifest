@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10" xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest" xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10" xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities" xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10" xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3" IgnorableNamespaces="uap uap3 mp rescap">
-  <Identity Name="PlayandBuildCustom.10365195AA1EC" Publisher="CN=dg" Version="0.3.2584.0" />
+  <Identity Name="PlayandBuildCustom.10365195AA1EC" Publisher="CN=dg" Version="0.3.2585.0" />
   <mp:PhoneIdentity PhoneProductId="c2dd2cd0-7156-428e-b305-d3dd3505b10d" PhonePublisherId="00000000-0000-0000-0000-000000000000" />
   <Properties>
     <DisplayName>GoTweaks</DisplayName>
@@ -15,8 +15,16 @@
     <Resource Language="x-generate" />
   </Resources>
   <Applications>
+    <!-- Widget host (task #12, take 2). Game Bar activations bind to THIS
+         application's AppExtensions; users never launch it directly
+         (AppListEntry="none" hides it from Start). Desktop launches go to the
+         separate DesktopApp application below — a different app identity and
+         therefore a different PROCESS, so closing the desktop app can never
+         suspend or kill the widget. This is standard multi-app packaging, not
+         SupportsMultipleInstances (which crashes Game Bar's widget handoff —
+         see the 2582 field test). -->
     <Application Id="App" Executable="$targetnametoken$.exe" EntryPoint="$targetentrypoint$">
-      <uap:VisualElements DisplayName="GoTweaks" Description="GoTweaks" BackgroundColor="transparent" Square150x150Logo="Images\Square150x150Logo.png" Square44x44Logo="Images\Square44x44Logo.png">
+      <uap:VisualElements DisplayName="GoTweaks Widget" Description="GoTweaks" BackgroundColor="transparent" AppListEntry="none" Square150x150Logo="Images\Square150x150Logo.png" Square44x44Logo="Images\Square44x44Logo.png">
         <uap:DefaultTile Wide310x150Logo="Images\Wide310x150Logo.png" Square71x71Logo="Images\SmallTile.png" Square310x310Logo="Images\LargeTile.png" />
         <uap:SplashScreen Image="Images\SplashScreen.png" />
       </uap:VisualElements>
@@ -67,6 +75,19 @@
             </uap3:Properties>
           </uap3:AppExtension>
         </uap3:Extension>
+      </Extensions>
+    </Application>
+    <!-- The user-facing desktop app: same binary, own identity/process.
+         OnLaunched shows the full UI; closing it is a real close that leaves
+         the widget process untouched. The full-trust extension lets it
+         bootstrap the helper when it's the first thing the user opens. -->
+    <Application Id="DesktopApp" Executable="XboxGamingBar.exe" EntryPoint="XboxGamingBar.App">
+      <uap:VisualElements DisplayName="GoTweaks" Description="GoTweaks" BackgroundColor="transparent" Square150x150Logo="Images\Square150x150Logo.png" Square44x44Logo="Images\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Images\Wide310x150Logo.png" Square71x71Logo="Images\SmallTile.png" Square310x310Logo="Images\LargeTile.png" />
+        <uap:SplashScreen Image="Images\SplashScreen.png" />
+      </uap:VisualElements>
+      <Extensions>
+        <desktop:Extension Category="windows.fullTrustProcess" Executable="XboxGamingBarHelper\XboxGamingBarHelper.exe" />
       </Extensions>
     </Application>
   </Applications>
