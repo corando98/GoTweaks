@@ -393,6 +393,87 @@ Write-Host 'Wake trigger added'
         }
 
         /// <summary>
+        /// Reads whether the task's logon trigger is enabled ("start on boot",
+        /// tray toggle). The task itself must stay registered and runnable
+        /// either way — on-demand elevation relaunch depends on RunTaskNow.
+        /// Defaults to true (the created state) when the query fails.
+        /// </summary>
+        public static bool IsLogonTriggerEnabled()
+        {
+            try
+            {
+                var psScript = @"$t = Get-ScheduledTask -TaskName 'GoTweaksHelper' -TaskPath '\GoTweaks\' -ErrorAction Stop; $lt = @($t.Triggers) | Where-Object { $_.CimClass.CimClassName -eq 'MSFT_TaskLogonTrigger' } | Select-Object -First 1; if ($null -eq $lt) { 'none' } elseif ($lt.Enabled -eq $false) { 'disabled' } else { 'enabled' }";
+                var psInfo = new ProcessStartInfo
+                {
+                    FileName = "powershell.exe",
+                    Arguments = $"-NoProfile -ExecutionPolicy Bypass -Command \"{psScript.Replace("\"", "\\\"")}\"",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+                using (var process = Process.Start(psInfo))
+                {
+                    if (process == null) return true;
+                    string output = process.StandardOutput.ReadToEnd().Trim();
+                    process.WaitForExit(ProcessTimeoutMs);
+                    Logger.Info($"Logon trigger state query: '{output}'");
+                    return output != "disabled";
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"IsLogonTriggerEnabled failed: {ex.Message}");
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Enables/disables the task's logon trigger (tray "Start on boot").
+        /// Follows the AddWakeFromSleepTrigger pattern: modify the trigger
+        /// list via the ScheduledTasks CIM cmdlets and write it back.
+        /// </summary>
+        public static bool SetLogonTriggerEnabled(bool enabled)
+        {
+            try
+            {
+                string psBool = enabled ? "$true" : "$false";
+                var psScript = $@"$t = Get-ScheduledTask -TaskName 'GoTweaksHelper' -TaskPath '\GoTweaks\' -ErrorAction Stop; $triggers = @($t.Triggers); foreach ($tr in $triggers) {{ if ($tr.CimClass.CimClassName -eq 'MSFT_TaskLogonTrigger') {{ $tr.Enabled = {psBool} }} }}; Set-ScheduledTask -TaskName 'GoTweaksHelper' -TaskPath '\GoTweaks\' -Trigger $triggers | Out-Null; 'ok'";
+                var psInfo = new ProcessStartInfo
+                {
+                    FileName = "powershell.exe",
+                    Arguments = $"-NoProfile -ExecutionPolicy Bypass -Command \"{psScript.Replace("\"", "\\\"")}\"",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+                using (var process = Process.Start(psInfo))
+                {
+                    if (process == null) return false;
+                    string output = process.StandardOutput.ReadToEnd().Trim();
+                    string error = process.StandardError.ReadToEnd();
+                    process.WaitForExit(ProcessTimeoutMs);
+                    bool ok = process.ExitCode == 0 && output.EndsWith("ok");
+                    if (ok)
+                    {
+                        Logger.Info($"Logon trigger (start on boot) set to {enabled}");
+                    }
+                    else
+                    {
+                        Logger.Warn($"SetLogonTriggerEnabled({enabled}) failed: exit={process.ExitCode}, stderr={error.Trim()}");
+                    }
+                    return ok;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"SetLogonTriggerEnabled failed: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Removes the scheduled task
         /// </summary>
         public static void RemoveTask()

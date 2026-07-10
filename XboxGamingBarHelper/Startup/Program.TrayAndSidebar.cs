@@ -49,10 +49,36 @@ namespace XboxGamingBarHelper
 
             try
             {
-                _trayIndicator = new HelperTrayIndicator(OnTrayRestartRequested, OnTrayExitRequested, OnTrayOpenAppRequested);
+                string version;
+                try { version = Services.HelperDeploymentService.GetDeployedVersion() ?? "?"; }
+                catch { version = "?"; }
+
+                _trayIndicator = new HelperTrayIndicator(
+                    version,
+                    OnTrayRestartRequested,
+                    OnTrayExitRequested,
+                    OnTrayOpenAppRequested,
+                    OnTrayOpenGameBarRequested,
+                    OnTrayOpenLogsRequested,
+                    OnTrayStartOnBootToggled);
                 if (_trayIndicator.Start())
                 {
                     Logger.Info("Tray indicator started");
+
+                    // The logon-trigger query shells PowerShell (~1s) — load the
+                    // real "Start on boot" state async and correct the default.
+                    _ = Task.Run(() =>
+                    {
+                        try
+                        {
+                            bool enabled = Services.ScheduledTaskService.IsLogonTriggerEnabled();
+                            _trayIndicator?.SetStartOnBootChecked(enabled);
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Debug($"Start-on-boot state load failed: {ex.Message}");
+                        }
+                    });
                     return;
                 }
 
@@ -135,6 +161,68 @@ namespace XboxGamingBarHelper
             {
                 Logger.Warn($"Tray: Open GoTweaks failed: {ex.Message}");
             }
+        }
+
+        private static void OnTrayOpenGameBarRequested()
+        {
+            Logger.Info("Tray: Open Game Bar requested");
+            try
+            {
+                // ms-gamebar: is Xbox Game Bar's activation protocol (the same
+                // scheme widget deep links use). ShellExecute resolves it.
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "ms-gamebar://",
+                    UseShellExecute = true,
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"Tray: Open Game Bar failed: {ex.Message}");
+            }
+        }
+
+        private static void OnTrayOpenLogsRequested()
+        {
+            Logger.Info("Tray: Open logs folder requested");
+            try
+            {
+                var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                var logsDir = Path.Combine(localAppData, "Packages",
+                    "PlayandBuildCustom.10365195AA1EC_8edemd50ez3gg", "LocalCache", "Local");
+                if (!Directory.Exists(logsDir))
+                {
+                    logsDir = localAppData; // elevated fallback location
+                }
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = $"\"{logsDir}\"",
+                    UseShellExecute = false,
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"Tray: Open logs folder failed: {ex.Message}");
+            }
+        }
+
+        private static void OnTrayStartOnBootToggled(bool enabled)
+        {
+            Logger.Info($"Tray: Start on boot toggled to {enabled}");
+            _ = Task.Run(() =>
+            {
+                bool ok = Services.ScheduledTaskService.SetLogonTriggerEnabled(enabled);
+                if (!ok)
+                {
+                    // Revert the checkbox so the UI doesn't lie about the state.
+                    try
+                    {
+                        _trayIndicator?.SetStartOnBootChecked(Services.ScheduledTaskService.IsLogonTriggerEnabled());
+                    }
+                    catch { }
+                }
+            });
         }
 
         private static void OnTrayExitRequested()
@@ -245,20 +333,76 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
 
         private sealed class HelperTrayIndicator : IDisposable
         {
+            private readonly string _version;
             private readonly Action _onRestartRequested;
             private readonly Action _onExitRequested;
             private readonly Action _onOpenAppRequested;
+            private readonly Action _onOpenGameBarRequested;
+            private readonly Action _onOpenLogsRequested;
+            private readonly Action<bool> _onStartOnBootToggled;
             private readonly ManualResetEventSlim _startupSignal = new ManualResetEventSlim(false);
             private Thread _uiThread;
             private Exception _startupException;
             private uint _threadId;
             private bool _disposed;
+            private global::System.Windows.Forms.ContextMenuStrip _menu;
+            private global::System.Windows.Forms.ToolStripMenuItem _startOnBootItem;
+            private volatile bool _suppressStartOnBootEvent;
 
-            internal HelperTrayIndicator(Action onRestartRequested, Action onExitRequested, Action onOpenAppRequested)
+            internal HelperTrayIndicator(
+                string version,
+                Action onRestartRequested,
+                Action onExitRequested,
+                Action onOpenAppRequested,
+                Action onOpenGameBarRequested,
+                Action onOpenLogsRequested,
+                Action<bool> onStartOnBootToggled)
             {
+                _version = version;
                 _onRestartRequested = onRestartRequested;
                 _onExitRequested = onExitRequested;
                 _onOpenAppRequested = onOpenAppRequested;
+                _onOpenGameBarRequested = onOpenGameBarRequested;
+                _onOpenLogsRequested = onOpenLogsRequested;
+                _onStartOnBootToggled = onStartOnBootToggled;
+            }
+
+            /// <summary>
+            /// Updates the "Start on boot" checkbox from any thread without
+            /// re-firing the toggle callback (used for the async initial state
+            /// load and for reverting a failed toggle).
+            /// </summary>
+            internal void SetStartOnBootChecked(bool isChecked)
+            {
+                var menu = _menu;
+                var item = _startOnBootItem;
+                if (menu == null || item == null)
+                {
+                    return;
+                }
+
+                void Apply()
+                {
+                    _suppressStartOnBootEvent = true;
+                    try { item.Checked = isChecked; }
+                    finally { _suppressStartOnBootEvent = false; }
+                }
+
+                try
+                {
+                    if (menu.IsHandleCreated && menu.InvokeRequired)
+                    {
+                        menu.BeginInvoke((Action)Apply);
+                    }
+                    else
+                    {
+                        Apply();
+                    }
+                }
+                catch
+                {
+                    // Menu torn down mid-update — nothing to do.
+                }
             }
 
             /// <summary>
@@ -312,18 +456,50 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
                 {
                     using (var menu = new global::System.Windows.Forms.ContextMenuStrip())
                     {
+                        _menu = menu;
+
+                        var versionItem = new global::System.Windows.Forms.ToolStripMenuItem($"GoTweaks v{_version}")
+                        {
+                            Enabled = false,
+                        };
+
                         var openItem = new global::System.Windows.Forms.ToolStripMenuItem("Open GoTweaks");
                         openItem.Font = new global::System.Drawing.Font(openItem.Font, global::System.Drawing.FontStyle.Bold);
                         openItem.Click += (sender, args) => _onOpenAppRequested?.Invoke();
 
-                        var restartItem = new global::System.Windows.Forms.ToolStripMenuItem("Restart");
+                        var openGameBarItem = new global::System.Windows.Forms.ToolStripMenuItem("Open Game Bar (Win+G)");
+                        openGameBarItem.Click += (sender, args) => _onOpenGameBarRequested?.Invoke();
+
+                        _startOnBootItem = new global::System.Windows.Forms.ToolStripMenuItem("Start on boot")
+                        {
+                            CheckOnClick = true,
+                            Checked = true, // created-task default; async query corrects it
+                        };
+                        _startOnBootItem.CheckedChanged += (sender, args) =>
+                        {
+                            if (!_suppressStartOnBootEvent)
+                            {
+                                _onStartOnBootToggled?.Invoke(_startOnBootItem.Checked);
+                            }
+                        };
+
+                        var openLogsItem = new global::System.Windows.Forms.ToolStripMenuItem("Open logs folder");
+                        openLogsItem.Click += (sender, args) => _onOpenLogsRequested?.Invoke();
+
+                        var restartItem = new global::System.Windows.Forms.ToolStripMenuItem("Restart helper");
                         restartItem.Click += (sender, args) => _onRestartRequested?.Invoke();
 
                         var exitItem = new global::System.Windows.Forms.ToolStripMenuItem("Exit");
                         exitItem.Click += (sender, args) => _onExitRequested?.Invoke();
 
-                        menu.Items.Add(openItem);
+                        menu.Items.Add(versionItem);
                         menu.Items.Add(new global::System.Windows.Forms.ToolStripSeparator());
+                        menu.Items.Add(openItem);
+                        menu.Items.Add(openGameBarItem);
+                        menu.Items.Add(new global::System.Windows.Forms.ToolStripSeparator());
+                        menu.Items.Add(_startOnBootItem);
+                        menu.Items.Add(new global::System.Windows.Forms.ToolStripSeparator());
+                        menu.Items.Add(openLogsItem);
                         menu.Items.Add(restartItem);
                         menu.Items.Add(new global::System.Windows.Forms.ToolStripSeparator());
                         menu.Items.Add(exitItem);
