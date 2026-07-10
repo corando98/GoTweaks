@@ -191,6 +191,32 @@ namespace XboxGamingBarHelper.IPC
             return anySent;
         }
 
+        /// <summary>
+        /// Broadcasts to every connected client EXCEPT the given one, skipping
+        /// the RequestId response routing. Used to forward one client's
+        /// property Set to the other client(s) so multiple UIs stay in sync —
+        /// the property layer suppresses its own remote-sync on pipe-originated
+        /// Sets (echo-loop prevention), so without this the second UI never
+        /// hears about changes made in the first.
+        /// </summary>
+        public void BroadcastExcept(int excludeClientId, string message)
+        {
+            List<ClientConnection> clients;
+            lock (_clientsLock)
+            {
+                clients = new List<ClientConnection>(_clients);
+            }
+
+            foreach (var client in clients)
+            {
+                if (client.Id == excludeClientId)
+                {
+                    continue;
+                }
+                SendToClient(client, message);
+            }
+        }
+
         private bool SendToClient(ClientConnection client, string message)
         {
             if (client?.Stream?.IsConnected != true)
@@ -350,7 +376,7 @@ namespace XboxGamingBarHelper.IPC
                     {
                         Logger.Debug($"Received from client {client.Id}: {line.Substring(0, Math.Min(100, line.Length))}...");
                         TrackRequestSource(client, line);
-                        MessageReceived?.Invoke(this, new PipeMessageEventArgs(line));
+                        MessageReceived?.Invoke(this, new PipeMessageEventArgs(line, client.Id));
                     }
                 }
             }
@@ -441,9 +467,16 @@ namespace XboxGamingBarHelper.IPC
     {
         public string Message { get; }
 
-        public PipeMessageEventArgs(string message)
+        /// <summary>
+        /// Id of the pipe client the message arrived from (0 = unknown). Lets
+        /// handlers forward Sets to the OTHER clients for multi-UI sync.
+        /// </summary>
+        public int SourceClientId { get; }
+
+        public PipeMessageEventArgs(string message, int sourceClientId = 0)
         {
             Message = message;
+            SourceClientId = sourceClientId;
         }
     }
 }

@@ -858,7 +858,7 @@ namespace XboxGamingBarHelper
                 // Handle property requests via the properties system
                 if (pipeMsg.Function != Shared.Enums.Function.None)
                 {
-                    HandlePipePropertyRequest(pipeMsg);
+                    HandlePipePropertyRequest(pipeMsg, e.SourceClientId);
                 }
             }
             catch (Exception ex)
@@ -871,7 +871,7 @@ namespace XboxGamingBarHelper
         /// <summary>
         /// Handles property Get/Set requests from the pipe
         /// </summary>
-        private static void HandlePipePropertyRequest(Shared.IPC.PipeMessage request)
+        private static void HandlePipePropertyRequest(Shared.IPC.PipeMessage request, int sourceClientId = 0)
         {
             try
             {
@@ -1557,6 +1557,27 @@ namespace XboxGamingBarHelper
                     // Convert to ValueSet and use the existing property handling
                     var valueSet = request.ToValueSet();
                     response = properties.HandlePipeMessage(valueSet);
+
+                    // Multi-UI sync: the property layer suppresses its own
+                    // remote-sync on pipe-originated Sets (echo-loop
+                    // prevention), so with two clients connected (desktop app
+                    // + widget) the OTHER client never heard about this
+                    // change. Forward the Set to everyone except the sender —
+                    // shaped exactly like a normal helper push (Command.Set,
+                    // no RequestId).
+                    if (request.Command == Shared.Enums.Command.Set && pipeServer != null)
+                    {
+                        try
+                        {
+                            var forward = Shared.IPC.PipeMessage.FromValueSet(request.ToValueSet());
+                            forward.RequestId = 0;
+                            pipeServer.BroadcastExcept(sourceClientId, forward.ToJson());
+                        }
+                        catch (Exception fwdEx)
+                        {
+                            Logger.Debug($"Set forward to other clients failed: {fwdEx.Message}");
+                        }
+                    }
                 }
 
                 if (response != null && pipeServer != null && pipeServer.IsConnected)
