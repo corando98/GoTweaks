@@ -168,13 +168,11 @@ namespace XboxGamingBarHelper
             Logger.Info("Tray: Open Game Bar requested");
             try
             {
-                // ms-gamebar: is Xbox Game Bar's activation protocol (the same
-                // scheme widget deep links use). ShellExecute resolves it.
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = "ms-gamebar://",
-                    UseShellExecute = true,
-                });
+                // Inject Win+G through the existing hotkey plumbing. The
+                // ms-gamebar: protocol was a no-op from the elevated helper
+                // (field test 2587), and Win+G is what Game Bar actually
+                // listens for.
+                SendKeyboardShortcut("Win+G");
             }
             catch (Exception ex)
             {
