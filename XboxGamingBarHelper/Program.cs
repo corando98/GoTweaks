@@ -480,15 +480,16 @@ namespace XboxGamingBarHelper
                         }
                     }
 
-                    SetupDebugLog("Exiting setup mode");
-                    // Force process exit: a plain return leaves the setup
-                    // instance alive indefinitely (foreground thread from the
-                    // Task Scheduler COM interop or elevation plumbing) — field
-                    // report 2026-07-09 found a setup instance still running
-                    // 20+ minutes after "Exiting setup mode", showing up as a
-                    // second XboxGamingBarHelper in Task Manager. Same forced
-                    // exit the tray-restart path uses.
-                    Environment.Exit(0);
+                    SetupDebugLog("Exiting setup mode (terminating process)");
+                    // Terminate hard: a plain return left the setup instance
+                    // alive indefinitely, and Environment.Exit(0) DEADLOCKED in
+                    // shutdown plumbing (verified 2026-07-09: setup_debug.txt
+                    // reached the line before Exit and the process was still
+                    // alive 6+ minutes later — the Task Scheduler COM apartment
+                    // wedges finalization). Kill() is TerminateProcess: no
+                    // shutdown ceremony, nothing to deadlock on. Deploy is
+                    // complete and logs are flushed at this point.
+                    System.Diagnostics.Process.GetCurrentProcess().Kill();
                     return;
                 }
                 catch (Exception ex)
