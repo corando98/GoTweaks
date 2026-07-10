@@ -567,23 +567,28 @@ namespace XboxGamingBar
             var deferral = e.GetDeferral();
             try
             {
-                // HIDE-TO-TRAY instead of close. Closing (even via
+                // MINIMIZE instead of close. Closing (even via
                 // TryConsolidateAsync) leaves zero visible views — the widget's
                 // Game Bar-hosted view doesn't count — and Windows suspends the
                 // process, revoking extended execution with SystemPolicy at the
-                // same instant (verified on 2574). A hidden/minimized window is
-                // the state our keep-alive ExtendedExecutionSession is designed
-                // to survive, so the process keeps running and the widget stays
-                // connected. The UWP view can't hide itself; the full-trust
-                // helper does it via ShowWindow(SW_HIDE) on our
-                // ApplicationFrameHost window. Restored from the helper's tray
-                // icon ("Open GoTweaks" / double-click) or a Start relaunch.
+                // same instant (verified on 2574). A minimized window is the
+                // state our keep-alive ExtendedExecutionSession is designed to
+                // survive, so the process keeps running and the widget stays
+                // connected. The UWP view can't minimize itself; the full-trust
+                // helper does it via ShowWindow on our ApplicationFrameHost
+                // window. (Full hide-to-tray is unwinnable in-process — the
+                // frame host re-presents any externally-hidden window while its
+                // CoreWindow lives; see User32.HideAppFrameWindow for the
+                // 2576–2580 field-test ladder. Multi-instance is Game
+                // Bar-incompatible per the 2582 test.) Restored from the
+                // taskbar, the tray icon ("Open GoTweaks" / double-click), or a
+                // Start relaunch.
                 if (IsConnected && PipeClient != null)
                 {
                     e.Handled = true;
                     var message = new ValueSet { { "HideAppWindow", true } };
                     PipeClient.SendValueSet(message);
-                    Logger.Info("Desktop window close intercepted while widget active: requested hide-to-tray via helper");
+                    Logger.Info("Desktop window close intercepted while widget active: requested minimize via helper");
                 }
                 else
                 {
