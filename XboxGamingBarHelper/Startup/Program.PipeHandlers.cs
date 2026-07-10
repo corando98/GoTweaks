@@ -1015,13 +1015,9 @@ namespace XboxGamingBarHelper
                 // Sidebar Menu: Enable/disable sidebar overlay mode
                 else if (functionValue == (int)Function.SidebarMenuEnabled)
                 {
-                    if (request.Content != null)
-                    {
-                        sidebarMenuEnabled = request.Content.ToString().ToLower() == "true";
-                        Properties.Settings.Default.SidebarMenuEnabled = sidebarMenuEnabled;
-                        Properties.Settings.Default.Save();
-                        Logger.Info($"Pipe: Sidebar Menu enabled set to: {sidebarMenuEnabled}");
-                    }
+                    // Beta sidebar overlay removed — Game Bar is the only overlay
+                    // UI. Enum entry stays for wire compatibility; value ignored.
+                    Logger.Debug("Pipe: SidebarMenuEnabled ignored (sidebar removed)");
                 }
                 // Software gyro bias capture or reset. Steam-style one-shot calibration:
                 // user puts the device on a flat surface, presses Calibrate, we sample for

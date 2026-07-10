@@ -3762,7 +3762,6 @@ namespace XboxGamingBar
                 Logger.Info("[PIPE] Sending Quick Metrics and Screen Saver enabled states to helper...");
                 SendQuickMetricsEnabledToHelper();
                 SendScreenSaverEnabledToHelper();
-                SendSidebarMenuEnabledToHelper();
                 SendProfileSaveFlagsToHelper();
                 SendPowerSourceProfileConfigToHelper();
                 SendPowerSourceProfileValuesToHelper();

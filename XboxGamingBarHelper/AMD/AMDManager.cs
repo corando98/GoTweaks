@@ -17,11 +17,6 @@ namespace XboxGamingBarHelper.AMD
     internal class AMDManager : OnScreenDisplayManager
     {
         // AMD Software stuff
-        // Computer\HKEY_CURRENT_USER\Software\AMD\CN\Performance
-        private static readonly RegistryKey AMD_PERFORMANCE_KEY_ROOT = Registry.CurrentUser;
-        private const string AMD_PERFORMANCE_KEY_PATH = @"Software\AMD\CN\Performance";
-        private const string AMD_PERFORMANCE_STATE_KEY_NAME = "MetricsOverlayState";
-        private const string AMD_PERFORMANCE_PROFILE_KEY_NAME = "MetricsProfile";
 
         // ADLX stuff
         private ADLX_RESULT adlxInitializeResult;
@@ -283,11 +278,6 @@ namespace XboxGamingBarHelper.AMD
             get { return amdDisplayTemperature; }
         }
 
-        private InputInjector inputInjector;
-        private InjectedInputKeyboardInfo[] turnAMDOverlayOnOffKeyboardCombo;
-        private InjectedInputKeyboardInfo[] changeAMDOverlayLevelKeyboardCombo;
-        private List<Tuple<int, int>> amdOverlayLevelList;
-        private Dictionary<int, int> amdOverlayLevelMap;
 
         private long lastUpdate;
 
@@ -741,44 +731,6 @@ namespace XboxGamingBarHelper.AMD
             var threeDSettingsChangedHandling = ADLX.threeDSettingsChangedHandlingP_Ptr_value(threeDSettingsChangedHandlingPointer);
             amd3DSettingsChangedListener = new AMD3DSettingsChangedListener(this);
             threeDSettingsChangedHandling.Add3DSettingsEventListener(amd3DSettingsChangedListener);
-
-            inputInjector = InputInjector.TryCreate();
-            turnAMDOverlayOnOffKeyboardCombo = new InjectedInputKeyboardInfo[]
-            {
-                new InjectedInputKeyboardInfo { VirtualKey = (ushort)VirtualKey.LeftControl, KeyOptions = InjectedInputKeyOptions.None },
-                new InjectedInputKeyboardInfo { VirtualKey = (ushort)VirtualKey.LeftShift, KeyOptions = InjectedInputKeyOptions.None },
-                new InjectedInputKeyboardInfo { VirtualKey = (ushort)VirtualKey.O, KeyOptions = InjectedInputKeyOptions.None },
-                new InjectedInputKeyboardInfo { VirtualKey = (ushort)VirtualKey.LeftControl, KeyOptions = InjectedInputKeyOptions.KeyUp },
-                new InjectedInputKeyboardInfo { VirtualKey = (ushort)VirtualKey.LeftShift, KeyOptions = InjectedInputKeyOptions.KeyUp },
-                new InjectedInputKeyboardInfo { VirtualKey = (ushort)VirtualKey.O, KeyOptions = InjectedInputKeyOptions.KeyUp },
-            };
-            changeAMDOverlayLevelKeyboardCombo = new InjectedInputKeyboardInfo[]
-            {
-                new InjectedInputKeyboardInfo { VirtualKey = (ushort)VirtualKey.LeftControl, KeyOptions = InjectedInputKeyOptions.None },
-                new InjectedInputKeyboardInfo { VirtualKey = (ushort)VirtualKey.LeftShift, KeyOptions = InjectedInputKeyOptions.None },
-                new InjectedInputKeyboardInfo { VirtualKey = (ushort)VirtualKey.X, KeyOptions = InjectedInputKeyOptions.None },
-                new InjectedInputKeyboardInfo { VirtualKey = (ushort)VirtualKey.LeftControl, KeyOptions = InjectedInputKeyOptions.KeyUp },
-                new InjectedInputKeyboardInfo { VirtualKey = (ushort)VirtualKey.LeftShift, KeyOptions = InjectedInputKeyOptions.KeyUp },
-                new InjectedInputKeyboardInfo { VirtualKey = (ushort)VirtualKey.X, KeyOptions = InjectedInputKeyOptions.KeyUp }
-            };
-            // In AMD Software: Adrenaline Edition:
-            // Level 3 is basic (FPS only)                      => Our level 1 (FPS)
-            // Level 1 is intermediate (FPS + Usage + Wattage)  => Our level 2 (BATTERY)
-            // Level 2 is advanced (many elements)              => Our level 3 (DETAILED)
-            // Level 0 is custom (user seletectable)            => Our level 4 (FULL)
-            amdOverlayLevelList = new List<Tuple<int, int>>()
-            {
-                new Tuple<int, int>(1, 3),
-                new Tuple<int, int>(2, 1),
-                new Tuple<int, int>(3, 2),
-                new Tuple<int, int>(4, 0),
-            };
-            amdOverlayLevelMap = new Dictionary<int, int>();
-            foreach (var amdOverlayLevel in amdOverlayLevelList)
-            {
-                amdOverlayLevelMap.Add(amdOverlayLevel.Item1, amdOverlayLevel.Item2);
-            }
-            lastUpdate = 0;
         }
 
         /// <summary>
@@ -1145,160 +1097,10 @@ namespace XboxGamingBarHelper.AMD
             }
             lastUpdate = now;
 
-            if (IsInUsed)
-            {
-                SetAMDValues();
-            }
+            // (AMD Adrenalin overlay pass-through removed — RTSS is the only
+            // OSD provider; nothing to sync here anymore.)
         }
 
-        public override void SetLevel(int level)
-        {
-            base.SetLevel(level);
 
-            // SetAMDValues();
-        }
-
-        private async void SetAMDValues()
-        {
-            try
-            {
-                var (currentlyOn, currentLevel) = ReadCurrentMetricsProfile();
-                if (onScreenDisplayLevel == 0)
-                {
-                    if (currentlyOn == 1)
-                    {
-                        Logger.Info("Turning OFF AMD On-Screen Display.");
-                        inputInjector.InjectKeyboardInput(turnAMDOverlayOnOffKeyboardCombo);
-                    }
-                    else
-                    {
-                        Logger.Info("AMD On-Screen Display is already turned OFF.");
-                    }
-                }
-                else
-                {
-                    if (currentlyOn == 0)
-                    {
-                        Logger.Info("Turning ON AMD On-Screen Display.");
-                        inputInjector.InjectKeyboardInput(turnAMDOverlayOnOffKeyboardCombo);
-                        await Task.Delay(100);
-                    }
-
-                    var targetLevel = amdOverlayLevelMap[onScreenDisplayLevel];
-                    if (currentLevel != targetLevel)
-                    {
-                        var currentLevelIndex = 0;
-                        var targetLevelIndex = 0;
-                        for (var i = 0; i < amdOverlayLevelList.Count; i++)
-                        {
-                            if (amdOverlayLevelList[i].Item2 == currentLevel)
-                            {
-                                currentLevelIndex = i;
-                            }
-                            if (amdOverlayLevelList[i].Item2 == targetLevel)
-                            {
-                                targetLevelIndex = i;
-                            }
-                        }
-
-                        var numberOfKeyPresses = Math.Abs(targetLevelIndex - currentLevelIndex);
-                        Logger.Info($"Current AMD On-Screen Display level is {currentLevel} at index {currentLevelIndex}, need to change to {targetLevel} at index {targetLevelIndex}, need to press {numberOfKeyPresses} times.");
-                        for (var i = 0; i < numberOfKeyPresses; i++)
-                        {
-                            inputInjector.InjectKeyboardInput(changeAMDOverlayLevelKeyboardCombo);
-                            await Task.Delay(100);
-                        }
-                    }
-                    else
-                    {
-                        Logger.Info($"Current AMD On-Screen Display level is {currentLevel} already matches {targetLevel}.");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Error in SetAMDValues: {ex.Message}");
-            }
-        }
-
-        private static Tuple<int, int> ReadCurrentMetricsProfile()
-        {
-            try
-            {
-                using (RegistryKey subKey = AMD_PERFORMANCE_KEY_ROOT.OpenSubKey(AMD_PERFORMANCE_KEY_PATH))
-                {
-                    if (subKey != null)
-                    {
-                        object stateObject = subKey.GetValue(AMD_PERFORMANCE_STATE_KEY_NAME);
-
-                        if (stateObject != null)
-                        {
-                            Logger.Debug($"Value of '{AMD_PERFORMANCE_STATE_KEY_NAME}' at '{AMD_PERFORMANCE_KEY_PATH}': {stateObject} of type {stateObject.GetType().Name}");
-                            var stateValue = (int)stateObject;
-                            if (stateValue == 0)
-                            {
-                                return new Tuple<int, int>(0, 0);
-                            }
-                            else
-                            {
-                                var profileObject = subKey.GetValue(AMD_PERFORMANCE_PROFILE_KEY_NAME);
-                                if (profileObject != null)
-                                {
-                                    Logger.Debug($"Value of {AMD_PERFORMANCE_PROFILE_KEY_NAME} is {profileObject} of type {profileObject.GetType().Name}");
-                                    var profileValue = (int)profileObject;
-                                    return new Tuple<int, int>(stateValue, profileValue);
-                                }
-                                else
-                                {
-                                    return new Tuple<int, int>(stateValue, 0);
-                                }
-                            }
-                        }
-                        else
-                        {
-                            Logger.Warn($"Value '{AMD_PERFORMANCE_STATE_KEY_NAME}' not found in '{AMD_PERFORMANCE_KEY_PATH}'.");
-                            return new Tuple<int, int>(0, 0);
-                        }
-                    }
-                    else
-                    {
-                        Logger.Warn($"Registry key '{AMD_PERFORMANCE_KEY_PATH}' not found.");
-                        return new Tuple<int, int>(0, 0);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"An error occurred: {ex.Message}");
-                return new Tuple<int, int>(0, 0);
-            }
-        }
-
-        private static bool SetCurrentMetricsProfile(int metricOverlayState, int metricProfile)
-        {
-            try
-            {
-                using (RegistryKey subKey = AMD_PERFORMANCE_KEY_ROOT.OpenSubKey(AMD_PERFORMANCE_KEY_PATH))
-                {
-                    if (subKey != null)
-                    {
-                        subKey.SetValue(AMD_PERFORMANCE_STATE_KEY_NAME, metricOverlayState);
-                        subKey.SetValue(AMD_PERFORMANCE_PROFILE_KEY_NAME, metricProfile);
-                        Logger.Debug($"Set registry key '{AMD_PERFORMANCE_KEY_PATH}\\{AMD_PERFORMANCE_STATE_KEY_NAME}' to {metricOverlayState} and '{AMD_PERFORMANCE_KEY_PATH}\\{AMD_PERFORMANCE_PROFILE_KEY_NAME}' to {metricProfile}.");
-                        return true;
-                    }
-                    else
-                    {
-                        Logger.Warn($"Registry key '{AMD_PERFORMANCE_KEY_PATH}' not found.");
-                        return false;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"An error occurred: {ex.Message}");
-                return false;
-            }
-        }
     }
 }

@@ -1230,14 +1230,7 @@ namespace XboxGamingBarHelper
                 }
                 lastFocusWidgetTime = now;
 
-                // If sidebar mode is enabled, toggle sidebar instead of opening Game Bar
-                Logger.Info($"FocusGoTweaks: sidebarMenuEnabled={sidebarMenuEnabled}, sidebarManager={sidebarManager != null}");
-                if (sidebarMenuEnabled && sidebarManager != null)
-                {
-                    sidebarManager.Toggle();
-                    Logger.Info("Sidebar: Toggled sidebar overlay");
-                    return;
-                }
+                // (Beta sidebar overlay removed — Game Bar is the only overlay UI.)
 
                 // Open Game Bar (required for widget activation)
                 SendKeyboardShortcutViaInputInjector("Win+G");

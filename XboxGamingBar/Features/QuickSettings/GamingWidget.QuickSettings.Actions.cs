@@ -759,38 +759,7 @@ namespace XboxGamingBar
 
         private void CyclePerformanceOverlay()
         {
-            if (osdProvider == 1) // AMD
-            {
-                // AMD has 4 overlay levels that cycle with Ctrl+Shift+X
-                // Ctrl+Shift+O toggles the overlay on/off completely
-                // Cycle: Off -> Level 1 -> Level 2 -> Level 3 -> Level 4 -> Off
-                if (amdOverlayLevel == 0)
-                {
-                    // Currently off, turn on (starts at level 1)
-                    SendAMDOverlayToggle();
-                    amdOverlayLevel = 1;
-                    SaveAMDOverlayLevel();
-                    Logger.Info("AMD Overlay toggled ON (Level 1)");
-                }
-                else if (amdOverlayLevel < 4)
-                {
-                    // Cycle to next level
-                    CycleAMDOverlayLevel();
-                    amdOverlayLevel++;
-                    SaveAMDOverlayLevel();
-                    Logger.Info($"AMD Overlay cycled to Level {amdOverlayLevel}");
-                }
-                else
-                {
-                    // At level 4, turn off
-                    SendAMDOverlayToggle();
-                    amdOverlayLevel = 0;
-                    SaveAMDOverlayLevel();
-                    Logger.Info("AMD Overlay toggled OFF");
-                }
-                UpdateQuickSettingsTileStates();
-            }
-            else // RTSS
+            // (AMD Adrenalin overlay pass-through removed - RTSS only.)
             {
                 if (osd != null)
                 {

@@ -116,8 +116,6 @@ namespace XboxGamingBarHelper
         private static XboxGamingBarHelper.ControllerEmulation.Viiper.ViiperEmulationManager viiperEmulationManager;
         private static AutoTDPManager autoTDPManager;
         private static DefaultGameProfileManager defaultGameProfileManager;
-        private static Sidebar.SidebarManager sidebarManager;
-        private static bool sidebarMenuEnabled;
         private static List<IManager> Managers;
 
         public static OnScreenDisplayProperty onScreenDisplay;
@@ -550,7 +548,6 @@ namespace XboxGamingBarHelper
             try
             {
                 TryStartTrayIndicator();
-                TryStartSidebar();
                 await Initialize();
             }
             catch (Exception ex)
@@ -561,7 +558,6 @@ namespace XboxGamingBarHelper
             }
             finally
             {
-                sidebarManager?.Dispose();
                 DisposeTrayIndicator();
                 // Intentionally NOT releasing/disposing singleInstanceMutex here.
                 // The kernel releases named mutexes automatically on process exit.
@@ -1359,7 +1355,6 @@ namespace XboxGamingBarHelper
             // Note: defaultGameProfileManager is added in background task when ready
 
             // Wire sidebar manager to live managers (WPF thread already running from TryStartSidebar)
-            sidebarManager?.SetManagers(performanceManager, autoTDPManager, profileManager, legionManager, controllerEmulationManager, powerManager, rtssManager, systemManager);
 
             // Gate the per-tick LibreHardwareMonitor walk on whether anyone actually wants
             // fresh sensor data. PerformanceManager already short-circuits on QuickMetrics
@@ -1370,7 +1365,6 @@ namespace XboxGamingBarHelper
             {
                 try
                 {
-                    if (sidebarManager?.IsVisibleCached == true) return true;
                     if (autoTDPManager?.Enabled?.Value == true) return true;
                     if (legionManager?.IsFanCurveVisible == true) return true;
                     // EC fan override loop reads CPUTemperature every tick to drive 0xC6C8. If

@@ -93,31 +93,6 @@ namespace XboxGamingBarHelper
             }
         }
 
-        private static void TryStartSidebar()
-        {
-            try
-            {
-                // Load persisted sidebar state
-                sidebarMenuEnabled = Properties.Settings.Default.SidebarMenuEnabled;
-                Logger.Info($"Sidebar: Loaded persisted state: {sidebarMenuEnabled}");
-
-                sidebarManager = new Sidebar.SidebarManager();
-                if (sidebarManager.Start())
-                {
-                    Logger.Info("Sidebar manager started");
-                }
-                else
-                {
-                    Logger.Warn("Sidebar manager failed to start");
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Warn($"Sidebar manager startup failed: {ex.Message}");
-                sidebarManager = null;
-            }
-        }
-
         private static void DisposeTrayIndicator()
         {
             try

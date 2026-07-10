@@ -89,8 +89,6 @@ namespace XboxGamingBar
         private bool quickMetricsEnabled = false;
         private bool isUpdatingMetricCheckboxes = false;
         private bool screenSaverEnabled = false;
-        private bool sidebarMenuEnabled = false;
-        private const string SidebarMenuEnabledKey = "SidebarMenuEnabled";
         private const string ScreenSaverEnabledKey = "QS_ScreenSaverEnabled";
         private const int ScreenSaverTimeoutSeconds = 60;
         private DispatcherTimer screenSaverCountdownTimer;
@@ -496,13 +494,6 @@ namespace XboxGamingBar
                     }
                 }
 
-                // Load Sidebar Menu toggle state
-                if (settings.Values.TryGetValue(SidebarMenuEnabledKey, out object sbVal) && sbVal is bool sbEnabled)
-                {
-                    sidebarMenuEnabled = sbEnabled;
-                    SidebarMenuToggle.IsOn = sidebarMenuEnabled;
-                }
-
                 // Load Quick Metrics selection
                 selectedMetrics.Clear();
                 if (settings.Values.TryGetValue(QuickMetricsSelectionKey, out object selectionVal) && selectionVal is string selectionStr)
@@ -650,36 +641,6 @@ namespace XboxGamingBar
             catch (Exception ex)
             {
                 Logger.Error($"Error sending Screen Saver enabled state: {ex.Message}");
-            }
-        }
-
-        private void SidebarMenuToggle_Toggled(object sender, RoutedEventArgs e)
-        {
-            sidebarMenuEnabled = SidebarMenuToggle.IsOn;
-            var settings = ApplicationData.Current.LocalSettings;
-            settings.Values[SidebarMenuEnabledKey] = sidebarMenuEnabled;
-            SendSidebarMenuEnabledToHelper();
-            Logger.Info($"Sidebar Menu toggled: {sidebarMenuEnabled}");
-        }
-
-        private void SendSidebarMenuEnabledToHelper()
-        {
-            try
-            {
-                if (!App.IsConnected) return;
-
-                var request = new Windows.Foundation.Collections.ValueSet
-                {
-                    { "Command", (int)Shared.Enums.Command.Set },
-                    { "Function", (int)Shared.Enums.Function.SidebarMenuEnabled },
-                    { "Content", sidebarMenuEnabled }
-                };
-                App.PipeClient?.SendValueSet(request);
-                Logger.Info($"Sent Sidebar Menu enabled state to helper: {sidebarMenuEnabled}");
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Error sending Sidebar Menu enabled state: {ex.Message}");
             }
         }
 

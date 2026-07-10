@@ -2,7 +2,7 @@ using System;
 using System.Management;
 using NLog;
 
-namespace XboxGamingBarHelper.Sidebar
+namespace XboxGamingBarHelper.Systems
 {
     internal static class BrightnessManager
     {

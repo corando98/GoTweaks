@@ -449,14 +449,7 @@ namespace XboxGamingBar
                 // Performance Overlay tile
                 if (qsTileMap.TryGetValue("Overlay", out var overlayTile) && overlayTile.TileButton != null)
                 {
-                    if (osdProvider == 1) // AMD
-                    {
-                        string amdLevelText = amdOverlayLevel > 0 ? $"AMD {amdOverlayLevel}" : "Off";
-                        overlayTile.StateText.Text = amdLevelText;
-                        overlayTile.StateText.Foreground = amdOverlayLevel > 0 ? accentForeground : offForeground;
-                        overlayTile.TileButton.Background = amdOverlayLevel > 0 ? tileOnBrush : tileOffBrush;
-                    }
-                    else // RTSS
+                    // (AMD Adrenalin overlay pass-through removed - RTSS only.)
                     {
                         int level = (int)(osd?.Value ?? 0);
                         string levelText;

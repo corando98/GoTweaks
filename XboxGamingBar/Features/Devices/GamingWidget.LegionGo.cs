@@ -2312,6 +2312,10 @@ namespace XboxGamingBar
             if (!isCustomMode)
             {
                 TDPSlider.IsEnabled = false;
+                // Preset modes manage TDP themselves — hide the whole power-limit
+                // section (slider, limits line, boost/sticky indicators). It lives
+                // inside the TDP Mode card and only appears in Custom mode.
+                if (TDPSliderSection != null) TDPSliderSection.Visibility = Visibility.Collapsed;
 
                 // Update display to show preset name and TDP value
                 int modeIndex = TDPModeComboBox?.SelectedIndex ?? 1;
@@ -2401,6 +2405,7 @@ namespace XboxGamingBar
             {
                 // In Custom mode, enable if tdp property is ready
                 TDPSlider.IsEnabled = tdp != null;
+                if (TDPSliderSection != null) TDPSliderSection.Visibility = Visibility.Visible;
 
                 // Reset the "Limits" line — when switching into Custom mode the non-Custom
                 // branch above (or the widget's initial default-to-Balanced state) leaves

@@ -116,8 +116,6 @@ namespace XboxGamingBar
         private int osdTextSize = 100;    // Percentage: 50=Small, 100=Medium, 150=Large, 200=X-Large, 250=XX-Large, 300=XXX-Large
         private string osdTextColor = "DYNAMIC";  // DYNAMIC = value-based colors, or hex color code
         private string osdLabelColor = "DEFAULT";  // DEFAULT = use item-specific colors, or hex color code
-        private int osdProvider = 0;  // 0=RTSS, 1=AMD
-        private int amdOverlayLevel = 0;  // Track AMD overlay level: 0=Off, 1-4=Level 1-4 (can't query from AMD)
         private bool isOSDCustomizeExpanded = false;
         private bool isProfileDetectionExpanded = false;
         private bool isProfileSettingsExpanded = false;
@@ -204,122 +202,6 @@ namespace XboxGamingBar
                     LoadOSDOptionsForLevel(level);
                     // Note: This is only for RTSS customization - AMD overlay doesn't have configurable levels
                 }
-            }
-        }
-
-        private void OSDProviderComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (isLoadingOSDConfig) return;
-
-            if (OSDProviderComboBox?.SelectedItem is ComboBoxItem selected && selected.Tag is string tagStr)
-            {
-                if (int.TryParse(tagStr, out int provider))
-                {
-                    int previousProvider = osdProvider;
-                    osdProvider = provider;
-
-                    // Save to storage
-                    try
-                    {
-                        ApplicationData.Current.LocalSettings.Values["OSD_Provider"] = osdProvider;
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Error($"Error saving OSD provider: {ex.Message}");
-                    }
-
-                    // Update UI visibility
-                    UpdateOSDProviderUI();
-
-                    // When switching providers, disable the other one
-                    if (provider == 0) // RTSS
-                    {
-                        // Disable AMD overlay if it was enabled (send Ctrl+Shift+O to toggle off)
-                        if (previousProvider == 1 && amdOverlayLevel > 0)
-                        {
-                            SendAMDOverlayToggle();
-                            amdOverlayLevel = 0;
-                            SaveAMDOverlayLevel();
-                        }
-                        // Enable RTSS OSD by sending config
-                        SendOSDConfigToHelper();
-                    }
-                    else if (provider == 1) // AMD
-                    {
-                        // Disable RTSS OSD by setting level to 0
-                        if (osd != null)
-                        {
-                            osd.SetValue(0);
-                        }
-                        // Don't auto-toggle AMD overlay - we can't know its actual state
-                        // User should manually enable via Quick Settings tile if needed
-                    }
-
-                    // Update Quick Settings tiles
-                    UpdateQuickSettingsTileStates();
-
-                    Logger.Info($"OSD Provider changed to: {(provider == 0 ? "RTSS" : "AMD")}");
-                }
-            }
-        }
-
-        private void UpdateOSDProviderUI()
-        {
-            if (RTSSOptionsPanel != null)
-            {
-                RTSSOptionsPanel.Visibility = osdProvider == 0 ? Visibility.Visible : Visibility.Collapsed;
-            }
-            if (AMDOptionsPanel != null)
-            {
-                AMDOptionsPanel.Visibility = osdProvider == 1 ? Visibility.Visible : Visibility.Collapsed;
-            }
-        }
-
-        private async void SendAMDOverlayToggle()
-        {
-            // Send Ctrl+Shift+O to toggle AMD Adrenaline's metrics overlay on/off
-            // Use helper's InputInjector since UWP widget can't use SendInput directly
-            try
-            {
-                if (App.IsConnected)
-                {
-                    var request = new Windows.Foundation.Collections.ValueSet();
-                    request.Add("SendKeyboardShortcut", "Ctrl+Shift+O");
-                    await App.SendMessageAsync(request);
-                    Logger.Info("Sent AMD overlay toggle hotkey (Ctrl+Shift+O) via helper");
-                }
-                else
-                {
-                    Logger.Warn("Cannot send AMD overlay toggle - not connected to helper");
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Error sending AMD overlay toggle: {ex.Message}");
-            }
-        }
-
-        private async void CycleAMDOverlayLevel()
-        {
-            // Send Ctrl+Shift+X to cycle AMD Adrenaline's metrics overlay levels
-            // Use helper's InputInjector since UWP widget can't use SendInput directly
-            try
-            {
-                if (App.IsConnected)
-                {
-                    var request = new Windows.Foundation.Collections.ValueSet();
-                    request.Add("SendKeyboardShortcut", "Ctrl+Shift+X");
-                    await App.SendMessageAsync(request);
-                    Logger.Info("Sent AMD overlay cycle hotkey (Ctrl+Shift+X) via helper");
-                }
-                else
-                {
-                    Logger.Warn("Cannot cycle AMD overlay level - not connected to helper");
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Error cycling AMD overlay level: {ex.Message}");
             }
         }
 
@@ -647,14 +529,6 @@ namespace XboxGamingBar
                     frametimeGraphPinned = pinned;
                     if (FrametimeGraphPinnedToggle != null)
                         FrametimeGraphPinnedToggle.IsOn = frametimeGraphPinned;
-                }
-                if (settings.Values.TryGetValue("OSD_Provider", out object providerVal) && providerVal is int provider)
-                {
-                    osdProvider = provider;
-                }
-                if (settings.Values.TryGetValue("AMD_OverlayLevel", out object amdLevelVal) && amdLevelVal is int amdLevel)
-                {
-                    amdOverlayLevel = amdLevel;
                 }
 
                 // Update layout UI
@@ -1821,22 +1695,6 @@ namespace XboxGamingBar
             isLoadingOSDConfig = true;
             try
             {
-                // Set OSD provider combobox
-                if (OSDProviderComboBox != null)
-                {
-                    foreach (ComboBoxItem item in OSDProviderComboBox.Items)
-                    {
-                        if (item.Tag is string tag && int.TryParse(tag, out int val) && val == osdProvider)
-                        {
-                            OSDProviderComboBox.SelectedItem = item;
-                            break;
-                        }
-                    }
-                }
-
-                // Update provider-specific UI visibility
-                UpdateOSDProviderUI();
-
                 // Columns are per-level, loaded in LoadOSDOptionsForLevel
 
                 // Set text size combobox

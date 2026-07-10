@@ -52,32 +52,9 @@ namespace XboxGamingBar
                 int index = PerformanceOverlayComboBox.SelectedIndex;
                 if (index >= 0)
                 {
-                    if (osdProvider == 1) // AMD
-                    {
-                        // For AMD: index 0 = Off, index 1-3 maps to AMD levels
-                        if (index == 0 && amdOverlayLevel > 0)
-                        {
-                            // Turn off AMD overlay
-                            SendAMDOverlayToggle();
-                            amdOverlayLevel = 0;
-                            SaveAMDOverlayLevel();
-                            Logger.Info("AMD Overlay toggled OFF via ComboBox");
-                        }
-                        else if (index > 0 && amdOverlayLevel == 0)
-                        {
-                            // Turn on AMD overlay (starts at level 1)
-                            SendAMDOverlayToggle();
-                            amdOverlayLevel = 1;
-                            SaveAMDOverlayLevel();
-                            Logger.Info("AMD Overlay toggled ON via ComboBox");
-                        }
-                        // Note: We can't set specific AMD levels directly, only cycle
-                        UpdateQuickSettingsTileStates();
-                    }
-                    else // RTSS
-                    {
-                        PerformanceOverlaySlider.Value = index;
-                    }
+                    // (AMD Adrenalin overlay pass-through removed - RTSS is the
+                    // only OSD provider.)
+                    PerformanceOverlaySlider.Value = index;
                     // Save the setting (but not during initial load)
                     if (!isLoadingPerformanceOverlaySetting)
                     {
@@ -145,19 +122,6 @@ namespace XboxGamingBar
             catch (Exception ex)
             {
                 Logger.Error($"Error saving PerformanceOverlay setting: {ex.Message}");
-            }
-        }
-
-        private void SaveAMDOverlayLevel()
-        {
-            try
-            {
-                var settings = ApplicationData.Current.LocalSettings;
-                settings.Values["AMD_OverlayLevel"] = amdOverlayLevel;
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Error saving AMD overlay level: {ex.Message}");
             }
         }
 

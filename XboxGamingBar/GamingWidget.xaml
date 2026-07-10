@@ -949,37 +949,38 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- TDP Mode Card (all devices) -->
+                        <!-- TDP Mode Card (all devices). The power-limit slider lives in
+                             this same card and is only shown in Custom mode - preset modes
+                             manage TDP themselves (see UpdateTDPSliderEnabledState). -->
                         <Border x:Name="TDPModeCard" Style="{StaticResource CardStyle}">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                    <TextBlock Text="TDP Mode" Style="{StaticResource CardTitleStyle}"/>
-                                    <TextBlock Text="Controls power and thermal profile"
-                                               Style="{StaticResource CardCaptionStyle}"/>
-                                </StackPanel>
-                                <ComboBox x:Name="TDPModeComboBox"
-                                          MinWidth="140"
-                                          Grid.Column="1"
-                                          Style="{StaticResource ModernComboBoxStyle}"
-                                          SelectedIndex="1"
-                                          SelectionChanged="TDPModeComboBox_SelectionChanged"
-                                          XYFocusUp="{x:Bind PerformanceOverlayComboBox}"
-                                          XYFocusDown="{x:Bind TDPSlider}">
-                                    <ComboBoxItem Content="Quiet" Tag="1"/>
-                                    <ComboBoxItem Content="Balanced" Tag="2"/>
-                                    <ComboBoxItem Content="Performance" Tag="3"/>
-                                    <ComboBoxItem Content="Custom" Tag="255"/>
-                                </ComboBox>
-                            </Grid>
-                        </Border>
-
-                        <!-- TDP Power Limit Card -->
-                        <Border Style="{StaticResource CardStyle}">
                             <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="TDP Mode" Style="{StaticResource CardTitleStyle}"/>
+                                        <TextBlock Text="Controls power and thermal profile"
+                                                   Style="{StaticResource CardCaptionStyle}"/>
+                                    </StackPanel>
+                                    <ComboBox x:Name="TDPModeComboBox"
+                                              MinWidth="140"
+                                              Grid.Column="1"
+                                              Style="{StaticResource ModernComboBoxStyle}"
+                                              SelectedIndex="1"
+                                              SelectionChanged="TDPModeComboBox_SelectionChanged"
+                                              XYFocusUp="{x:Bind PerformanceOverlayComboBox}"
+                                              XYFocusDown="{x:Bind TDPSlider}">
+                                        <ComboBoxItem Content="Quiet" Tag="1"/>
+                                        <ComboBoxItem Content="Balanced" Tag="2"/>
+                                        <ComboBoxItem Content="Performance" Tag="3"/>
+                                        <ComboBoxItem Content="Custom" Tag="255"/>
+                                    </ComboBox>
+                                </Grid>
+
+                                <!-- TDP Power Limit section (Custom mode only) -->
+                                <StackPanel x:Name="TDPSliderSection" Visibility="Collapsed" Margin="0,12,0,0">
                                 <Grid>
                                     <TextBlock Text="TDP Power Limit" Style="{StaticResource CardTitleStyle}"/>
                                     <TextBlock x:Name="TDPValueText"
@@ -1025,6 +1026,7 @@
                                            FontWeight="SemiBold"
                                            Margin="0,1,0,0"
                                            Visibility="{Binding ElementName=StickyTDPToggle, Path=IsOn, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
 
@@ -3277,35 +3279,9 @@
                                 <!-- Collapsible Content -->
                                 <StackPanel x:Name="OSDCustomizeContent" Visibility="Collapsed" Margin="0,12,0,0">
 
-                                    <!-- OSD Provider Selection -->
-                                    <Grid Margin="0,0,0,12">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel>
-                                            <TextBlock Text="OSD Provider"
-                                                       Foreground="#FFFFFF"
-                                                       VerticalAlignment="Center"
-                                                       FontSize="14"/>
-                                            <TextBlock Text="Select overlay source"
-                                                       Foreground="#707070"
-                                                       FontSize="11"/>
-                                        </StackPanel>
-                                        <ComboBox x:Name="OSDProviderComboBox"
-                                                  Style="{StaticResource ModernComboBoxStyle}"
-                                                  Width="120"
-                                                  Grid.Column="1"
-                                                  SelectionChanged="OSDProviderComboBox_SelectionChanged"
-                                                  UseSystemFocusVisuals="True"
-                                                  FocusVisualPrimaryBrush="White"
-                                                  FocusVisualSecondaryBrush="Transparent">
-                                            <ComboBoxItem Content="RTSS" Tag="0" IsSelected="True"/>
-                                            <ComboBoxItem Content="AMD" Tag="1"/>
-                                        </ComboBox>
-                                    </Grid>
+                                    <!-- (OSD provider selection removed - RTSS is the only provider; the AMD Adrenalin overlay pass-through was unused.) -->
 
-                                    <!-- RTSS-specific options (hidden when AMD provider is selected) -->
+                                    <!-- RTSS options -->
                                     <StackPanel x:Name="RTSSOptionsPanel">
                                         <!-- Overlay Level Selection -->
                                         <Grid Margin="0,0,0,12">
@@ -3626,16 +3602,7 @@
                                                  TextChanged="OSDCustomTagsTextBox_TextChanged"/>
                                     </StackPanel>
 
-                                    <!-- AMD-specific info (shown when AMD provider is selected) -->
-                                    <StackPanel x:Name="AMDOptionsPanel" Visibility="Collapsed">
-                                        <TextBlock Text="AMD Adrenaline Overlay"
-                                                   Style="{StaticResource CardTitleStyle}"
-                                                   Margin="0,0,0,8"/>
-                                        <TextBlock Text="The AMD overlay is controlled through Adrenaline software. Use Ctrl+Shift+O to toggle and Ctrl+Shift+X to cycle overlay levels."
-                                                   Foreground="#A0A0A0"
-                                                   FontSize="12"
-                                                   TextWrapping="Wrap"/>
-                                    </StackPanel>
+                                    
                                 </StackPanel>
                             </StackPanel>
                         </Border>
@@ -5975,22 +5942,7 @@
                                             Style="{StaticResource StandaloneButtonStyle}"
                                             Click="PrepareForUninstallButton_Click"/>
 
-                                    <!-- Sidebar Menu (Beta) Toggle -->
-                                    <Grid Margin="0,16,0,0">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                            <TextBlock Text="Sidebar Menu (Beta)" FontSize="14" Foreground="#FFFFFF"/>
-                                            <TextBlock Text="Show overlay instead of Game Bar on Focus GoTweaks" FontSize="11" Foreground="#888888"/>
-                                        </StackPanel>
-                                        <ToggleSwitch x:Name="SidebarMenuToggle"
-                                                      Grid.Column="1"
-                                                      OnContent="" OffContent=""
-                                                      IsOn="False"
-                                                      Toggled="SidebarMenuToggle_Toggled"/>
-                                    </Grid>
+                                    <!-- (Beta sidebar overlay removed - Game Bar is the only overlay UI.) -->
 
                                     <!-- Enable Debug Tools Toggle -->
                                     <Grid Margin="0,16,0,0">

@@ -5,7 +5,6 @@ using System.Linq;
 using System.Threading;
 using Windows.Devices.Sensors;
 using XboxGamingBarHelper.Settings;
-using XboxGamingBarHelper.Sidebar;
 
 namespace XboxGamingBarHelper.Systems
 {

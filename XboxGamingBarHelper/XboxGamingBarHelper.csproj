@@ -519,18 +519,6 @@
     <Compile Include="Services\ScheduledTaskService.cs" />
     <Compile Include="Services\SystemRestoreService.cs" />
     <Compile Include="IPC\NamedPipeServer.cs" />
-    <Compile Include="Sidebar\SidebarTab.cs" />
-    <Compile Include="Sidebar\QuickTab.cs" />
-    <Compile Include="Sidebar\PerformanceTab.cs" />
-    <Compile Include="Sidebar\ProfilesTab.cs" />
-    <Compile Include="Sidebar\DisplayTab.cs" />
-    <Compile Include="Sidebar\LegionTab.cs" />
-    <Compile Include="Sidebar\SidebarWindow.cs" />
-    <Compile Include="Sidebar\SidebarManager.cs" />
-    <Compile Include="Sidebar\SidebarInputHandler.cs" />
-    <Compile Include="Sidebar\Audio\CoreAudioInterop.cs" />
-    <Compile Include="Sidebar\Audio\AudioManager.cs" />
-    <Compile Include="Sidebar\BrightnessManager.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Startup\Program.PackageLifecycle.cs" />
     <Compile Include="Startup\Program.TrayAndSidebar.cs" />
@@ -634,6 +622,7 @@
     <Compile Include="Systems\HDRSupportedProperty.cs" />
     <Compile Include="Systems\AdaptiveBrightnessModeProperty.cs" />
     <Compile Include="Systems\AdaptiveBrightnessManager.cs" />
+    <Compile Include="Systems\BrightnessManager.cs" />
     <Compile Include="Systems\CPUCoreConfigProperty.cs" />
     <Compile Include="Systems\CPUCoreActiveConfigProperty.cs" />
     <Compile Include="Systems\CoreParkingPercentProperty.cs" />
