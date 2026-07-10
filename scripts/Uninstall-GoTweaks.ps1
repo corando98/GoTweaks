@@ -72,4 +72,19 @@ if ($package) {
     Write-Host "GoTweaks app package not found (already uninstalled)."
 }
 
+# 3. Remove the sideload signing certificate that Add-AppDevPackage installed
+# into the machine's Trusted People store. Matched by the package publisher
+# (CN=dg) so nothing else is touched.
+try {
+    $certs = Get-ChildItem Cert:\LocalMachine\TrustedPeople -ErrorAction SilentlyContinue |
+        Where-Object { $_.Subject -eq 'CN=dg' }
+    foreach ($cert in $certs) {
+        Write-Host "Removing sideload certificate $($cert.Thumbprint) ($($cert.Subject))..."
+        Remove-Item -Path "Cert:\LocalMachine\TrustedPeople\$($cert.Thumbprint)" -Force
+    }
+    if (-not $certs) { Write-Host "No GoTweaks sideload certificate found (already removed)." }
+} catch {
+    Write-Warning "Certificate removal failed: $_ (remove manually via certlm.msc, Trusted People, CN=dg)"
+}
+
 Write-Host "Done. A reboot is recommended if controllers were hidden or drivers removed." -ForegroundColor Cyan
