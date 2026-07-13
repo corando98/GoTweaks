@@ -2759,10 +2759,16 @@ namespace XboxGamingBarHelper.Labs
                             {
                                 if (hasTabletReportHeader)
                                 {
-                                    // With heartbeat always active, we use 04:00:A1 header format
-                                    // Battery at bytes 3-6, connection status at bytes 10-11
-                                    int batteryOffset = 3;
-                                    int connOffset = 10;
+                                    // Battery/connection block shifts by +2 in detached mode, the
+                                    // same shift as BUTTON_BYTE (16->18), touch (24->26), and IMU
+                                    // (32->34). These were hardcoded to the attached-only values, so
+                                    // when the controllers are physically detached from the console
+                                    // the battery % read the wrong bytes and connection usually
+                                    // parsed as "not connected" (widget showed Detached).
+                                    //   Attached (04:00:A1): battery 3-6, connection 10-11.
+                                    //   Detached (04:3C:74): battery 5-8, connection 12-13.
+                                    int batteryOffset = isDetachedMode ? 5 : 3;
+                                    int connOffset = isDetachedMode ? 12 : 10;
 
                                     // Connection status: 0x01=Off, 0x02=Attached, 0x03=Detached
                                     // Only 0x02 means the controller is actually connected
@@ -3112,6 +3118,15 @@ namespace XboxGamingBarHelper.Labs
                 int leftBase = imuBase;
                 int rightBase = imuBase + 13;
 
+                // Detached/uninitialized (04:3C:74) reports encode IMU int16s BIG-endian;
+                // the initialized (04:00:A1) layout is little-endian. Reading the detached
+                // block little-endian yields quantized garbage (low byte always 0x00/0xFF),
+                // which surfaced as gyro drift and axis jumps on the detached controllers.
+                bool imuBigEndian = isUninitializedHeader;
+                Func<int, short> ReadImu = off => imuBigEndian
+                    ? ReadInt16BigEndian(buffer, off)
+                    : ReadInt16LittleEndian(buffer, off);
+
                 bool leftHighQualityActive = HasHighQualityImuSample(buffer, leftBase);
                 bool rightHighQualityActive = HasHighQualityImuSample(buffer, rightBase);
 
@@ -3141,9 +3156,9 @@ namespace XboxGamingBarHelper.Labs
                 // uses BMI260's native convention directly.
                 if (leftHighQualityActive)
                 {
-                    short lgX = ReadInt16LittleEndian(buffer, leftBase + 7);
-                    short lgY = ReadInt16LittleEndian(buffer, leftBase + 11);
-                    short lgZ = ReadInt16LittleEndian(buffer, leftBase + 9);
+                    short lgX = ReadImu(leftBase + 7);
+                    short lgY = ReadImu(leftBase + 11);
+                    short lgZ = ReadImu(leftBase + 9);
                     LogGyroSpikeIfAny("L", buffer, leftBase, lgX, lgY, lgZ); // log raw, before filter, so the audit log keeps showing torn reads even after we mask them
                     // See FilterTornGyroValue comment for torn-read background.
                     short flgX = FilterTornGyroValue(lgX, ref _leftPrevGX1, ref _leftPrevGX2, ref _leftConsecGX, ref _leftTornReadSubstitutions);
@@ -3153,18 +3168,18 @@ namespace XboxGamingBarHelper.Labs
                         -flgX * GYRO_SCALE_DEG_PER_SECOND,
                         -flgY * GYRO_SCALE_DEG_PER_SECOND,
                          flgZ * GYRO_SCALE_DEG_PER_SECOND,
-                        ReadInt16LittleEndian(buffer, leftBase + 1) * ACCEL_SCALE_G,
-                        ReadInt16LittleEndian(buffer, leftBase + 5) * ACCEL_SCALE_G,
-                        ReadInt16LittleEndian(buffer, leftBase + 3) * ACCEL_SCALE_G,
+                        ReadImu(leftBase + 1) * ACCEL_SCALE_G,
+                        ReadImu(leftBase + 5) * ACCEL_SCALE_G,
+                        ReadImu(leftBase + 3) * ACCEL_SCALE_G,
                         sampleTimestampUtc);
                     hasLeftSample = true;
                 }
 
                 if (rightHighQualityActive)
                 {
-                    short rgX = ReadInt16LittleEndian(buffer, rightBase + 9);
-                    short rgY = ReadInt16LittleEndian(buffer, rightBase + 11);
-                    short rgZ = ReadInt16LittleEndian(buffer, rightBase + 7);
+                    short rgX = ReadImu(rightBase + 9);
+                    short rgY = ReadImu(rightBase + 11);
+                    short rgZ = ReadImu(rightBase + 7);
                     LogGyroSpikeIfAny("R", buffer, rightBase, rgX, rgY, rgZ);
                     short frgX = FilterTornGyroValue(rgX, ref _rightPrevGX1, ref _rightPrevGX2, ref _rightConsecGX, ref _rightTornReadSubstitutions);
                     short frgY = FilterTornGyroValue(rgY, ref _rightPrevGY1, ref _rightPrevGY2, ref _rightConsecGY, ref _rightTornReadSubstitutions);
@@ -3173,9 +3188,9 @@ namespace XboxGamingBarHelper.Labs
                         frgX * GYRO_SCALE_DEG_PER_SECOND,
                         frgY * GYRO_SCALE_DEG_PER_SECOND,
                         frgZ * GYRO_SCALE_DEG_PER_SECOND,
-                        ReadInt16LittleEndian(buffer, rightBase + 3) * ACCEL_SCALE_G,
-                        ReadInt16LittleEndian(buffer, rightBase + 5) * ACCEL_SCALE_G,
-                        ReadInt16LittleEndian(buffer, rightBase + 1) * ACCEL_SCALE_G,
+                        ReadImu(rightBase + 3) * ACCEL_SCALE_G,
+                        ReadImu(rightBase + 5) * ACCEL_SCALE_G,
+                        ReadImu(rightBase + 1) * ACCEL_SCALE_G,
                         sampleTimestampUtc);
                     hasRightSample = true;
                 }
