@@ -1372,37 +1372,15 @@ namespace XboxGamingBar
                 // Update the remapped buttons summary display
                 UpdateGamepadMappingSummary();
 
-                // Apply Desktop Controls toggle state (with event unsubscription to prevent handler firing)
+                // Desktop Mode is now a global overlay (see DesktopControlsPreset.cs), not a
+                // per-profile preset merge. Just reflect its live state on the toggle here; if
+                // active, the overlay is re-applied on top of this profile at the end of the
+                // method via ReapplyDesktopOverlayAfterProfileLoad().
                 if (LegionDesktopControlsToggle != null)
                 {
                     LegionDesktopControlsToggle.Toggled -= LegionDesktopControls_Toggled;
-                    try
-                    {
-                        LegionDesktopControlsToggle.IsOn = profile.DesktopControlsEnabled;
-                        // Apply/clear Desktop Controls mappings
-                        if (profile.DesktopControlsEnabled)
-                        {
-                            // Override Joystick as Mouse to Right Stick for Desktop Controls preset
-                            if (LegionJoystickAsMouseComboBox != null)
-                                LegionJoystickAsMouseComboBox.SelectedIndex = 2; // Right Stick
-                            if (LegionJoystickMouseSensGrid != null)
-                                LegionJoystickMouseSensGrid.Visibility = Windows.UI.Xaml.Visibility.Visible;
-                            // Send joystick as mouse mode to helper
-                            legionJoystickAsMouseMode?.SetValue(2);
-                            // Apply the desktop control button mappings to the controller
-                            ApplyDesktopControlMappings();
-                        }
-                        else
-                        {
-                            // Clear the desktop control button mappings from the controller
-                            // Note: JoystickAsMouseMode is preserved from profile (already applied above)
-                            ClearDesktopControlMappings();
-                        }
-                    }
-                    finally
-                    {
-                        LegionDesktopControlsToggle.Toggled += LegionDesktopControls_Toggled;
-                    }
+                    try { LegionDesktopControlsToggle.IsOn = isDesktopModeActive; }
+                    finally { LegionDesktopControlsToggle.Toggled += LegionDesktopControls_Toggled; }
                 }
 
                 // Apply lighting settings
@@ -1468,6 +1446,9 @@ namespace XboxGamingBar
                 // This avoids startup ordering issues where improved input state arrives
                 // after initial profile controls are populated.
                 RefreshLegionEnhancedRemapUi();
+
+                // Refresh the "Editing: Global/<Game>/Desktop Controls" header hint.
+                UpdateButtonRemappingOverlayHint();
             }
             finally
             {
@@ -1488,7 +1469,7 @@ namespace XboxGamingBar
             byte colorG = LegionColorPicker != null ? LegionColorPicker.Color.G : currentProfile.LightColorG;
             byte colorB = LegionColorPicker != null ? LegionColorPicker.Color.B : currentProfile.LightColorB;
 
-            return new ControllerProfile
+            var builtProfile = new ControllerProfile
             {
                 ButtonY1 = GetButtonMappingFromUI("Y1"),
                 ButtonY2 = GetButtonMappingFromUI("Y2"),
@@ -1540,6 +1521,8 @@ namespace XboxGamingBar
                 PowerLight = LegionPowerLightToggle?.IsOn ?? currentProfile.PowerLight,
                 HasExplicitLighting = true  // Mark as having explicit lighting since we're capturing from UI
             };
+
+            return builtProfile;
         }
 
         private void LegionControllerProfileToggle_Toggled(object sender, RoutedEventArgs e)
@@ -1674,6 +1657,21 @@ namespace XboxGamingBar
         // debounced for continuous-drag controls.
         private void PerformControllerSettingSave(object sender)
         {
+            // While Desktop Mode is active, ALL controller-setting saves route to the Desktop
+            // profile and the underlying Global/Per-Game profile is left untouched. This is what
+            // keeps paddle (Y/M/Desktop/Page) and other remaps from leaking into the profile
+            // underneath while the user edits their Desktop layout.
+            if (isDesktopModeActive)
+            {
+                SaveCurrentToDesktopProfile();
+                SendButtonMappingsToHelper(desktopControllerProfile);
+                SendControllerSettingsToHelper(desktopControllerProfile);
+                bool powerLightOnly = sender == LegionPowerLightToggle;
+                if (!powerLightOnly)
+                    SendLightingToHelper(desktopControllerProfile);
+                return;
+            }
+
             // Get current profile from UI
             ControllerProfile profile;
             if (LegionControllerProfileToggle?.IsOn == true && HasValidGame(currentGameName))
@@ -1739,7 +1737,11 @@ namespace XboxGamingBar
                 // Send gamepad button mappings as JSON dictionary
                 // During profile loading, use gamepadButtonMappings (includes desktop control changes)
                 // Otherwise use profile.GamepadButtonMappings
-                var mappingsToSend = isLoadingControllerProfile ? gamepadButtonMappings : profile.GamepadButtonMappings;
+                // Always send the LIVE gamepad mappings, not the profile's. Normally they match
+                // (GetCurrentControllerProfileFromUI copies live), but while Desktop Mode is active
+                // the profile carries the substituted UNDERLYING mappings for storage while the
+                // controller must reflect the live Desktop overlay.
+                var mappingsToSend = gamepadButtonMappings;
                 if (mappingsToSend != null && mappingsToSend.Count > 0)
                 {
                     var gamepadMappingsJson = SerializeGamepadButtonMappings(mappingsToSend);

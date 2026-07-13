@@ -43,6 +43,22 @@ namespace XboxGamingBar
 {
     public sealed partial class GamingWidget
     {
+        // ---- Desktop Mode (controller overlay) ----
+        // Desktop Mode is a separate, user-editable controller REMAP profile stored under the
+        // name "Desktop". While it's on, EVERY button-remap edit (gamepad face/dpad/stick AND the
+        // Y/M/Desktop/Page paddles) plus joystick-as-mouse routes to the Desktop profile, not the
+        // underlying Global/Per-Game profile. Toggling off re-applies the underlying profile, so
+        // the underlying bindings are never touched. State is a global flag, remembered across
+        // profile switches and app restarts.
+
+        private const string DesktopProfileName = "Desktop";
+        private bool isDesktopModeActive;
+        private string _desktopUnderlyingProfileName = "Global";
+        private ControllerProfile desktopControllerProfile = new ControllerProfile();
+
+        private const string DesktopModeActiveKey = "DesktopMode_Active";
+        private const string DesktopModeSeededKey = "DesktopMode_Seeded";
+
         private void LegionDesktopControls_Toggled(object sender, RoutedEventArgs e)
         {
             if (isLoadingControllerProfile || isSwitchingControllerProfile)
@@ -51,115 +67,222 @@ namespace XboxGamingBar
             // Skip if a profile was just applied (prevents duplicate sends from queued UI events)
             if ((DateTime.Now - lastProfileApplyTime).TotalMilliseconds < 2000)
             {
-                Logger.Info("Desktop Controls toggled event skipped - profile was just applied");
+                Logger.Info("Desktop Mode toggle skipped - profile was just applied");
                 return;
             }
 
             bool enabled = LegionDesktopControlsToggle?.IsOn ?? false;
+            ApplyDesktopModeState(enabled, persistActive: true);
+        }
 
-            if (enabled)
+        /// <summary>
+        /// Enable or disable the Desktop Mode overlay. Enable loads (or seeds) the Desktop profile
+        /// and applies it; disable saves the current edits to Desktop and re-applies the underlying
+        /// profile so all its bindings are restored.
+        /// </summary>
+        private void ApplyDesktopModeState(bool enabled, bool persistActive)
+        {
+            try
             {
-                // Apply desktop controls preset
-                // 1. Set Right Stick as Mouse (for cursor movement)
-                if (LegionJoystickAsMouseComboBox != null)
-                    LegionJoystickAsMouseComboBox.SelectedIndex = 2; // Right Stick
+                var settings = Windows.Storage.ApplicationData.Current.LocalSettings;
 
-                // 2. Apply button mappings (DPAD, LS scroll, LB/LT clicks)
-                ApplyDesktopControlMappings();
-            }
-            else
-            {
-                // Reset to defaults
-                if (LegionJoystickAsMouseComboBox != null)
-                    LegionJoystickAsMouseComboBox.SelectedIndex = 0; // Disabled
+                // Heal the legacy-storage state before deciding whether to seed.
+                MigrateDesktopModeStorageIfNeeded();
 
-                // Clear the desktop control button mappings
-                ClearDesktopControlMappings();
-            }
-
-            Logger.Info($"Desktop Controls toggled: {enabled}");
-
-            // Save the updated profile
-            if (!isLoadingControllerProfile && !isSwitchingControllerProfile)
-            {
-                if (LegionControllerProfileToggle?.IsOn == true && HasValidGame(currentGameName))
+                if (enabled && !isDesktopModeActive)
                 {
-                    gameControllerProfile = GetCurrentControllerProfileFromUI();
-                    SaveControllerProfileToStorage($"Game_{currentGameName}", gameControllerProfile);
-                    Logger.Info($"Saved Desktop Controls state to game profile: {currentGameName}");
+                    // Remember which profile is underneath so we can restore it on disable.
+                    _desktopUnderlyingProfileName =
+                        (LegionControllerProfileToggle?.IsOn == true && HasValidGame(currentGameName))
+                            ? $"Game_{currentGameName}" : "Global";
+
+                    // Load the user's Desktop profile, or seed it (current remaps + desktop preset).
+                    if (DesktopModeSeeded())
+                    {
+                        desktopControllerProfile = new ControllerProfile();
+                        LoadControllerProfileFromStorage(DesktopProfileName, desktopControllerProfile);
+                    }
+                    else
+                    {
+                        desktopControllerProfile = GetCurrentControllerProfileFromUI(); // underlying snapshot
+                        desktopControllerProfile.GamepadButtonMappings = BuildDesktopPresetMappings();
+                        desktopControllerProfile.JoystickAsMouseMode = 2; // Right Stick as mouse
+                        SaveControllerProfileToStorage(DesktopProfileName, desktopControllerProfile);
+                        settings.Values[DesktopModeSeededKey] = true;
+                    }
+                    desktopControllerProfile.DesktopControlsEnabled = true;
+
+                    isDesktopModeActive = true;
+                    InjectGamepadResetsForRemovedButtons(desktopControllerProfile);
+                    ApplyControllerProfile(desktopControllerProfile);
+
+                    if (persistActive) settings.Values[DesktopModeActiveKey] = true;
+                    UpdateButtonRemappingOverlayHint();
+                    Logger.Info($"Desktop Mode enabled (overlay applied, underlying={_desktopUnderlyingProfileName})");
                 }
+                else if (!enabled && isDesktopModeActive)
+                {
+                    // Capture the final Desktop edits, then re-apply the underlying profile.
+                    SaveCurrentToDesktopProfile();
+                    isDesktopModeActive = false;
+
+                    var underlying = new ControllerProfile();
+                    LoadControllerProfileFromStorage(_desktopUnderlyingProfileName, underlying);
+                    if (_desktopUnderlyingProfileName == "Global") globalControllerProfile = underlying;
+                    else gameControllerProfile = underlying;
+                    InjectGamepadResetsForRemovedButtons(underlying);
+                    ApplyControllerProfile(underlying);
+
+                    if (persistActive) settings.Values[DesktopModeActiveKey] = false;
+                    UpdateButtonRemappingOverlayHint();
+                    Logger.Info($"Desktop Mode disabled (restored {_desktopUnderlyingProfileName})");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"ApplyDesktopModeState error: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Persist the current UI remaps to the Desktop profile. Called from the controller-save
+        /// choke points (SaveAndSendGamepadMappings / PerformControllerSettingSave) while Desktop
+        /// Mode is active, so edits never touch the underlying profile.
+        /// </summary>
+        private void SaveCurrentToDesktopProfile()
+        {
+            desktopControllerProfile = GetCurrentControllerProfileFromUI();
+            desktopControllerProfile.DesktopControlsEnabled = true;
+            SaveControllerProfileToStorage(DesktopProfileName, desktopControllerProfile);
+            var settings = Windows.Storage.ApplicationData.Current.LocalSettings;
+            settings.Values[DesktopModeSeededKey] = true;
+        }
+
+        private bool DesktopModeSeeded()
+        {
+            // The Desktop profile is "seeded" iff its storage container actually exists. Do NOT
+            // rely on the old DesktopMode_Seeded flag — builds 0.3.2607-2609 set that flag without
+            // ever creating the ControllerProfile_Desktop container, which left Desktop Mode blank.
+            var settings = Windows.Storage.ApplicationData.Current.LocalSettings;
+            return settings.Containers.ContainsKey($"ControllerProfile_{DesktopProfileName}");
+        }
+
+        /// <summary>
+        /// One-time migration off the legacy Desktop Mode storage (builds 0.3.2607-2609 stored
+        /// bindings under DesktopMode_* LocalSettings keys and set DesktopMode_Seeded WITHOUT ever
+        /// writing the ControllerProfile_Desktop container). Clears those artifacts and any blank
+        /// container so Desktop Mode re-seeds from the built-in preset. Self-clearing (won't re-run).
+        /// </summary>
+        private void MigrateDesktopModeStorageIfNeeded()
+        {
+            try
+            {
+                var settings = Windows.Storage.ApplicationData.Current.LocalSettings;
+                bool legacy = settings.Values.ContainsKey("DesktopMode_GamepadMappings")
+                           || settings.Values.ContainsKey("DesktopMode_JoystickMouseIndex");
+                if (!legacy) return;
+
+                if (settings.Containers.ContainsKey($"ControllerProfile_{DesktopProfileName}"))
+                    settings.DeleteContainer($"ControllerProfile_{DesktopProfileName}");
+                settings.Values.Remove("DesktopMode_GamepadMappings");
+                settings.Values.Remove("DesktopMode_JoystickMouseIndex");
+                settings.Values.Remove(DesktopModeSeededKey);
+                Logger.Info("Migrated Desktop Mode off legacy storage - Desktop profile will re-seed from preset");
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"MigrateDesktopModeStorageIfNeeded failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// The helper only resets a gamepad button that's explicitly present with Type=0; buttons
+        /// absent from the new set stay mapped. So when switching to <paramref name="target"/>,
+        /// inject Type=0 resets for any button that's currently mapped (live) but not in the target,
+        /// so removed Desktop/underlying remaps actually clear on the controller.
+        /// </summary>
+        private void InjectGamepadResetsForRemovedButtons(ControllerProfile target)
+        {
+            if (target == null) return;
+            if (target.GamepadButtonMappings == null)
+                target.GamepadButtonMappings = new Dictionary<string, ButtonMapping>();
+            if (gamepadButtonMappings == null) return;
+            foreach (var key in gamepadButtonMappings.Keys)
+            {
+                if (!target.GamepadButtonMappings.ContainsKey(key))
+                    target.GamepadButtonMappings[key] = new ButtonMapping { Type = 0, GamepadAction = 0 };
+            }
+        }
+
+        /// <summary>
+        /// Update the Button Remapping header hint to show which overlay is being edited:
+        /// "Desktop Controls" when Desktop Mode is on, otherwise the active per-game profile
+        /// name or "Global".
+        /// </summary>
+        private void UpdateButtonRemappingOverlayHint()
+        {
+            try
+            {
+                if (ButtonRemappingOverlayHint == null) return;
+                string label;
+                if (isDesktopModeActive)
+                    label = "Desktop Controls";
+                else if (LegionControllerProfileToggle?.IsOn == true && HasValidGame(currentGameName))
+                    label = currentGameName;
                 else
-                {
-                    globalControllerProfile = GetCurrentControllerProfileFromUI();
-                    SaveControllerProfileToStorage("Global", globalControllerProfile);
-                    Logger.Info("Saved Desktop Controls state to global profile");
-                }
+                    label = "Global";
+                ButtonRemappingOverlayHint.Text = $"Editing: {label}";
+            }
+            catch (Exception ex)
+            {
+                Logger.Debug($"UpdateButtonRemappingOverlayHint error: {ex.Message}");
             }
         }
 
-        private void ApplyDesktopControlMappings()
+        /// <summary>The built-in Desktop Mode default: DPAD/LS→arrows, LSClick→Win, A→Enter, B→Esc, LB→LClick, LT→RClick.</summary>
+        private Dictionary<string, ButtonMapping> BuildDesktopPresetMappings()
         {
-            // Desktop Controls preset - uses LB/LT for clicks to avoid firmware drag-drop bug with triggers
-            // HID key codes: Up=0x52, Down=0x51, Left=0x50, Right=0x4F, Enter=0x28, Escape=0x29, LeftGUI(Win)=0xE3
-            // MouseButton dropdown index: 0=Left, 1=Right, 2=Middle, 3=ScrollUp, 4=ScrollDown
-
-            // DPAD → Arrow keys (Type=1 Keyboard)
-            gamepadButtonMappings["DPadUp"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0x52 } };
-            gamepadButtonMappings["DPadDown"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0x51 } };
-            gamepadButtonMappings["DPadLeft"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0x50 } };
-            gamepadButtonMappings["DPadRight"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0x4F } };
-
-            // Left Stick Up/Down → Arrow Up/Down (Type=1 Keyboard)
-            gamepadButtonMappings["LSUp"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0x52 } };    // Up Arrow
-            gamepadButtonMappings["LSDown"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0x51 } }; // Down Arrow
-
-            // LSClick → Windows Key (Type=1 Keyboard)
-            gamepadButtonMappings["LSClick"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0xE3 } }; // Left GUI (Win)
-
-            // A → Enter, B → Escape (Type=1 Keyboard)
-            gamepadButtonMappings["A"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0x28 } };  // Enter
-            gamepadButtonMappings["B"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0x29 } };  // Escape
-
-            // LB → Left Click, LT → Right Click (Type=2 Mouse)
-            gamepadButtonMappings["LB"] = new ButtonMapping { Type = 2, MouseButton = 0 };     // Left Click
-            gamepadButtonMappings["LT"] = new ButtonMapping { Type = 2, MouseButton = 1 };     // Right Click
-
-            // During profile loading, just update the dictionary - SendButtonMappingsToHelper will send once at the end
-            if (!isLoadingControllerProfile)
+            // HID key codes: Up=0x52, Down=0x51, Left=0x50, Right=0x4F, Enter=0x28, Escape=0x29, LeftGUI(Win)=0xE3.
+            // LB/LT used for clicks to avoid the firmware drag-drop bug with triggers.
+            // MouseButton: 0=Left, 1=Right, 2=Middle, 3=ScrollUp, 4=ScrollDown.
+            return new Dictionary<string, ButtonMapping>
             {
-                SaveAndSendGamepadMappings();
-            }
-            UpdateGamepadMappingSummary();
-
-            Logger.Info("Applied desktop control mappings: DPAD/LS→Arrows, LSClick→Win, A→Enter, B→Esc, LB→LClick, LT→RClick");
+                ["DPadUp"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0x52 } },
+                ["DPadDown"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0x51 } },
+                ["DPadLeft"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0x50 } },
+                ["DPadRight"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0x4F } },
+                ["LSUp"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0x52 } },
+                ["LSDown"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0x51 } },
+                ["LSClick"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0xE3 } },
+                ["A"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0x28 } },
+                ["B"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0x29 } },
+                ["LB"] = new ButtonMapping { Type = 2, MouseButton = 0 },
+                ["LT"] = new ButtonMapping { Type = 2, MouseButton = 1 },
+            };
         }
 
-        private void ClearDesktopControlMappings()
+        /// <summary>Restore Desktop Mode active state on startup (global flag), if it was left on.</summary>
+        private void RestoreDesktopModeIfActive()
         {
-            var desktopButtons = new[] { "DPadUp", "DPadDown", "DPadLeft", "DPadRight", "LSUp", "LSDown", "LSClick", "A", "B", "LB", "LT" };
-
-            // Set each button to reset state (Type=0, GamepadAction=0) to trigger HID reset
-            foreach (var button in desktopButtons)
+            try
             {
-                gamepadButtonMappings[button] = new ButtonMapping { Type = 0, GamepadAction = 0 };
-            }
+                var settings = Windows.Storage.ApplicationData.Current.LocalSettings;
+                bool wasActive = settings.Values.TryGetValue(DesktopModeActiveKey, out var v) && v is bool b && b;
+                if (!wasActive || isDesktopModeActive) return;
 
-            // During profile loading, just update the dictionary - SendButtonMappingsToHelper will send once at the end
-            if (!isLoadingControllerProfile)
-            {
-                SaveAndSendGamepadMappings();
-
-                // Remove from dictionary after sending reset (only when not loading profile)
-                foreach (var button in desktopButtons)
+                if (LegionDesktopControlsToggle != null)
                 {
-                    gamepadButtonMappings.Remove(button);
+                    LegionDesktopControlsToggle.Toggled -= LegionDesktopControls_Toggled;
+                    try { LegionDesktopControlsToggle.IsOn = true; }
+                    finally { LegionDesktopControlsToggle.Toggled += LegionDesktopControls_Toggled; }
                 }
+                ApplyDesktopModeState(true, persistActive: false);
+                Logger.Info("Desktop Mode restored on startup (was left active)");
             }
-            // When loading profile, keep Type=0 entries in dictionary so they get sent with other mappings
-
-            UpdateGamepadMappingSummary();
-
-            Logger.Info("Cleared desktop control mappings for DPAD, LS, A, B, LB, LT");
+            catch (Exception ex)
+            {
+                Logger.Error($"RestoreDesktopModeIfActive error: {ex.Message}");
+            }
         }
 
     }

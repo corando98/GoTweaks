@@ -316,6 +316,16 @@ namespace XboxGamingBar
                 return;
             }
 
+            // While Desktop Mode is active, all remaps belong to the Desktop profile, not the
+            // underlying Global/Per-Game profile. Save to Desktop and send live to the helper.
+            if (isDesktopModeActive)
+            {
+                SaveCurrentToDesktopProfile();
+                SendButtonMappingsToHelper(desktopControllerProfile);
+                UpdateGamepadMappingSummary();
+                return;
+            }
+
             // Get current profile
             ControllerProfile currentProfile;
             if (LegionControllerProfileToggle?.IsOn == true && HasValidGame(currentGameName))

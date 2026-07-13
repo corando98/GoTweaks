@@ -2197,6 +2197,9 @@ namespace XboxGamingBar
             // (ApplyControllerProfile will clear isLoadingControllerProfile when done)
             ApplyControllerProfile(globalControllerProfile);
 
+            // If Desktop Mode was left on, restore the overlay on top of the loaded profile.
+            RestoreDesktopModeIfActive();
+
             // Subscribe to power source profile toggle changes to update game profile card
             PowerSourceProfileToggle.Toggled += PowerSourceToggle_Changed;
 
@@ -3797,6 +3800,10 @@ namespace XboxGamingBar
                 // fires) but breaks every hotkey in FSE where the widget is suspended
                 // and only the helper is polling XInput. Issue #79 (kingvall).
                 SendControllerHotkeyConfigToHelper();
+
+                // Same rationale for quick-tile combos: the helper loses its in-memory
+                // registrations on restart, so re-push them once the pipe is up.
+                SendTileHotkeysToHelper();
 
                 // Re-send the persisted Auto Hibernate AC/DC mode now that the pipe is up. At
                 // Loaded time (when LoadAutoHibernateModeSetting first runs) the pipe isn't

@@ -7618,6 +7618,9 @@
                                         <TextBlock Text="Button Remapping" Style="{StaticResource CardTitleStyle}"/>
                                         <TextBlock Text="Map buttons to gamepad, keyboard, or mouse"
                                                    Style="{StaticResource CardCaptionStyle}"/>
+                                        <TextBlock x:Name="ButtonRemappingOverlayHint" Text="Editing: Global"
+                                                   Style="{StaticResource CardCaptionStyle}"
+                                                   Foreground="#7BC8FF" Margin="0,2,0,0"/>
                                     </StackPanel>
                                     <ToggleButton x:Name="ButtonRemappingExpandToggle"
                                                   Grid.Column="1"
@@ -8050,8 +8053,8 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                     <TextBlock Text="Desktop Controls" Style="{StaticResource CardTitleStyle}"/>
-                                    <TextBlock Text="RS→Mouse, DPAD/LS→Arrows, A→Enter, B→Esc (Ctrl+Shift+D)"
-                                               Style="{StaticResource CardCaptionStyle}"/>
+                                    <TextBlock Text="A separate mouse/keyboard layout for desktop use. Remaps you make while it's on are saved to Desktop Controls and restored next time (Ctrl+Shift+D)."
+                                               Style="{StaticResource CardCaptionStyle}" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <ToggleSwitch x:Name="LegionDesktopControlsToggle"
                                               Grid.Column="1"
