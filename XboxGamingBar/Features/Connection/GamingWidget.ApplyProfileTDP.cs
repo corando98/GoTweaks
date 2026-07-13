@@ -256,6 +256,12 @@ namespace XboxGamingBar
                         await Task.Delay(totalWaitMs);
                         Logger.Info("Old helper should now be fully exited");
 
+                        // Force the next package-helper launch to redeploy the bundled (updated)
+                        // helper. Without this, relaunching just reruns the stale deployed helper —
+                        // which self-reports as "up to date" (its .version == its own assembly) — so
+                        // the mismatch loops forever and the widget talks to an old-protocol helper.
+                        InvalidateDeployedHelperVersion();
+
                         return false; // Return false so a new helper will be launched
                     }
                 }
@@ -267,6 +273,35 @@ namespace XboxGamingBar
             {
                 Logger.Debug($"Error reading heartbeat: {ex.Message}");
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Delete the deployed helper's .version file so the next package-context helper launch
+        /// (via FullTrustProcessLauncher, which runs the deployment bootstrapper) sees
+        /// IsDeploymentNeeded()==true and redeploys the bundled binaries. This breaks the update
+        /// loop where a stale deployed helper keeps relaunching itself as current. Path mirrors
+        /// HelperDeploymentService: {LocalCache}\GoTweaks\Helper\.version.
+        /// </summary>
+        private void InvalidateDeployedHelperVersion()
+        {
+            try
+            {
+                var localCache = Windows.Storage.ApplicationData.Current.LocalCacheFolder.Path;
+                var versionFile = System.IO.Path.Combine(localCache, "GoTweaks", "Helper", ".version");
+                if (System.IO.File.Exists(versionFile))
+                {
+                    System.IO.File.Delete(versionFile);
+                    Logger.Info($"Invalidated deployed helper .version to force redeploy on next launch: {versionFile}");
+                }
+                else
+                {
+                    Logger.Info($"Deployed helper .version not found ({versionFile}) - redeploy will trigger on next launch");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"InvalidateDeployedHelperVersion failed: {ex.Message}");
             }
         }
 
