@@ -232,9 +232,7 @@ namespace XboxGamingBar
 
                     if (value.StartsWith("\"") && value.EndsWith("\""))
                     {
-                        result[key] = value.Substring(1, value.Length - 2)
-                            .Replace("\\\"", "\"").Replace("\\\\", "\\")
-                            .Replace("\\n", "\n").Replace("\\r", "\r").Replace("\\t", "\t");
+                        result[key] = UnescapeJsonString(value.Substring(1, value.Length - 2));
                     }
                     else if (value == "true")
                     {
@@ -326,6 +324,35 @@ namespace XboxGamingBar
             {
                 _ = LaunchHelperWithGuardsAsync("Pipe disconnected");
             });
+        }
+
+        // Single-pass JSON string unescape. Sequential Replace() calls corrupt data:
+        // collapsing "\\" -> "\" before decoding "\t"/"\n"/"\r" lets a freshly-collapsed
+        // backslash pair with an adjacent letter and be misread as an escape (e.g. a wire
+        // "C:\\temp" -> "C:\temp" -> "C:<TAB>emp"). Decode each escape exactly once.
+        private static string UnescapeJsonString(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return s ?? "";
+            var sb = new System.Text.StringBuilder(s.Length);
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                if (c == '\\' && i + 1 < s.Length)
+                {
+                    char next = s[i + 1];
+                    switch (next)
+                    {
+                        case '"': sb.Append('"'); i++; break;
+                        case '\\': sb.Append('\\'); i++; break;
+                        case 'n': sb.Append('\n'); i++; break;
+                        case 'r': sb.Append('\r'); i++; break;
+                        case 't': sb.Append('\t'); i++; break;
+                        default: sb.Append(c); break;
+                    }
+                }
+                else { sb.Append(c); }
+            }
+            return sb.ToString();
         }
 
     }

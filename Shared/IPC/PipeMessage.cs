@@ -248,12 +248,37 @@ namespace Shared.IPC
 
         private static string UnescapeJson(string s)
         {
-            if (s == null) return "";
-            return s.Replace("\\\"", "\"")
-                    .Replace("\\\\", "\\")
-                    .Replace("\\n", "\n")
-                    .Replace("\\r", "\r")
-                    .Replace("\\t", "\t");
+            if (string.IsNullOrEmpty(s)) return "";
+
+            // Single-pass scan, not sequential whole-string Replace() calls. Replacing "\\"
+            // with "\" before replacing "\t"/"\n"/"\r" lets a freshly-collapsed backslash pair
+            // up with an unrelated adjacent letter from the ORIGINAL string and get misread as
+            // an escape one step later — e.g. "C:\\temp" (escaped "C:\temp") collapses "\\" ->
+            // "\" first, leaving "C:\temp", and the very next step matches that backslash + "t"
+            // as "\t" and corrupts it into a real tab ("C:<TAB>emp"). Decode each escape once.
+            var sb = new System.Text.StringBuilder(s.Length);
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                if (c == '\\' && i + 1 < s.Length)
+                {
+                    char next = s[i + 1];
+                    switch (next)
+                    {
+                        case '"': sb.Append('"'); i++; break;
+                        case '\\': sb.Append('\\'); i++; break;
+                        case 'n': sb.Append('\n'); i++; break;
+                        case 'r': sb.Append('\r'); i++; break;
+                        case 't': sb.Append('\t'); i++; break;
+                        default: sb.Append(c); break;
+                    }
+                }
+                else
+                {
+                    sb.Append(c);
+                }
+            }
+            return sb.ToString();
         }
 
         private static string ValueToJson(object value)
