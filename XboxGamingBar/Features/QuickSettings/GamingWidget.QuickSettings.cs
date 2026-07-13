@@ -86,13 +86,15 @@ namespace XboxGamingBar
         private int qsColumnCount = 4;
 
         // Quick Metrics row state
-        private bool quickMetricsEnabled = false;
+        private bool quickMetricsEnabled = true;  // on by default; a saved choice (QS_MetricsEnabled) overrides
         private bool isUpdatingMetricCheckboxes = false;
         private bool screenSaverEnabled = false;
         private const string ScreenSaverEnabledKey = "QS_ScreenSaverEnabled";
         private const int ScreenSaverTimeoutSeconds = 60;
         private DispatcherTimer screenSaverCountdownTimer;
         private const string QuickMetricsEnabledKey = "QS_MetricsEnabled";
+        private const string PanelBrightnessShowKey = "QS_ShowBrightness";
+        private bool panelBrightnessShow = false;  // hidden by default; revealed via Customize
         private const string QuickMetricsSelectionKey = "QS_MetricsSelection";
         private const int MaxSelectedMetrics = 6;
 
@@ -127,13 +129,13 @@ namespace XboxGamingBar
         {
             { MetricType.BatteryDrain, new MetricInfo { Id = "BatteryDrain", Label = "Battery", Glyph = "\uE83F", Unit = "W" } },
             { MetricType.BatteryLevel, new MetricInfo { Id = "BatteryLevel", Label = "Battery", Glyph = "\uE83F", Unit = "%" } },
-            { MetricType.CPUUsage, new MetricInfo { Id = "CPUUsage", Label = "CPU", Glyph = "\uE950", Unit = "%" } },
+            { MetricType.CPUUsage, new MetricInfo { Id = "CPUUsage", Label = "CPU", Glyph = "\uEEA1", Unit = "%" } },
             { MetricType.CPUTemp, new MetricInfo { Id = "CPUTemp", Label = "CPU Temp", Glyph = "\uE9CA", Unit = "°" } },
-            { MetricType.CPUWattage, new MetricInfo { Id = "CPUWattage", Label = "CPU", Glyph = "\uE945", Unit = "W" } },
-            { MetricType.GPUUsage, new MetricInfo { Id = "GPUUsage", Label = "GPU", Glyph = "\uE7F4", Unit = "%" } },
+            { MetricType.CPUWattage, new MetricInfo { Id = "CPUWattage", Label = "CPU", Glyph = "\uEEA1", Unit = "W" } },
+            { MetricType.GPUUsage, new MetricInfo { Id = "GPUUsage", Label = "GPU", Glyph = "\uE964", Unit = "%" } },
             { MetricType.GPUTemp, new MetricInfo { Id = "GPUTemp", Label = "GPU Temp", Glyph = "\uE9CA", Unit = "°" } },
-            { MetricType.GPUWattage, new MetricInfo { Id = "GPUWattage", Label = "GPU", Glyph = "\uE945", Unit = "W" } },
-            { MetricType.MemoryUsage, new MetricInfo { Id = "MemoryUsage", Label = "Memory", Glyph = "\uE964", Unit = "%" } },
+            { MetricType.GPUWattage, new MetricInfo { Id = "GPUWattage", Label = "GPU", Glyph = "\uE964", Unit = "W" } },
+            { MetricType.MemoryUsage, new MetricInfo { Id = "MemoryUsage", Label = "Memory", Glyph = "\uEEA0", Unit = "%" } },
             { MetricType.TimeRemaining, new MetricInfo { Id = "TimeRemaining", Label = "Time", Glyph = "\uE916", Unit = "" } }
         };
 
@@ -249,11 +251,11 @@ namespace XboxGamingBar
             // Row 1 - Performance Core (most used)
             AddTileDefinition("TDPMode", "TDP Mode", "\uE945", order: order++);
             AddTileDefinition("AutoTDP", "AutoTDP", "\uE9F5", order: order++);
-            AddTileDefinition("PowerMode", "Power Mode", "\uE945", order: order++);
-            AddTileDefinition("CPUBoost", "CPU Boost", "\uE7F4", order: order++);
+            AddTileDefinition("PowerMode", "Power Mode", "\uEC4A", order: order++);
+            AddTileDefinition("CPUBoost", "CPU Boost", "\uEEA1", order: order++);
 
             // Row 2 - Performance Fine-tuning
-            AddTileDefinition("EPP", "EPP", "\uE83E", order: order++);
+            AddTileDefinition("EPP", "EPP", "\uE9E9", order: order++);
             AddTileDefinition("FPSLimit", "FPS Limit", "\uE916", order: order++);
             AddTileDefinition("RadeonChill", "Chill", "\uE9CA", order: order++);
             AddTileDefinition("Profile", "Profile", "\uE77B", order: order++);
@@ -265,14 +267,14 @@ namespace XboxGamingBar
             AddTileDefinition("Fullscreen", "Fullscreen", "\uE740", order: order++);
 
             // Row 4 - AMD Graphics Features
-            AddTileDefinition("RSR", "RSR", "\uE8B3", order: order++);
-            AddTileDefinition("RIS", "RIS", "\uE8B3", order: order++);
-            AddTileDefinition("AFMF", "AFMF", "\uE916", order: order++);
-            AddTileDefinition("AntiLag", "Anti-Lag", "\uE916", order: order++);
+            AddTileDefinition("RSR", "RSR", "\uEE71", order: order++);
+            AddTileDefinition("RIS", "RIS", "\uE71E", order: order++);
+            AddTileDefinition("AFMF", "AFMF", "\uEB9D", order: order++);
+            AddTileDefinition("AntiLag", "Anti-Lag", "\uF42F", order: order++);
 
             // Row 5 - Scaling/Quality
-            AddTileDefinition("LosslessScaling", "Lossless", "\uE740", order: order++);
-            AddTileDefinition("Overlay", "Overlay", "\uE7B3", order: order++);
+            AddTileDefinition("LosslessScaling", "Lossless", "\uEA5F", order: order++);
+            AddTileDefinition("Overlay", "Overlay", "\uE9D9", order: order++);
 
             // Row 6 - Input & Interaction
             AddTileDefinition("ScreenSaver", "Idle Screen Off", "\uE7E8", order: order++);
@@ -285,10 +287,12 @@ namespace XboxGamingBar
             AddTileDefinition("ControllerEmulation", "Controller", "\uE7FC", order: order++);
 
             // Row 7 - System/Device
-            AddTileDefinition("LegionLightMode", "Light Mode", "\uE781", order: order++);
-            AddTileDefinition("LegionPowerLight", "Power Light", "\uE7E8", order: order++);
-            AddTileDefinition("LegionChargeLimit", "Charge Limit", "\uE83F", order: order++);
+            AddTileDefinition("LegionLightMode", "Light Mode", "\uEA80", order: order++);
+            AddTileDefinition("LegionPowerLight", "Power Light", "\uE781", order: order++);
+            AddTileDefinition("LegionChargeLimit", "Charge Limit", "\uEA95", order: order++);
             AddTileDefinition("LegionFanFullSpeed", "Fan Max", "\uE9CA", order: order++);
+            AddTileDefinition("LegionVibration", "Vibration", "\uE877", order: order++);
+            AddTileDefinition("LegionVibrationMode", "Vib Mode", "\uE877", order: order++);
             AddTileDefinition("Battery", "Battery", "\uE83F", order: order++);
 
             // Load custom shortcut tiles from storage
@@ -484,6 +488,14 @@ namespace XboxGamingBar
                     quickMetricsEnabled = metricsEnabled;
                 }
 
+                // Load panel brightness slider show preference (hidden by default)
+                if (settings.Values.TryGetValue(PanelBrightnessShowKey, out object pbShowVal) && pbShowVal is bool pbShow)
+                {
+                    panelBrightnessShow = pbShow;
+                }
+                if (PanelBrightnessShowToggle != null) PanelBrightnessShowToggle.IsOn = panelBrightnessShow;
+                UpdatePanelBrightnessRowVisibility();
+
                 // Load Screen Saver toggle state
                 if (settings.Values.TryGetValue(ScreenSaverEnabledKey, out object ssVal) && ssVal is bool ssEnabled)
                 {
@@ -598,6 +610,30 @@ namespace XboxGamingBar
         /// <summary>
         /// Send Quick Metrics enabled state to helper
         /// </summary>
+        private void PanelBrightnessShowToggle_Toggled(object sender, RoutedEventArgs e)
+        {
+            if (PanelBrightnessShowToggle == null) return;
+            panelBrightnessShow = PanelBrightnessShowToggle.IsOn;
+            ApplicationData.Current.LocalSettings.Values[PanelBrightnessShowKey] = panelBrightnessShow;
+            UpdatePanelBrightnessRowVisibility();
+            Logger.Info($"Panel brightness slider show: {panelBrightnessShow}");
+        }
+
+        private void UpdatePanelBrightnessRowVisibility()
+        {
+            if (PanelBrightnessRow != null)
+                PanelBrightnessRow.Visibility = panelBrightnessShow ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        // Slider drag -> helper (panelBrightness WidgetSliderProperty debounces + pipes the Set).
+        // Also updates the % label live. The property object owns the pipe send; here we only
+        // reflect the number so the label tracks the thumb.
+        private void PanelBrightnessSlider_ValueChanged(object sender, Windows.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+        {
+            if (PanelBrightnessValueText != null)
+                PanelBrightnessValueText.Text = $"{(int)e.NewValue}%";
+        }
+
         private void SendQuickMetricsEnabledToHelper()
         {
             try

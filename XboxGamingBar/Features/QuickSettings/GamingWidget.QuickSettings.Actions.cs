@@ -87,6 +87,12 @@ namespace XboxGamingBar
                             case "FPSLimit":
                                 CycleFPSLimit();
                                 break;
+                            case "LegionVibration":
+                                CycleLegionVibration();
+                                break;
+                            case "LegionVibrationMode":
+                                CycleLegionVibrationMode();
+                                break;
                             case "Resolution":
                                 CycleResolution();
                                 break;
@@ -838,6 +844,33 @@ namespace XboxGamingBar
             if (SaveFPSLimit && !isLoadingProfile && !isSwitchingProfile)
             {
                 SaveCurrentSettingsToProfile(currentProfileName);
+            }
+        }
+
+        private void CycleLegionVibration()
+        {
+            if (legionGoDetected?.Value == true && legionVibration != null)
+            {
+                int currentLevel = legionVibration.Value;
+                int nextLevel = (currentLevel + 1) % 4; // 0-3: Off, Weak, Medium, Strong
+                legionVibration.SetValue(nextLevel);
+                UpdateQuickSettingsTileStates();
+                Logger.Info($"Legion Vibration intensity cycled from {currentLevel} to {nextLevel}");
+            }
+        }
+
+        private void CycleLegionVibrationMode()
+        {
+            if (legionGoDetected?.Value == true && legionVibrationMode != null)
+            {
+                int currentMode = legionVibrationMode.Value;
+                // Modes are 1-based (FPS=1, Racing=2, AVG=3, SPG=4, RPG=5 — see VibrationMode
+                // enum in LegionGoController.cs), not 0-based. The old "% 5" cycled 0-4, which
+                // could land on the invalid value 0 and could never reach RPG (5).
+                int nextMode = (currentMode % 5) + 1; // 1-5: FPS, Racing, AVG, SPG, RPG
+                legionVibrationMode.SetValue(nextMode);
+                UpdateQuickSettingsTileStates();
+                Logger.Info($"Legion Vibration mode cycled from {currentMode} to {nextMode}");
             }
         }
 

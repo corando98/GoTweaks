@@ -412,7 +412,8 @@ namespace XboxGamingBar
                 var icon = new FontIcon
                 {
                     Glyph = info.Glyph,
-                    FontSize = 14,
+                    // Bumped one step for readability (paired inline with the value text below).
+                    FontSize = 16,
                     Foreground = new SolidColorBrush((Windows.UI.Color)Application.Current.Resources["SystemAccentColorLight2"]),
                     Margin = new Thickness(0, 0, 4, 0),
                     VerticalAlignment = VerticalAlignment.Center
@@ -421,7 +422,7 @@ namespace XboxGamingBar
                 var valueText = new TextBlock
                 {
                     Text = "--",
-                    FontSize = 14,
+                    FontSize = 16,
                     FontWeight = Windows.UI.Text.FontWeights.SemiBold,
                     Foreground = new SolidColorBrush(Windows.UI.Colors.White),
                     VerticalAlignment = VerticalAlignment.Center
@@ -435,7 +436,8 @@ namespace XboxGamingBar
                 var labelText = new TextBlock
                 {
                     Text = info.Label,
-                    FontSize = 10,
+                    // Bumped one step for readability.
+                    FontSize = 12,
                     Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 136, 136, 136)), // #888888
                     HorizontalAlignment = HorizontalAlignment.Center
                 };

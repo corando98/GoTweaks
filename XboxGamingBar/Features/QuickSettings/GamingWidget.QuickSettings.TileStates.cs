@@ -791,6 +791,44 @@ namespace XboxGamingBar
                     fanFullSpeedTile.TileButton.Background = enabled ? tileOnBrush : tileOffBrush;
                 }
 
+                // Legion Vibration intensity tile
+                if (qsTileMap.TryGetValue("LegionVibration", out var vibrationTile) && vibrationTile.TileButton != null && legionGoDetected?.Value == true)
+                {
+                    int level = legionVibration?.Value ?? 0;
+                    string levelText;
+                    switch (level)
+                    {
+                        case 1: levelText = "Weak"; break;
+                        case 2: levelText = "Medium"; break;
+                        case 3: levelText = "Strong"; break;
+                        default: levelText = "Off"; break;
+                    }
+                    vibrationTile.StateText.Text = levelText;
+                    vibrationTile.StateText.Foreground = level > 0 ? accentForeground : offForeground;
+                    vibrationTile.TileButton.Background = level > 0 ? tileOnBrush : tileOffBrush;
+                }
+
+                // Legion Vibration Mode tile (0-4: FPS, Racing, AVG, SPG, RPG)
+                if (qsTileMap.TryGetValue("LegionVibrationMode", out var vibrationModeTile) && vibrationModeTile.TileButton != null && legionGoDetected?.Value == true)
+                {
+                    // legionVibrationMode.Value is 1-based (FPS=1, Racing=2, AVG=3, SPG=4,
+                    // RPG=5 — VibrationMode enum in LegionGoController.cs), not 0-based.
+                    int vibMode = legionVibrationMode?.Value ?? 1;
+                    string vibModeText;
+                    switch (vibMode)
+                    {
+                        case 1: vibModeText = "FPS"; break;
+                        case 2: vibModeText = "Racing"; break;
+                        case 3: vibModeText = "AVG"; break;
+                        case 4: vibModeText = "SPG"; break;
+                        case 5: vibModeText = "RPG"; break;
+                        default: vibModeText = "FPS"; break;
+                    }
+                    vibrationModeTile.StateText.Text = vibModeText;
+                    vibrationModeTile.StateText.Foreground = accentForeground;
+                    vibrationModeTile.TileButton.Background = tileOnBrush;
+                }
+
                 // Screen Saver tile
                 if (qsTileMap.TryGetValue("ScreenSaver", out var screenSaverTile) && screenSaverTile.TileButton != null)
                 {
@@ -813,7 +851,11 @@ namespace XboxGamingBar
                 {
                     // Get device battery info (hide bolt at 100%)
                     int deviceBat = PowerManager.RemainingChargePercent;
-                    bool deviceCharging = PowerManager.PowerSupplyStatus == PowerSupplyStatus.Adequate;
+                    // On AC = not NotPresent, matching the isOnAC check used elsewhere. NOT
+                    // == Adequate, which flips to Inadequate once the battery hits 100% (the
+                    // charger stops actively drawing current), wrongly showing the non-charging
+                    // icon on a fully-charged, still-plugged-in device.
+                    bool deviceCharging = PowerManager.PowerSupplyStatus != PowerSupplyStatus.NotPresent;
                     string deviceIndicator = (deviceCharging && deviceBat < 100) ? "⚡" : "";
 
                     // Get the tile content elements
@@ -830,7 +872,7 @@ namespace XboxGamingBar
                         if (deviceCharging)
                         {
                             // Charging icons
-                            if (deviceBat >= 90) glyph = "\uEBB5";      // Full charging
+                            if (deviceBat >= 90) glyph = "\uEA93";      // Full charging (BatteryCharging10)
                             else if (deviceBat >= 70) glyph = "\uE862"; // Charging 8
                             else if (deviceBat >= 50) glyph = "\uE85F"; // Charging 5
                             else if (deviceBat >= 30) glyph = "\uE85C"; // Charging 2
