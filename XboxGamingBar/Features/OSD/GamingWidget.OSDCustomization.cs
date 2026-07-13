@@ -92,7 +92,7 @@ namespace XboxGamingBar
         private static readonly Dictionary<string, string> osdItemDisplayNames = new Dictionary<string, string>
         {
             { "AppName", "App Name (D3D11, Vulkan, etc.)" },
-            { "Time", "Time (12-hour)" },
+            { "Time", "Time" },
             { "FPS", "FPS & Frametime" },
             { "Battery", "Battery" },
             { "ControllerBattery", "Controller Battery (L/R)" },
@@ -137,6 +137,7 @@ namespace XboxGamingBar
         private bool adaptiveBrightnessEnabled = false;
         private bool osdPositionShiftEnabled = false;
         private bool frametimeGraphPinned = false;
+        private bool osd24HourClock = false;
         private int osdOpacity = 100; // percentage 10-100
         private bool isLoadingOLEDSettings = false;
         private bool isLoadingPerformanceOverlaySetting = false;
@@ -427,6 +428,7 @@ namespace XboxGamingBar
                 settings.Values["OSD_LabelColor"] = osdLabelColor;
                 settings.Values["OSD_Opacity"] = osdOpacity;
                 settings.Values["OSD_FrametimeGraphPinned"] = frametimeGraphPinned;
+                settings.Values["OSD_Clock24Hour"] = osd24HourClock;
 
                 Logger.Info($"OSD configuration saved to storage (resolution: {currentRes}, text size: {osdTextSize}, opacity: {osdOpacity})");
             }
@@ -530,6 +532,12 @@ namespace XboxGamingBar
                     if (FrametimeGraphPinnedToggle != null)
                         FrametimeGraphPinnedToggle.IsOn = frametimeGraphPinned;
                 }
+                if (settings.Values.TryGetValue("OSD_Clock24Hour", out object clock24Val) && clock24Val is bool clock24)
+                {
+                    osd24HourClock = clock24;
+                    if (Osd24HourClockToggle != null)
+                        Osd24HourClockToggle.IsOn = osd24HourClock;
+                }
 
                 // Update layout UI
                 UpdateOSDLayoutUI();
@@ -557,6 +565,7 @@ namespace XboxGamingBar
                 configParts.Add($"LabelColor:{osdLabelColor}");
                 configParts.Add($"Opacity:{osdOpacity}");
                 configParts.Add($"FrametimeGraphPinned:{(frametimeGraphPinned ? "1" : "0")}");
+                configParts.Add($"Clock24Hour:{(osd24HourClock ? "1" : "0")}");
 
                 // Add per-level item configuration
                 foreach (var level in osdLevelConfig.Keys)

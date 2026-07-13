@@ -81,6 +81,14 @@ namespace XboxGamingBar
             SendOSDConfigToHelper();
         }
 
+        private void Osd24HourClockToggle_Toggled(object sender, RoutedEventArgs e)
+        {
+            if (isLoadingOSDConfig) return;
+            osd24HourClock = Osd24HourClockToggle.IsOn;
+            SaveOSDConfigToStorage();
+            SendOSDConfigToHelper();
+        }
+
         private void SaveDisplayOSDSettingsToStorage()
         {
             try

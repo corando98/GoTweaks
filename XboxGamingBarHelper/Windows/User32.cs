@@ -1467,6 +1467,52 @@ namespace XboxGamingBarHelper.Windows
         private const int SdrFailureLogEvery = 30;
 
         /// <summary>
+        /// <summary>
+        /// Is the built-in (internal) panel part of the CURRENT active display configuration?
+        /// Uses QueryDisplayConfig(ONLY_ACTIVE_PATHS) and looks for a target whose output
+        /// technology is INTERNAL. In "show only on external" mode the internal panel has no
+        /// active path, so this returns false even though WmiMonitorBrightness still enumerates
+        /// its (inactive) instance. Returns null when the query fails (caller falls back).
+        /// Used to gate the panel-brightness slider so it disables when docked to an external
+        /// display with the built-in panel off (WMI brightness only controls the internal panel).
+        /// </summary>
+        public static bool? IsInternalPanelActive()
+        {
+            try
+            {
+                int result = GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, out uint pathCount, out uint modeCount);
+                if (result != ERROR_SUCCESS)
+                {
+                    Logger.Warn($"IsInternalPanelActive: GetDisplayConfigBufferSizes failed with error {result}");
+                    return null;
+                }
+
+                var paths = new DISPLAYCONFIG_PATH_INFO[pathCount];
+                var modes = new DISPLAYCONFIG_MODE_INFO[modeCount];
+                result = QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, ref pathCount, paths, ref modeCount, modes, IntPtr.Zero);
+                if (result != ERROR_SUCCESS)
+                {
+                    Logger.Warn($"IsInternalPanelActive: QueryDisplayConfig failed with error {result}");
+                    return null;
+                }
+
+                for (int i = 0; i < pathCount; i++)
+                {
+                    if (paths[i].targetInfo.outputTechnology == DISPLAYCONFIG_OUTPUT_TECHNOLOGY_INTERNAL)
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"IsInternalPanelActive failed: {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
         /// Get HDR support and enabled status for the primary display.
         /// </summary>
         public static (bool Supported, bool Enabled) GetHDRStatus()

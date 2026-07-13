@@ -175,6 +175,18 @@ namespace XboxGamingBarHelper.Systems
             get { return displayOrientation; }
         }
 
+        private readonly PanelBrightnessProperty panelBrightness;
+        public PanelBrightnessProperty PanelBrightness
+        {
+            get { return panelBrightness; }
+        }
+
+        private readonly PanelBrightnessSupportedProperty panelBrightnessSupported;
+        public PanelBrightnessSupportedProperty PanelBrightnessSupported
+        {
+            get { return panelBrightnessSupported; }
+        }
+
         private readonly AdaptiveBrightnessModeProperty adaptiveBrightnessMode;
         public AdaptiveBrightnessModeProperty AdaptiveBrightnessMode
         {
@@ -272,6 +284,8 @@ namespace XboxGamingBarHelper.Systems
             displayOrientation = new DisplayOrientationProperty(User32.GetCurrentOrientation(), this);
 
             adaptiveBrightnessMode = new AdaptiveBrightnessModeProperty(this);
+            panelBrightness = new PanelBrightnessProperty(this);
+            panelBrightnessSupported = new PanelBrightnessSupportedProperty(this);
             // Master AB toggle lives inside the OSD/Display bundle and is only re-sent on
             // widget change — so a helper restart loses the in-memory "requested" flag.
             // Persist it locally and re-apply on startup so mode flips work after restarts.
@@ -484,6 +498,21 @@ namespace XboxGamingBarHelper.Systems
         {
             try
             {
+                // Refresh built-in panel brightness availability + value. Dock/undock changes
+                // whether the internal panel is in the active display config, so the optional
+                // brightness slider must enable/disable to match without reopening GoTweaks.
+                // ForceSetValue guarantees the widget re-asserts its enabled/grayed state (#50).
+                if (panelBrightnessSupported != null)
+                {
+                    bool brightnessSupported = BrightnessManager.IsSupported();
+                    Logger.Info($"Panel brightness supported after display change: {brightnessSupported}");
+                    panelBrightnessSupported.ForceSetValue(brightnessSupported);
+                    if (brightnessSupported && panelBrightness != null)
+                    {
+                        panelBrightness.ForceSetValue(BrightnessManager.GetBrightness());
+                    }
+                }
+
                 // Refresh supported refresh rates
                 var newRefreshRates = User32.GetSupportedRefreshRates();
                 if (newRefreshRates != null && newRefreshRates.Count > 0)

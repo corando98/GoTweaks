@@ -97,5 +97,55 @@ namespace XboxGamingBar
             }
         }
 
+        // --- Hide Advanced Options (System > TDP Settings). ON = hide the Performance-tab
+        // Advanced card and the OS Power Mode card, so new users see fewer, more predictable
+        // settings. Default ON. ---
+        private const string HideAdvancedOptionsKey = "HideAdvancedOptions";
+        private bool hideAdvancedOptions = true;
+        private bool _hideAdvancedLoaded = false;
+
+        private void HideAdvancedOptionsToggle_Toggled(object sender, RoutedEventArgs e)
+        {
+            if (HideAdvancedOptionsToggle == null) return;
+            hideAdvancedOptions = HideAdvancedOptionsToggle.IsOn;
+            ApplyHideAdvancedOptions();
+            if (_hideAdvancedLoaded)
+            {
+                ApplicationData.Current.LocalSettings.Values[HideAdvancedOptionsKey] = hideAdvancedOptions;
+                Logger.Info($"Hide Advanced Options set to {hideAdvancedOptions}");
+            }
+        }
+
+        private void ApplyHideAdvancedOptions()
+        {
+            var vis = hideAdvancedOptions ? Visibility.Collapsed : Visibility.Visible;
+            if (AdvancedCard != null) AdvancedCard.Visibility = vis;
+            if (OSPowerModeCard != null) OSPowerModeCard.Visibility = vis;
+        }
+
+        // Called during startup settings load. Applies the stored preference (default ON)
+        // without the XAML IsOn="True" init-fire stomping a stored value.
+        private void LoadHideAdvancedOptions()
+        {
+            try
+            {
+                var settings = ApplicationData.Current.LocalSettings;
+                if (settings.Values.TryGetValue(HideAdvancedOptionsKey, out object v) && v is bool b)
+                {
+                    hideAdvancedOptions = b;
+                }
+                if (HideAdvancedOptionsToggle != null) HideAdvancedOptionsToggle.IsOn = hideAdvancedOptions;
+                ApplyHideAdvancedOptions();
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"LoadHideAdvancedOptions failed: {ex.Message}");
+            }
+            finally
+            {
+                _hideAdvancedLoaded = true;
+            }
+        }
+
     }
 }

@@ -48,6 +48,18 @@ namespace XboxGamingBarHelper.Systems
 
         internal static bool IsSupported()
         {
+            // Authoritative gate: is the built-in panel in the ACTIVE display config?
+            // WmiMonitorBrightness keeps enumerating the internal panel's (inactive)
+            // instance even when docked to an external-only display, so instance
+            // presence alone is NOT enough — the WMI Set would silently no-op or
+            // control nothing. QueryDisplayConfig is the same signal Windows' own
+            // brightness slider uses (it grays out with external-only). (#50 docked.)
+            bool? internalActive = XboxGamingBarHelper.Windows.User32.IsInternalPanelActive();
+            if (internalActive == false)
+            {
+                return false; // built-in panel not in active config -> not controllable
+            }
+
             try
             {
                 using (var searcher = new ManagementObjectSearcher("root\\WMI", "SELECT CurrentBrightness FROM WmiMonitorBrightness"))

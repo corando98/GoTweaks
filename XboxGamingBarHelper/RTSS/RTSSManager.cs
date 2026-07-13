@@ -28,6 +28,8 @@ namespace XboxGamingBarHelper.RTSS
         private readonly OSDItemAutoTDP osdItemAutoTDP;
         private readonly OSDItemTDPLimits osdItemTDPLimits;
         private readonly OSDItemCPU osdItemCPU;
+        private readonly OSDItemTime osdItemTime = new OSDItemTime();
+        private bool clock24Hour = false;
         private readonly OSDItemGPU osdItemGPU;
         private readonly OSDItemVRAM osdItemVRAM;
         private readonly OSDItemControllerBattery osdItemControllerBattery;
@@ -150,7 +152,7 @@ namespace XboxGamingBarHelper.RTSS
             osdItemControllerBattery = new OSDItemControllerBattery(null, null, null, null);
             osdItems = new OSDItem[]
             {
-                new OSDItemTime(),
+                osdItemTime,
                 new OSDItemAppName(),
                 new OSDItemFPS(),
                 new OSDItemBattery(performanceManager.BatteryLevel, performanceManager.BatteryDischargeRate, performanceManager.BatteryChargeRate, performanceManager.BatteryRemainingTime, () => performanceManager.BatteryTimeToFull),
@@ -231,6 +233,11 @@ namespace XboxGamingBarHelper.RTSS
                     {
                         frametimeGraphPinned = value == "1" || value.ToLower() == "true";
                         Logger.Debug($"OSD FrametimeGraphPinned: {frametimeGraphPinned}");
+                    }
+                    else if (key == "Clock24Hour")
+                    {
+                        clock24Hour = value == "1" || value.ToLower() == "true";
+                        Logger.Debug($"OSD Clock24Hour: {clock24Hour}");
                     }
                     else if (key.StartsWith("L") && key.EndsWith("_Columns"))
                     {
@@ -564,6 +571,7 @@ namespace XboxGamingBarHelper.RTSS
             // Update clock display settings based on config
             osdItemCPU.SetShowClock(IsItemEnabled("CPUClock"));
             osdItemGPU.SetShowClock(IsItemEnabled("GPUClock"));
+            osdItemTime.Use24Hour = clock24Hour;
 
             // Set text color and opacity on all items
             // Apply opacity for OLED protection
