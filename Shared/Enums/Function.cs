@@ -539,5 +539,11 @@
         // Helper -> widget push: a registered tile combo fired. Content = the tile id/tag.
         // Widget re-dispatches it through the normal tile-click handler (SimulateTileHotkeyFired).
         TileHotkeyFired,                // string - tile id/tag that the combo activated (helper -> widget)
+
+        // VIIPER: which emulated-controller button the Legion front buttons act as while
+        // controller emulation is active. String value: none|guide|touchpad|share|options|l3|r3.
+        // Resolved per emulated type in the VIIPER forwarder (touchpad only exists on Sony/Deck).
+        Viiper_DesktopButtonTarget,     // string - Legion "Desktop" front button -> emulated button
+        Viiper_PageButtonTarget,        // string - Legion "Page" front button -> emulated button
     }
 }

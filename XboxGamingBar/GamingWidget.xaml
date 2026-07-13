@@ -5361,6 +5361,28 @@
                                                    Margin="0,6,0,0"
                                                    Visibility="Collapsed"/>
 
+                                        <!-- Front buttons (Desktop / Page) -> emulated controller button -->
+                                        <TextBlock Text="Desktop button" FontSize="12" Foreground="#CCCCCC" Margin="0,12,0,4"/>
+                                        <ComboBox x:Name="ViiperDesktopButtonTargetComboBox" HorizontalAlignment="Stretch">
+                                            <ComboBoxItem Content="None" Tag="none"/>
+                                            <ComboBoxItem Content="Guide / PS" Tag="guide"/>
+                                            <ComboBoxItem Content="Touchpad click (Sony/Deck)" Tag="touchpad"/>
+                                            <ComboBoxItem Content="Share / Create / View" Tag="share"/>
+                                            <ComboBoxItem Content="Options / Start / Menu" Tag="options"/>
+                                            <ComboBoxItem Content="L3 (left stick click)" Tag="l3"/>
+                                            <ComboBoxItem Content="R3 (right stick click)" Tag="r3"/>
+                                        </ComboBox>
+                                        <TextBlock Text="Page button" FontSize="12" Foreground="#CCCCCC" Margin="0,12,0,4"/>
+                                        <ComboBox x:Name="ViiperPageButtonTargetComboBox" HorizontalAlignment="Stretch">
+                                            <ComboBoxItem Content="None" Tag="none"/>
+                                            <ComboBoxItem Content="Guide / PS" Tag="guide"/>
+                                            <ComboBoxItem Content="Touchpad click (Sony/Deck)" Tag="touchpad"/>
+                                            <ComboBoxItem Content="Share / Create / View" Tag="share"/>
+                                            <ComboBoxItem Content="Options / Start / Menu" Tag="options"/>
+                                            <ComboBoxItem Content="L3 (left stick click)" Tag="l3"/>
+                                            <ComboBoxItem Content="R3 (right stick click)" Tag="r3"/>
+                                        </ComboBox>
+
                                         <!-- Swap rumble motors -->
                                         <Grid Margin="0,12,0,0">
                                             <Grid.ColumnDefinitions>

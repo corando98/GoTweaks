@@ -983,6 +983,8 @@ namespace XboxGamingBar
         private readonly ViiperStringComboProperty viiperSonySubDevice;
         private readonly ViiperStringComboProperty viiperNintendoSubDevice;
         private readonly ViiperStringComboProperty viiperGuideButtonMode;
+        private readonly ViiperStringComboProperty viiperDesktopButtonTarget;
+        private readonly ViiperStringComboProperty viiperPageButtonTarget;
         private readonly ViiperSwapRumbleMotorsProperty viiperSwapRumbleMotors;
         private readonly ViiperMirrorLightbarToStickProperty viiperMirrorLightbarToStick;
         private readonly ViiperStickGyroEnabledProperty viiperStickGyroEnabled;
@@ -1704,6 +1706,8 @@ namespace XboxGamingBar
             viiperSonySubDevice = new ViiperStringComboProperty("dualsense-edge", Shared.Enums.Function.Viiper_SonySubDevice, ViiperSonySubDeviceComboBox, this);
             viiperNintendoSubDevice = new ViiperStringComboProperty("switchpro", Shared.Enums.Function.Viiper_NintendoSubDevice, ViiperNintendoSubDeviceComboBox, this);
             viiperGuideButtonMode = new ViiperStringComboProperty("Native", Shared.Enums.Function.Viiper_GuideButtonMode, ViiperGuideButtonModeComboBox, this);
+            viiperDesktopButtonTarget = new ViiperStringComboProperty("guide", Shared.Enums.Function.Viiper_DesktopButtonTarget, ViiperDesktopButtonTargetComboBox, this);
+            viiperPageButtonTarget = new ViiperStringComboProperty("touchpad", Shared.Enums.Function.Viiper_PageButtonTarget, ViiperPageButtonTargetComboBox, this);
             viiperSwapRumbleMotors = new ViiperSwapRumbleMotorsProperty(ViiperSwapRumbleMotorsToggle, this);
             viiperMirrorLightbarToStick = new ViiperMirrorLightbarToStickProperty(ViiperMirrorLightbarToStickToggle, this);
             viiperStickGyroEnabled = new ViiperStickGyroEnabledProperty(ViiperStickGyroEnabledToggle, this);
@@ -1978,6 +1982,8 @@ namespace XboxGamingBar
                 viiperSonySubDevice,
                 viiperNintendoSubDevice,
                 viiperGuideButtonMode,
+                viiperDesktopButtonTarget,
+                viiperPageButtonTarget,
                 viiperSwapRumbleMotors,
                 viiperRumbleIntensity,
                 viiperMirrorLightbarToStick,

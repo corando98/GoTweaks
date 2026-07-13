@@ -117,6 +117,14 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
                 {
                     settingsManager.ViiperGuideButtonMode.PropertyChanged += OnGuideModeChanged;
                 }
+                if (settingsManager.ViiperDesktopButtonTarget != null)
+                {
+                    settingsManager.ViiperDesktopButtonTarget.PropertyChanged += OnFrontButtonTargetChanged;
+                }
+                if (settingsManager.ViiperPageButtonTarget != null)
+                {
+                    settingsManager.ViiperPageButtonTarget.PropertyChanged += OnFrontButtonTargetChanged;
+                }
                 if (settingsManager.ViiperSwapRumbleMotors != null)
                 {
                     settingsManager.ViiperSwapRumbleMotors.PropertyChanged += OnSwapRumbleMotorsChanged;
@@ -670,6 +678,9 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             forwarder.SetGyroSource(ResolveGyroSource());
             forwarder.SetJoyconGyroPerHalf(settingsManager?.ViiperJoyconGyroPerHalf?.Value ?? false);
             forwarder.SetGuideButtonMode(ResolveGuideMode());
+            forwarder.SetFrontButtonTargets(
+                settingsManager?.ViiperDesktopButtonTarget?.Value ?? "guide",
+                settingsManager?.ViiperPageButtonTarget?.Value ?? "touchpad");
             forwarder.SetSwapRumbleMotors(settingsManager?.ViiperSwapRumbleMotors?.Value ?? false);
             forwarder.SetRumbleIntensity(settingsManager?.ViiperRumbleIntensity?.Value ?? 100);
             forwarder.SetMirrorLightbarToStick(settingsManager?.ViiperMirrorLightbarToStick?.Value ?? false);
@@ -845,6 +856,17 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             catch (Exception ex) { Logger.Warn($"OnGuideModeChanged threw: {ex.Message}"); }
         }
 
+        private void OnFrontButtonTargetChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            try
+            {
+                forwarder.SetFrontButtonTargets(
+                    settingsManager?.ViiperDesktopButtonTarget?.Value ?? "guide",
+                    settingsManager?.ViiperPageButtonTarget?.Value ?? "touchpad");
+            }
+            catch (Exception ex) { Logger.Warn($"OnFrontButtonTargetChanged threw: {ex.Message}"); }
+        }
+
         private void OnSwapRumbleMotorsChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
             try { forwarder.SetSwapRumbleMotors(settingsManager?.ViiperSwapRumbleMotors?.Value ?? false); }
@@ -892,9 +914,34 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             catch (Exception ex) { Logger.Warn($"OnGyroAxisMapChanged threw: {ex.Message}"); }
         }
 
+        private System.Threading.Timer _deviceConfigDebounceTimer;
+        private readonly object _deviceSwapLock = new object();
+        private const int DeviceConfigDebounceMs = 500;
+
         private void OnDeviceConfigChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
             if (!isRunning) return; // Will be picked up on next Start().
+
+            // Debounce rapid config changes (e.g. spinning the Sony sub-device dropdown) into a
+            // single hot-swap once the selection settles. Without this, every intermediate value
+            // fired a full RemoveDevice+AddDevice, churning virtual devices faster than the async
+            // ghost-PnP cleanup could evict them — leaving phantom duplicate gamepads (all fed by
+            // the one forwarder, hence identical input).
+            var t = _deviceConfigDebounceTimer;
+            if (t == null)
+                _deviceConfigDebounceTimer = new System.Threading.Timer(
+                    _ => PerformDeviceConfigSwap(), null, DeviceConfigDebounceMs, System.Threading.Timeout.Infinite);
+            else
+                t.Change(DeviceConfigDebounceMs, System.Threading.Timeout.Infinite);
+        }
+
+        private void PerformDeviceConfigSwap()
+        {
+            lock (_deviceSwapLock)
+            {
+            try
+            {
+            if (!isRunning) return;
 
             string oldType = activeDeviceType;
             string newType;
@@ -997,6 +1044,9 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             {
                 forwarder.SetPaused(false);
             }
+            }
+            catch (Exception ex) { Logger.Error(ex, "PerformDeviceConfigSwap threw"); }
+            } // _deviceSwapLock
         }
 
         public void Stop()

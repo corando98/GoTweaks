@@ -586,6 +586,7 @@
     <Compile Include="Settings\ViiperAlternateGyroConventionProperty.cs" />
     <Compile Include="Settings\ViiperSteamSubDeviceProperty.cs" />
     <Compile Include="Settings\ViiperSonySubDeviceProperty.cs" />
+    <Compile Include="Settings\ViiperFrontButtonTargetProperties.cs" />
     <Compile Include="Settings\ViiperNintendoSubDeviceProperty.cs" />
     <Compile Include="Settings\ViiperGuideButtonModeProperty.cs" />
     <Compile Include="Settings\ViiperSwapRumbleMotorsProperty.cs" />

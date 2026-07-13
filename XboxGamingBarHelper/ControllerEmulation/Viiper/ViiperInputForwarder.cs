@@ -23,6 +23,22 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
         GameBar = 1,
     }
 
+    /// <summary>
+    /// Logical emulated-controller button a Legion front button (Desktop/Page) maps to. Resolved
+    /// per emulated type in the wire builders; the type-agnostic ones ride the XInput button field
+    /// so every builder translates them, and Touchpad is Sony/Deck-only.
+    /// </summary>
+    internal enum FrontButtonTarget
+    {
+        None = 0,
+        Guide,        // PS / Xbox Guide / Steam button
+        Touchpad,     // Sony touchpad click / Deck touchpad (no-op on Xbox)
+        ShareView,    // Share/Create (Sony) / View/Back (Xbox)
+        OptionsMenu,  // Options (Sony) / Menu/Start (Xbox)
+        L3,
+        R3,
+    }
+
     /// <summary>Which IMU source (if any) feeds the gyro bytes of the VIIPER wire format.</summary>
     internal enum ViiperGyroSourceKind
     {
@@ -182,6 +198,15 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
         [System.Runtime.InteropServices.DllImport("winmm.dll", EntryPoint = "timeEndPeriod")]
         private static extern uint NativeTimeEndPeriod(uint uMilliseconds);
         private volatile ViiperGuideButtonMode guideMode = ViiperGuideButtonMode.Native;
+
+        // Configurable emulated-button target for the Legion Desktop (Mode) / Page (Share) front
+        // buttons. Standard targets are injected into the XInput button field so every wire
+        // builder translates them correctly; Touchpad is Sony/Deck-only and applied via the
+        // per-frame _auxTouchpadClick flag. Defaults match the prior hardcoded behavior.
+        private volatile FrontButtonTarget _desktopFrontTarget = FrontButtonTarget.Guide;
+        private volatile FrontButtonTarget _pageFrontTarget = FrontButtonTarget.Touchpad;
+        private bool _auxTouchpadClick;
+
         private volatile bool swapRumbleMotors;
         // Percent ×10 so we can apply it with integer math (1000 == unity). Range 0..2000.
         private volatile int rumbleIntensityScaled = 1000;
@@ -984,6 +1009,69 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             Logger.Info($"VIIPER forwarder guide-button mode -> {mode}");
         }
 
+        /// <summary>Set the emulated-button target for the Legion Desktop (Mode) / Page (Share) front buttons.</summary>
+        public void SetFrontButtonTargets(string desktop, string page)
+        {
+            _desktopFrontTarget = ParseFrontTarget(desktop, FrontButtonTarget.Guide);
+            _pageFrontTarget = ParseFrontTarget(page, FrontButtonTarget.Touchpad);
+            Logger.Info($"VIIPER forwarder front-button targets -> Desktop={_desktopFrontTarget}, Page={_pageFrontTarget}");
+        }
+
+        private static FrontButtonTarget ParseFrontTarget(string s, FrontButtonTarget fallback)
+        {
+            switch ((s ?? "").Trim().ToLowerInvariant())
+            {
+                case "none":     return FrontButtonTarget.None;
+                case "guide":    return FrontButtonTarget.Guide;
+                case "touchpad": return FrontButtonTarget.Touchpad;
+                case "share":    return FrontButtonTarget.ShareView;
+                case "options":  return FrontButtonTarget.OptionsMenu;
+                case "l3":       return FrontButtonTarget.L3;
+                case "r3":       return FrontButtonTarget.R3;
+                default:         return fallback;
+            }
+        }
+
+        /// <summary>
+        /// Map the Legion Desktop (Mode) / Page (Share) front buttons to their configured emulated
+        /// buttons before the wire builder runs. Standard targets are OR-ed into the XInput button
+        /// field (every builder translates them); Touchpad sets a per-frame flag the Sony/Deck
+        /// builders read. The Mode/Share aux bits are then cleared so the builders' legacy hardcoded
+        /// mappings don't double-fire. Guide is handled by the caller's guide-mode logic when the
+        /// Desktop target is Guide, so this only injects Guide in Native mode (Mode still set).
+        /// </summary>
+        private void ApplyConfigurableAuxButtons(ref ViiperXInputGamepad gp)
+        {
+            _auxTouchpadClick = false;
+
+            if ((currentAuxButtons & LegionAux.Mode) != 0)
+            {
+                ApplyFrontTargetToGamepad(_desktopFrontTarget, ref gp);
+                currentAuxButtons &= unchecked((ushort)~LegionAux.Mode);
+            }
+            if ((currentAuxButtons & LegionAux.Share) != 0)
+            {
+                ApplyFrontTargetToGamepad(_pageFrontTarget, ref gp);
+                currentAuxButtons &= unchecked((ushort)~LegionAux.Share);
+            }
+        }
+
+        private void ApplyFrontTargetToGamepad(FrontButtonTarget target, ref ViiperXInputGamepad gp)
+        {
+            switch (target)
+            {
+                case FrontButtonTarget.Guide:       gp.Buttons |= ViiperXInput.Guide; break;
+                case FrontButtonTarget.ShareView:   gp.Buttons |= ViiperXInput.Back; break;
+                case FrontButtonTarget.OptionsMenu: gp.Buttons |= ViiperXInput.Start; break;
+                case FrontButtonTarget.L3:          gp.Buttons |= ViiperXInput.LeftThumb; break;
+                case FrontButtonTarget.R3:          gp.Buttons |= ViiperXInput.RightThumb; break;
+                case FrontButtonTarget.Touchpad:    _auxTouchpadClick = true; break;
+                case FrontButtonTarget.None:
+                default:
+                    break;
+            }
+        }
+
         public void SetSwapRumbleMotors(bool swap)
         {
             if (swapRumbleMotors == swap) return;
@@ -1587,10 +1675,14 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
                         // Guide-button mode: if the user wants Mode/Guide to open Xbox Game
                         // Bar instead of the emulated PS/Guide button, fire Win+G on press
                         // edge and strip the press from the outgoing state.
+                        // The Desktop (Mode) front button only acts as Guide when it's mapped to
+                        // Guide; in that case honor the guide-button mode (native emulated guide
+                        // vs Win+G). Otherwise ApplyConfigurableAuxButtons maps Mode to its target.
+                        bool desktopIsGuide = _desktopFrontTarget == FrontButtonTarget.Guide;
                         bool guidePressed = ((sample.Buttons & ViiperXInput.Guide) != 0)
-                                         || ((currentAuxButtons & LegionAux.Mode) != 0);
+                                         || (desktopIsGuide && (currentAuxButtons & LegionAux.Mode) != 0);
                         ApplyGuideModeEdge(guidePressed);
-                        if (guideMode == ViiperGuideButtonMode.GameBar)
+                        if (desktopIsGuide && guideMode == ViiperGuideButtonMode.GameBar)
                         {
                             currentAuxButtons &= unchecked((ushort)~LegionAux.Mode);
                         }
@@ -1650,6 +1742,7 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
                                 }
                             }
                         }
+                        ApplyConfigurableAuxButtons(ref gp);
                         ApplyStickTriggerShaping(ref gp);
                         byte[] data = BuildDeviceInput(gp);
                         if (data != null && data.Length > 0)
@@ -1727,6 +1820,7 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
                                 }
                             }
                         }
+                        ApplyConfigurableAuxButtons(ref gp);
                         ApplyStickTriggerShaping(ref gp);
                         byte[] data = BuildDeviceInput(gp);
                         if (data != null && data.Length > 0)
@@ -2249,7 +2343,7 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             // user gets from Legion HID, so they don't go to waste in the DS4 mapping).
             ushort aux = currentAuxButtons;
             if ((aux & LegionAux.Mode) != 0) ds4Buttons |= 0x0001;   // Mode -> PS
-            if ((aux & LegionAux.Share) != 0) ds4Buttons |= 0x0002;  // Share -> Touchpad click
+            if (_auxTouchpadClick) ds4Buttons |= 0x0002;  // configured front button -> Touchpad click
             WriteU16(data, 4, ds4Buttons);
 
             byte dpad = 0;
@@ -2331,7 +2425,7 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             if ((aux & LegionAux.Y3) != 0) dseButtons |= 0x00200000;    // Y3 (right upper) -> ExtraR1
             if ((aux & LegionAux.M3) != 0) dseButtons |= 0x00800000;    // M3 (right lower) -> ExtraL3
             if ((aux & LegionAux.Mode) != 0) dseButtons |= 0x00010000;  // Mode  -> PS
-            if ((aux & LegionAux.Share) != 0) dseButtons |= 0x00020000; // Share -> Touchpad click
+            if (_auxTouchpadClick) dseButtons |= 0x00020000; // configured front button -> Touchpad click
             WriteU32(data, 4, dseButtons);
 
             byte dpad = 0;
@@ -2534,7 +2628,7 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
 
             ushort aux = currentAuxButtons;
             if ((aux & LegionAux.Mode) != 0) dsButtons |= 0x00010000;             // Mode  → PS
-            if ((aux & LegionAux.Share) != 0) dsButtons |= 0x00020000;            // Share → Touchpad click
+            if (_auxTouchpadClick) dsButtons |= 0x00020000;            // configured front button → Touchpad click
             WriteU32(data, 4, dsButtons);
 
             byte dpad = 0;
@@ -2647,8 +2741,8 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             if ((gp.Buttons & ViiperXInput.DPadRight) != 0) dpad |= 0x08;
             data[12] = dpad;
 
-            // Share → reserved bit at byte 13 (matches reference app's mapping).
-            if ((aux & LegionAux.Share) != 0) data[13] |= 0x01;
+            // Configured front button → Touchpad/reserved bit at byte 13 (reference app mapping).
+            if (_auxTouchpadClick) data[13] |= 0x01;
 
             // Bytes 14-25: IMU (gyro X/Y/Z + accel X/Y/Z as int16). libviiper's
             // xboxelite2 InputState already carries these on the wire for Steam
