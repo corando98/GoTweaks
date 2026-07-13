@@ -125,6 +125,7 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         private const int EC_FAN_PANIC_TEMP_C = 101;
         private const int EC_FAN_PANIC_MIN_RPM = 4800; // matches the EC firmware's own failsafe RPM
         private bool ecInPanicMode = false; // sticky log latch — log once when entering, once when leaving
+        private bool ecInFullSpeed = false; // sticky log latch for the Fan Full Speed override
         private bool gyroEnabled = false;
         private int vibrationLevel = 2; // Medium
         private bool powerLightEnabled = true;
@@ -2464,6 +2465,38 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                     Logger.Info($"EC fan PANIC cleared: temp={tempC}°C dropped below {EC_FAN_PANIC_TEMP_C}°C — resuming curve-driven control.");
                     ecInPanicMode = false;
                     // Force a fresh anchor evaluation so we don't keep panic RPM after panic ends.
+                    ecAnchorTempC = int.MinValue;
+                    ecCurrentTargetRpm = -1;
+                }
+
+                // --- Fan Full Speed override. ---
+                // When the user has Full Speed on, the Lenovo WMI full-speed command and this
+                // loop's curve write to 0xC6C8 otherwise fight, and the curve wins on the next
+                // tick — so Full Speed silently reverts to the curve. Command EC_FAN_MAX_RPM
+                // here so both paths agree, re-writing every tick to defeat any firmware
+                // walk-back. Panic (thermal safety) still takes precedence above this.
+                if (fanFullSpeed)
+                {
+                    int fullRpm = Math.Min(EC_FAN_MAX_RPM, 65535);
+                    if (!ecInFullSpeed)
+                    {
+                        Logger.Info($"EC fan FULL SPEED engaged — commanding {fullRpm} RPM via 0xC6C8 (curve/anchor bypassed until Full Speed is turned off).");
+                        ecInFullSpeed = true;
+                    }
+                    if (legionEcAccess.SetTargetFanRpm((ushort)fullRpm))
+                    {
+                        ecCurrentTargetRpm = fullRpm;
+                        ecLastWrittenRpm = fullRpm;
+                        ecLastForcedRewriteUtc = DateTime.UtcNow;
+                    }
+                    return; // skip anchor/curve while Full Speed is on
+                }
+
+                if (ecInFullSpeed)
+                {
+                    Logger.Info("EC fan FULL SPEED cleared — resuming curve-driven control.");
+                    ecInFullSpeed = false;
+                    // Fresh anchor so we don't hold max RPM after Full Speed ends.
                     ecAnchorTempC = int.MinValue;
                     ecCurrentTargetRpm = -1;
                 }

@@ -126,6 +126,10 @@ namespace XboxGamingBar
                     {
                         ArmUserNavIntent(focused.Tag as string);
                     }
+                    // Committing to a tab with A/Enter drops focus straight into the tab's
+                    // content so the user doesn't have to D-pad down from the tab strip.
+                    // Deferred to Low priority so the section is shown before we focus into it.
+                    var ignoreFocusInto = Dispatcher.RunAsync(CoreDispatcherPriority.Low, FocusFirstControlInActiveTab);
                     break;
                 case VirtualKey.Left:
                 case VirtualKey.Right:
@@ -445,6 +449,66 @@ namespace XboxGamingBar
                 }
             }
             return visibleItems;
+        }
+
+        /// <summary>
+        /// The ScrollViewer of the currently active tab (matches lastUserNavTag), or null.
+        /// </summary>
+        private ScrollViewer GetActiveTabScrollViewer()
+        {
+            switch (lastUserNavTag)
+            {
+                case "Quick": return QuickSettingsScrollViewer;
+                case "Performance": return PerformanceScrollViewer;
+                case "Game": return GameScrollViewer;
+                case "AMD": return AMDScrollViewer;
+                case "Scaling": return ScalingScrollViewer;
+                case "Legion": return LegionScrollViewer;
+                case "GPD": return GPDScrollViewer;
+                case "System": return SystemScrollViewer;
+                default: return null;
+            }
+        }
+
+        /// <summary>
+        /// Moves gamepad focus onto the first focusable control inside the active tab's content,
+        /// so committing to a tab (A/Enter on the nav item) doesn't require a manual D-pad-down.
+        /// No-op if the tab has no focusable content.
+        /// </summary>
+        internal void FocusFirstControlInActiveTab()
+        {
+            try
+            {
+                var sv = GetActiveTabScrollViewer();
+                if (sv == null || sv.Visibility != Visibility.Visible) return;
+                if (FocusManager.FindFirstFocusableElement(sv) is Control first)
+                {
+                    first.Focus(FocusState.Programmatic);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"FocusFirstControlInActiveTab failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Puts gamepad focus on the currently active tab in the nav strip, so the pad can
+        /// navigate immediately when the widget opens without the user first touching the screen.
+        /// Focuses (doesn't re-check) the already-selected tab, so it can't cause nav drift.
+        /// </summary>
+        internal void FocusActiveNavItem()
+        {
+            try
+            {
+                var active = MainNavPanel.Children.OfType<RadioButton>()
+                    .FirstOrDefault(rb => rb.IsChecked == true && rb.Visibility == Visibility.Visible);
+                active?.Focus(FocusState.Programmatic);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"FocusActiveNavItem failed: {ex.Message}");
+            }
         }
 
     }

@@ -8,7 +8,9 @@
     xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
-    d:DesignHeight="670" d:DesignWidth="600">
+    d:DesignHeight="670" d:DesignWidth="600"
+    RequiresPointer="WhenEngaged"
+    IsFocusEngagementEnabled="True">
 
     <Page.Resources>
         <!-- Existing Converters -->
@@ -210,11 +212,19 @@
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="ManipulationMode" Value="None"/>
             <Setter Property="IsFocusEngagementEnabled" Value="True"/>
+            <!-- High-visibility white focus ring for gamepad navigation -->
+            <Setter Property="UseSystemFocusVisuals" Value="True"/>
+            <Setter Property="FocusVisualPrimaryBrush" Value="White"/>
+            <Setter Property="FocusVisualSecondaryBrush" Value="Transparent"/>
+            <Setter Property="FocusVisualPrimaryThickness" Value="2"/>
+            <Setter Property="FocusVisualMargin" Value="-3,-3,-3,-3"/>
         </Style>
 
         <!-- Modern ComboBox Style - System style with minor customizations -->
         <Style x:Key="ModernComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource DefaultComboBoxStyle}">
             <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <!-- No UseSystemFocusVisuals here: the ComboBox already shows focus via
+                 ComboBoxBorderBrushFocused, and a system ring on top doubles it. -->
         </Style>
 
         <!-- Override ComboBox border colors to prevent highlight on focus/hover -->
@@ -227,21 +237,45 @@
 
         <!-- Modern Button Style - System style -->
         <Style x:Key="ModernButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+            <!-- High-visibility white focus ring for gamepad navigation -->
+            <Setter Property="UseSystemFocusVisuals" Value="True"/>
+            <Setter Property="FocusVisualPrimaryBrush" Value="White"/>
+            <Setter Property="FocusVisualSecondaryBrush" Value="Transparent"/>
+            <Setter Property="FocusVisualPrimaryThickness" Value="2"/>
+            <Setter Property="FocusVisualMargin" Value="-3,-3,-3,-3"/>
         </Style>
 
         <!-- Standalone Button Style - System style -->
         <Style x:Key="StandaloneButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
             <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <!-- High-visibility white focus ring for gamepad navigation -->
+            <Setter Property="UseSystemFocusVisuals" Value="True"/>
+            <Setter Property="FocusVisualPrimaryBrush" Value="White"/>
+            <Setter Property="FocusVisualSecondaryBrush" Value="Transparent"/>
+            <Setter Property="FocusVisualPrimaryThickness" Value="2"/>
+            <Setter Property="FocusVisualMargin" Value="-3,-3,-3,-3"/>
         </Style>
 
         <!-- Standalone ToggleButton Style - System style -->
         <Style x:Key="StandaloneToggleButtonStyle" TargetType="ToggleButton" BasedOn="{StaticResource DefaultToggleButtonStyle}">
             <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <!-- High-visibility white focus ring for gamepad navigation -->
+            <Setter Property="UseSystemFocusVisuals" Value="True"/>
+            <Setter Property="FocusVisualPrimaryBrush" Value="White"/>
+            <Setter Property="FocusVisualSecondaryBrush" Value="Transparent"/>
+            <Setter Property="FocusVisualPrimaryThickness" Value="2"/>
+            <Setter Property="FocusVisualMargin" Value="-3,-3,-3,-3"/>
         </Style>
 
         <!-- Checkbox with system style -->
         <Style x:Key="FocusableCheckBoxStyle" TargetType="CheckBox" BasedOn="{StaticResource DefaultCheckBoxStyle}">
             <Setter Property="Padding" Value="8,6"/>
+            <!-- High-visibility white focus ring for gamepad navigation -->
+            <Setter Property="UseSystemFocusVisuals" Value="True"/>
+            <Setter Property="FocusVisualPrimaryBrush" Value="White"/>
+            <Setter Property="FocusVisualSecondaryBrush" Value="Transparent"/>
+            <Setter Property="FocusVisualPrimaryThickness" Value="2"/>
+            <Setter Property="FocusVisualMargin" Value="-3,-3,-3,-3"/>
         </Style>
 
         <!-- Default Button Style Override - uses system style -->
@@ -458,7 +492,7 @@
             <Grid Grid.Row="1">
             <!-- QUICK SETTINGS TAB -->
             <Grid>
-                <ScrollViewer x:Name="QuickSettingsScrollViewer" VerticalScrollBarVisibility="Auto" Visibility="Visible"
+                <ScrollViewer x:Name="QuickSettingsScrollViewer" XYFocusUpNavigationStrategy="Projection" XYFocusDownNavigationStrategy="Projection" VerticalScrollBarVisibility="Auto" Visibility="Visible"
                               BringIntoViewOnFocusChange="True">
                     <StackPanel Padding="16,8,16,16">
 
@@ -543,6 +577,32 @@
                             </Grid>
                         </Button>
 
+                        <!-- Panel Brightness slider (#50). Hidden by default; revealed via the
+                             "Show Brightness Slider" toggle in Customize. Disabled when the built-in
+                             panel isn't controllable (e.g. docked, internal display off). -->
+                        <Border x:Name="PanelBrightnessRow"
+                                Background="#1A1C1E"
+                                CornerRadius="12"
+                                Padding="12,10"
+                                Margin="0,0,0,8"
+                                BorderBrush="#50555C"
+                                BorderThickness="1"
+                                Visibility="Collapsed">
+                            <StackPanel>
+                                <Grid>
+                                    <TextBlock Text="Brightness" Foreground="#FFFFFF" FontSize="13" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="PanelBrightnessValueText" Text="--%" Foreground="#A0A0A0"
+                                               FontSize="13" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                </Grid>
+                                <Slider x:Name="PanelBrightnessSlider"
+                                        Style="{StaticResource ModernSliderStyle}"
+                                        Minimum="0" Maximum="100"
+                                        TickFrequency="1" SnapsTo="Ticks"
+                                        Value="50"
+                                        ValueChanged="PanelBrightnessSlider_ValueChanged"/>
+                            </StackPanel>
+                        </Border>
+
                         <!-- Quick Metrics Row (compact stats display - dynamically populated) -->
                         <Border x:Name="QuickMetricsRow"
                                 Background="#1A1C1E"
@@ -610,6 +670,26 @@
 
                                 <!-- Show Metrics Row Toggle -->
                                 <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="Show Brightness Slider"
+                                                   Foreground="#FFFFFF"
+                                                   FontSize="13"/>
+                                        <TextBlock x:Name="PanelBrightnessUnsupportedText"
+                                                   Text="Adjusts the built-in display"
+                                                   Foreground="#666666"
+                                                   FontSize="11"/>
+                                    </StackPanel>
+                                    <ToggleSwitch x:Name="PanelBrightnessShowToggle"
+                                                  Grid.Column="1"
+                                                  OffContent="" OnContent=""
+                                                  Toggled="PanelBrightnessShowToggle_Toggled"/>
+                                </Grid>
+
+                                <Grid Margin="0,12,0,0">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
@@ -763,7 +843,7 @@
                 </ScrollViewer>
 
                 <!-- PERFORMANCE TAB -->
-                <ScrollViewer x:Name="PerformanceScrollViewer" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
+                <ScrollViewer x:Name="PerformanceScrollViewer" XYFocusUpNavigationStrategy="Projection" XYFocusDownNavigationStrategy="Projection" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
                               BringIntoViewOnFocusChange="True">
                     <StackPanel Padding="16,8,16,16">
 
@@ -930,8 +1010,6 @@
                                               Width="120"
                                               Grid.Column="1"
                                               SelectionChanged="PerformanceOverlayComboBox_SelectionChanged"
-                                              XYFocusUp="{x:Bind PerGameProfileToggle}"
-                                              XYFocusDown="{x:Bind TDPModeComboBox}"
                                               XYFocusLeft="{x:Bind PerformanceNavItem}">
                                         <ComboBoxItem Content="Off" Tag="0" IsSelected="True"/>
                                         <ComboBoxItem Content="Basic" Tag="1"/>
@@ -970,8 +1048,7 @@
                                               Style="{StaticResource ModernComboBoxStyle}"
                                               SelectedIndex="1"
                                               SelectionChanged="TDPModeComboBox_SelectionChanged"
-                                              XYFocusUp="{x:Bind PerformanceOverlayComboBox}"
-                                              XYFocusDown="{x:Bind TDPSlider}">
+                                              XYFocusUp="{x:Bind PerformanceOverlayComboBox}">
                                         <ComboBoxItem Content="Quiet" Tag="1"/>
                                         <ComboBoxItem Content="Balanced" Tag="2"/>
                                         <ComboBoxItem Content="Performance" Tag="3"/>
@@ -995,7 +1072,6 @@
                                         TickPlacement="BottomRight"
                                         IsEnabled="False" Value="-5"
                                         ValueChanged="TDPSlider_ValueChanged_UpdateDisplay"
-                                        XYFocusUp="{x:Bind TDPModeComboBox}"
                                         XYFocusDown="{x:Bind TDPExtrasExpandToggle}"
                                         />
                                 <Grid Margin="0,4,0,0">
@@ -1049,7 +1125,6 @@
                                                   VerticalAlignment="Center"
                                                   Background="Transparent"
                                                   BorderThickness="0"
-                                                  XYFocusUp="{x:Bind TDPSlider}"
                                                   XYFocusDown="{x:Bind OSPowerModeComboBox}"
                                                   UseSystemFocusVisuals="True"
                                                   Padding="8,4"
@@ -1073,8 +1148,7 @@
                                                       Grid.Column="1"
                                                       Style="{StaticResource ModernToggleStyle}"
                                                       Toggled="TDPBoostToggle_Toggled"
-                                                      XYFocusUp="{x:Bind TDPExtrasExpandToggle}"
-                                                      XYFocusDown="{x:Bind AutoTDPToggle}"/>
+                                                      XYFocusUp="{x:Bind TDPExtrasExpandToggle}"/>
                                     </Grid>
                                     <!-- TDP Boost expanded panel: per-profile SPPT / FPPT deltas. Visible only
                                          when the TDPBoostToggle is on. Replaces the global System-tab boost
@@ -1103,7 +1177,6 @@
                                                 SnapsTo="Ticks"
                                                 Value="1"
                                                 ValueChanged="TDPBoostSPPTSlider_ValueChanged"
-                                                XYFocusUp="{x:Bind TDPBoostToggle}"
                                                 XYFocusDown="{x:Bind TDPBoostFPPTSlider}"/>
 
                                         <!-- Peak (FPPT) delta -->
@@ -1126,8 +1199,7 @@
                                                 SnapsTo="Ticks"
                                                 Value="3"
                                                 ValueChanged="TDPBoostFPPTSlider_ValueChanged"
-                                                XYFocusUp="{x:Bind TDPBoostSPPTSlider}"
-                                                XYFocusDown="{x:Bind AutoTDPToggle}"/>
+                                                XYFocusUp="{x:Bind TDPBoostSPPTSlider}"/>
                                     </StackPanel>
 
                                     <!-- AutoTDP -->
@@ -1144,9 +1216,7 @@
                                         <ToggleSwitch x:Name="AutoTDPToggle"
                                                       Grid.Column="1"
                                                       Style="{StaticResource ModernToggleStyle}"
-                                                      Toggled="AutoTDPToggle_Toggled"
-                                                      XYFocusUp="{x:Bind TDPBoostToggle}"
-                                                      XYFocusDown="{x:Bind StickyTDPToggle}"/>
+                                                      Toggled="AutoTDPToggle_Toggled"/>
                                     </Grid>
                                     <StackPanel Visibility="{Binding ElementName=AutoTDPToggle, Path=IsOn, Converter={StaticResource BooleanToVisibilityConverter}}"
                                                 Margin="0,-8,0,0">
@@ -1242,8 +1312,7 @@
                                         <ToggleSwitch x:Name="StickyTDPToggle"
                                                       Grid.Column="1"
                                                       Style="{StaticResource ModernToggleStyle}"
-                                                      Toggled="StickyTDPToggle_Toggled"
-                                                      XYFocusUp="{x:Bind AutoTDPToggle}"/>
+                                                      Toggled="StickyTDPToggle_Toggled"/>
                                     </Grid>
                                     <StackPanel Visibility="{Binding ElementName=StickyTDPToggle, Path=IsOn, Converter={StaticResource BooleanToVisibilityConverter}}"
                                                 Margin="0,-8,0,0">
@@ -1258,7 +1327,7 @@
                         </Border>
 
                         <!-- OS Power Mode Card -->
-                        <Border Style="{StaticResource CardStyle}">
+                        <Border x:Name="OSPowerModeCard" Style="{StaticResource CardStyle}">
                             <StackPanel>
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -1304,7 +1373,7 @@
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0">
                                         <TextBlock Text="CPU Extras" Style="{StaticResource CardTitleStyle}"/>
-                                        <TextBlock Text="CPU Boost, EPP, and State limits"
+                                        <TextBlock Text="CPU Boost and EPP"
                                                    Style="{StaticResource CardCaptionStyle}"/>
                                     </StackPanel>
                                     <ToggleButton x:Name="CPUExtrasExpandToggle"
@@ -1358,31 +1427,6 @@
                                         </Grid>
                                     </StackPanel>
 
-                                    <!-- CPU State -->
-                                    <StackPanel>
-                                        <TextBlock Text="CPU State" FontSize="14" Foreground="#FFFFFF"/>
-                                        <TextBlock Text="Processor performance limits" FontSize="11" Foreground="#888888"/>
-                                        <Grid Margin="0,8,0,0">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
-                                            <StackPanel Grid.Column="0" Margin="0,0,6,0">
-                                                <TextBlock Text="Min %" FontSize="12" Foreground="#888888" Margin="0,0,0,4"/>
-                                                <ComboBox x:Name="MinCPUStateComboBox"
-                                                          Style="{StaticResource ModernComboBoxStyle}"
-                                                          SelectionChanged="MinCPUStateComboBox_SelectionChanged"
-                                                          IsEnabled="False"/>
-                                            </StackPanel>
-                                            <StackPanel Grid.Column="1" Margin="6,0,0,0">
-                                                <TextBlock Text="Max %" FontSize="12" Foreground="#888888" Margin="0,0,0,4"/>
-                                                <ComboBox x:Name="MaxCPUStateComboBox"
-                                                          Style="{StaticResource ModernComboBoxStyle}"
-                                                          SelectionChanged="MaxCPUStateComboBox_SelectionChanged"
-                                                          IsEnabled="False"/>
-                                            </StackPanel>
-                                        </Grid>
-                                    </StackPanel>
                                 </StackPanel>
                             </StackPanel>
                         </Border>
@@ -1454,7 +1498,6 @@
                                                   BorderThickness="0"
                                                   Padding="8,4"
                                                   Click="AdvancedExpandButton_Click"
-                                                  XYFocusUp="{x:Bind FPSLimitToggle}"
                                                   UseSystemFocusVisuals="True">
                                         <FontIcon x:Name="AdvancedExpandIcon" Glyph="&#xE70D;" FontSize="12"/>
                                     </ToggleButton>
@@ -1462,6 +1505,32 @@
 
                                 <!-- Collapsible Content -->
                                 <StackPanel x:Name="AdvancedContent" Visibility="Collapsed" Margin="0,12,0,0">
+
+                                    <!-- CPU State (moved here from CPU Extras) -->
+                                    <StackPanel Margin="0,0,0,16">
+                                        <TextBlock Text="CPU State" FontSize="14" Foreground="#FFFFFF"/>
+                                        <TextBlock Text="Processor performance limits" FontSize="11" Foreground="#888888"/>
+                                        <Grid Margin="0,8,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" Margin="0,0,6,0">
+                                                <TextBlock Text="Min %" FontSize="12" Foreground="#888888" Margin="0,0,0,4"/>
+                                                <ComboBox x:Name="MinCPUStateComboBox"
+                                                          Style="{StaticResource ModernComboBoxStyle}"
+                                                          SelectionChanged="MinCPUStateComboBox_SelectionChanged"
+                                                          IsEnabled="False"/>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" Margin="6,0,0,0">
+                                                <TextBlock Text="Max %" FontSize="12" Foreground="#888888" Margin="0,0,0,4"/>
+                                                <ComboBox x:Name="MaxCPUStateComboBox"
+                                                          Style="{StaticResource ModernComboBoxStyle}"
+                                                          SelectionChanged="MaxCPUStateComboBox_SelectionChanged"
+                                                          IsEnabled="False"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </StackPanel>
 
                                     <!-- Power Plan Section -->
                                     <StackPanel Margin="0,0,0,16">
@@ -1548,9 +1617,7 @@
                                             <ComboBox x:Name="CoreParkingComboBox"
                                                       Grid.Column="1"
                                                       Width="100"
-                                                      SelectionChanged="CoreParkingComboBox_SelectionChanged"
-                                                      UseSystemFocusVisuals="True"
-                                                      FocusVisualPrimaryBrush="White">
+                                                      SelectionChanged="CoreParkingComboBox_SelectionChanged">
                                                 <!-- Items populated dynamically based on CPU core count -->
                                             </ComboBox>
                                         </Grid>
@@ -1586,9 +1653,7 @@
                                             <ComboBox x:Name="PCoreCountComboBox"
                                                       Grid.Column="1"
                                                       Width="80"
-                                                      SelectionChanged="PCoreCountComboBox_SelectionChanged"
-                                                      UseSystemFocusVisuals="True"
-                                                      FocusVisualPrimaryBrush="White">
+                                                      SelectionChanged="PCoreCountComboBox_SelectionChanged">
                                                 <ComboBoxItem Content="0" Tag="0"/>
                                                 <ComboBoxItem Content="1" Tag="1"/>
                                                 <ComboBoxItem Content="2" Tag="2"/>
@@ -1613,9 +1678,7 @@
                                             <ComboBox x:Name="ECoreCountComboBox"
                                                       Grid.Column="1"
                                                       Width="80"
-                                                      SelectionChanged="ECoreCountComboBox_SelectionChanged"
-                                                      UseSystemFocusVisuals="True"
-                                                      FocusVisualPrimaryBrush="White">
+                                                      SelectionChanged="ECoreCountComboBox_SelectionChanged">
                                                 <ComboBoxItem Content="0" Tag="0"/>
                                                 <ComboBoxItem Content="1" Tag="1"/>
                                                 <ComboBoxItem Content="2" Tag="2"/>
@@ -1679,7 +1742,7 @@
                 </ScrollViewer>
 
                 <!-- GAME TAB -->
-                <ScrollViewer x:Name="GameScrollViewer" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
+                <ScrollViewer x:Name="GameScrollViewer" XYFocusUpNavigationStrategy="Projection" XYFocusDownNavigationStrategy="Projection" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
                               BringIntoViewOnFocusChange="True">
                     <StackPanel Padding="16,8,16,16">
 
@@ -2462,7 +2525,7 @@
                 </ScrollViewer>
 
                 <!-- GRAPHICS TAB -->
-                <ScrollViewer x:Name="AMDScrollViewer" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
+                <ScrollViewer x:Name="AMDScrollViewer" XYFocusUpNavigationStrategy="Projection" XYFocusDownNavigationStrategy="Projection" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
                               BringIntoViewOnFocusChange="True">
                     <StackPanel Padding="16,8,16,16">
 
@@ -2868,7 +2931,7 @@
                 </ScrollViewer>
 
                 <!-- SYSTEM TAB -->
-                <ScrollViewer x:Name="SystemScrollViewer" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
+                <ScrollViewer x:Name="SystemScrollViewer" XYFocusUpNavigationStrategy="Projection" XYFocusDownNavigationStrategy="Projection" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
                               BringIntoViewOnFocusChange="True">
                     <StackPanel Padding="16,8,16,16">
 
@@ -2904,6 +2967,27 @@
 
                                 <!-- Collapsible Content -->
                                 <StackPanel x:Name="TDPSettingsContent" Visibility="Collapsed" Margin="0,12,0,0">
+
+                                    <!-- Simplify: hide the Performance-tab Advanced card and the OS Power
+                                         Mode card for new users. ON by default = hidden (fewer, predictable
+                                         settings); turn off to reveal them. -->
+                                    <Grid Margin="0,0,0,16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                            <TextBlock Text="Hide Advanced Options" FontSize="14" Foreground="#FFFFFF"/>
+                                            <TextBlock Text="Hides the Advanced card and OS Power Mode for a simpler view"
+                                                       FontSize="11" Foreground="#888888" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <ToggleSwitch x:Name="HideAdvancedOptionsToggle"
+                                                      Grid.Column="1"
+                                                      OffContent="" OnContent=""
+                                                      IsOn="True"
+                                                      Style="{StaticResource ModernToggleStyle}"
+                                                      Toggled="HideAdvancedOptionsToggle_Toggled"/>
+                                    </Grid>
 
                                     <!-- TDP Control Method Section -->
                                     <TextBlock Text="Control Method" FontSize="13" FontWeight="SemiBold" Foreground="#AAAAAA" Margin="0,0,0,8"/>
@@ -3297,10 +3381,7 @@
                                                       Style="{StaticResource ModernComboBoxStyle}"
                                                       Width="120"
                                                       Grid.Column="1"
-                                                      SelectionChanged="OSDCustomizeLevelComboBox_SelectionChanged"
-                                                      UseSystemFocusVisuals="True"
-                                                      FocusVisualPrimaryBrush="White"
-                                                      FocusVisualSecondaryBrush="Transparent">
+                                                      SelectionChanged="OSDCustomizeLevelComboBox_SelectionChanged">
                                                 <ComboBoxItem Content="Basic" Tag="1" IsSelected="True"/>
                                                 <ComboBoxItem Content="Detailed" Tag="2"/>
                                                 <ComboBoxItem Content="Full" Tag="3"/>
@@ -3330,9 +3411,7 @@
                                                   Style="{StaticResource ModernComboBoxStyle}"
                                                   Width="80"
                                                   Grid.Column="1"
-                                                  SelectionChanged="OSDLayoutOption_Changed"
-                                                  UseSystemFocusVisuals="True"
-                                                  FocusVisualPrimaryBrush="White">
+                                                  SelectionChanged="OSDLayoutOption_Changed">
                                             <ComboBoxItem Content="1" Tag="1"/>
                                             <ComboBoxItem Content="2" Tag="2"/>
                                             <ComboBoxItem Content="3" Tag="3" IsSelected="True"/>
@@ -3360,9 +3439,7 @@
                                                   Style="{StaticResource ModernComboBoxStyle}"
                                                   Width="100"
                                                   Grid.Column="1"
-                                                  SelectionChanged="OSDLayoutOption_Changed"
-                                                  UseSystemFocusVisuals="True"
-                                                  FocusVisualPrimaryBrush="White">
+                                                  SelectionChanged="OSDLayoutOption_Changed">
                                             <ComboBoxItem Content="Small" Tag="50"/>
                                             <ComboBoxItem Content="Medium" Tag="100" IsSelected="True"/>
                                             <ComboBoxItem Content="Large" Tag="150"/>
@@ -3532,6 +3609,22 @@
                                                       Toggled="FrametimeGraphPinnedToggle_Toggled"/>
                                     </Grid>
 
+                                    <!-- 24-Hour Clock Toggle -->
+                                    <Grid Margin="0,4,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                            <TextBlock Text="24-Hour Clock" Foreground="#AAAAAA" FontSize="13"/>
+                                            <TextBlock Text="Show the OSD Time item in 24-hour format" Foreground="#707070" FontSize="11"/>
+                                        </StackPanel>
+                                        <ToggleSwitch x:Name="Osd24HourClockToggle"
+                                                      Grid.Column="1"
+                                                      Style="{StaticResource ModernToggleStyle}"
+                                                      Toggled="Osd24HourClockToggle_Toggled"/>
+                                    </Grid>
+
                                         <!-- Items Section -->
                                         <TextBlock Text="Items to Display"
                                                    Style="{StaticResource CardTitleStyle}"
@@ -3649,9 +3742,7 @@
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Text="View + A" VerticalAlignment="Center" Foreground="#FFFFFF" FontSize="13"/>
                                             <ComboBox x:Name="HotkeyMenuAComboBox" Grid.Column="1"
-                                                      SelectionChanged="HotkeyMenuA_SelectionChanged"
-                                                      UseSystemFocusVisuals="True"
-                                                      FocusVisualPrimaryBrush="White">
+                                                      SelectionChanged="HotkeyMenuA_SelectionChanged">
                                                 <ComboBoxItem Content="Disabled" Tag="0"/>
                                                 <ComboBoxItem Content="Keyboard Shortcut" Tag="1"/>
                                                 <ComboBoxItem Content="Toggle OSD" Tag="3"/>
@@ -3685,9 +3776,7 @@
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Text="View + B" VerticalAlignment="Center" Foreground="#FFFFFF" FontSize="13"/>
                                             <ComboBox x:Name="HotkeyMenuBComboBox" Grid.Column="1"
-                                                      SelectionChanged="HotkeyMenuB_SelectionChanged"
-                                                      UseSystemFocusVisuals="True"
-                                                      FocusVisualPrimaryBrush="White">
+                                                      SelectionChanged="HotkeyMenuB_SelectionChanged">
                                                 <ComboBoxItem Content="Disabled" Tag="0"/>
                                                 <ComboBoxItem Content="Keyboard Shortcut" Tag="1"/>
                                                 <ComboBoxItem Content="Toggle OSD" Tag="3"/>
@@ -3721,9 +3810,7 @@
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Text="View + X" VerticalAlignment="Center" Foreground="#FFFFFF" FontSize="13"/>
                                             <ComboBox x:Name="HotkeyMenuXComboBox" Grid.Column="1"
-                                                      SelectionChanged="HotkeyMenuX_SelectionChanged"
-                                                      UseSystemFocusVisuals="True"
-                                                      FocusVisualPrimaryBrush="White">
+                                                      SelectionChanged="HotkeyMenuX_SelectionChanged">
                                                 <ComboBoxItem Content="Disabled" Tag="0"/>
                                                 <ComboBoxItem Content="Keyboard Shortcut" Tag="1"/>
                                                 <ComboBoxItem Content="Toggle OSD" Tag="3"/>
@@ -3757,9 +3844,7 @@
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Text="View + Y" VerticalAlignment="Center" Foreground="#FFFFFF" FontSize="13"/>
                                             <ComboBox x:Name="HotkeyMenuYComboBox" Grid.Column="1"
-                                                      SelectionChanged="HotkeyMenuY_SelectionChanged"
-                                                      UseSystemFocusVisuals="True"
-                                                      FocusVisualPrimaryBrush="White">
+                                                      SelectionChanged="HotkeyMenuY_SelectionChanged">
                                                 <ComboBoxItem Content="Disabled" Tag="0"/>
                                                 <ComboBoxItem Content="Keyboard Shortcut" Tag="1"/>
                                                 <ComboBoxItem Content="Toggle OSD" Tag="3"/>
@@ -3793,9 +3878,7 @@
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Text="Menu + ↑" VerticalAlignment="Center" Foreground="#FFFFFF" FontSize="13"/>
                                             <ComboBox x:Name="HotkeyMenuDpadUpComboBox" Grid.Column="1"
-                                                      SelectionChanged="HotkeyMenuDpadUp_SelectionChanged"
-                                                      UseSystemFocusVisuals="True"
-                                                      FocusVisualPrimaryBrush="White">
+                                                      SelectionChanged="HotkeyMenuDpadUp_SelectionChanged">
                                                 <ComboBoxItem Content="Disabled" Tag="0"/>
                                                 <ComboBoxItem Content="Keyboard Shortcut" Tag="1"/>
                                                 <ComboBoxItem Content="Toggle OSD" Tag="3"/>
@@ -3829,9 +3912,7 @@
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Text="Menu + ↓" VerticalAlignment="Center" Foreground="#FFFFFF" FontSize="13"/>
                                             <ComboBox x:Name="HotkeyMenuDpadDownComboBox" Grid.Column="1"
-                                                      SelectionChanged="HotkeyMenuDpadDown_SelectionChanged"
-                                                      UseSystemFocusVisuals="True"
-                                                      FocusVisualPrimaryBrush="White">
+                                                      SelectionChanged="HotkeyMenuDpadDown_SelectionChanged">
                                                 <ComboBoxItem Content="Disabled" Tag="0"/>
                                                 <ComboBoxItem Content="Keyboard Shortcut" Tag="1"/>
                                                 <ComboBoxItem Content="Toggle OSD" Tag="3"/>
@@ -3865,9 +3946,7 @@
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Text="Menu + ←" VerticalAlignment="Center" Foreground="#FFFFFF" FontSize="13"/>
                                             <ComboBox x:Name="HotkeyMenuDpadLeftComboBox" Grid.Column="1"
-                                                      SelectionChanged="HotkeyMenuDpadLeft_SelectionChanged"
-                                                      UseSystemFocusVisuals="True"
-                                                      FocusVisualPrimaryBrush="White">
+                                                      SelectionChanged="HotkeyMenuDpadLeft_SelectionChanged">
                                                 <ComboBoxItem Content="Disabled" Tag="0"/>
                                                 <ComboBoxItem Content="Keyboard Shortcut" Tag="1"/>
                                                 <ComboBoxItem Content="Toggle OSD" Tag="3"/>
@@ -3901,9 +3980,7 @@
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Text="Menu + →" VerticalAlignment="Center" Foreground="#FFFFFF" FontSize="13"/>
                                             <ComboBox x:Name="HotkeyMenuDpadRightComboBox" Grid.Column="1"
-                                                      SelectionChanged="HotkeyMenuDpadRight_SelectionChanged"
-                                                      UseSystemFocusVisuals="True"
-                                                      FocusVisualPrimaryBrush="White">
+                                                      SelectionChanged="HotkeyMenuDpadRight_SelectionChanged">
                                                 <ComboBoxItem Content="Disabled" Tag="0"/>
                                                 <ComboBoxItem Content="Keyboard Shortcut" Tag="1"/>
                                                 <ComboBoxItem Content="Toggle OSD" Tag="3"/>
@@ -6266,7 +6343,7 @@
                 </ScrollViewer>
 
                 <!-- SCALING TAB -->
-                <ScrollViewer x:Name="ScalingScrollViewer" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
+                <ScrollViewer x:Name="ScalingScrollViewer" XYFocusUpNavigationStrategy="Projection" XYFocusDownNavigationStrategy="Projection" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
                               BringIntoViewOnFocusChange="True">
                     <StackPanel Padding="16,8,16,16">
 
@@ -6829,7 +6906,7 @@
                 </ScrollViewer>
 
                 <!-- LEGION TAB -->
-                <ScrollViewer x:Name="LegionScrollViewer" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
+                <ScrollViewer x:Name="LegionScrollViewer" XYFocusUpNavigationStrategy="Projection" XYFocusDownNavigationStrategy="Projection" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
                               BringIntoViewOnFocusChange="True">
                     <StackPanel Padding="16,8,16,16">
 
@@ -9223,7 +9300,7 @@
                 </ScrollViewer>
 
                 <!-- GPD TAB -->
-                <ScrollViewer x:Name="GPDScrollViewer" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
+                <ScrollViewer x:Name="GPDScrollViewer" XYFocusUpNavigationStrategy="Projection" XYFocusDownNavigationStrategy="Projection" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
                               BringIntoViewOnFocusChange="True">
                     <StackPanel Padding="16,8,16,16">
 

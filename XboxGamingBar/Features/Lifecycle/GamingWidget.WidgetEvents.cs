@@ -67,6 +67,20 @@ namespace XboxGamingBar
                 Logger.Info($"GamingWidget_VisibleChanged: Visible={isVisible}, DisplayMode={sender?.GameBarDisplayMode.ToString() ?? "Unknown"}");
                 UpdateGameBarForegroundSignal("VisibleChanged");
 
+                // Put gamepad focus on the active tab so the pad can navigate immediately on
+                // open — but only if nothing is focused yet, so we never steal focus from a
+                // user already interacting. Deferred so layout has settled first.
+                if (isVisible)
+                {
+                    var ignoreFocus = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Low, () =>
+                    {
+                        if (FocusManager.GetFocusedElement() == null)
+                        {
+                            FocusActiveNavItem();
+                        }
+                    });
+                }
+
                 // Resize to full height on first activation.
                 // Delay to let Game Bar finish restoring its cached layout first.
                 if (isVisible && !hasAppliedInitialSize && sender != null)

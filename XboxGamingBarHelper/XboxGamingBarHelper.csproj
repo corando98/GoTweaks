@@ -621,6 +621,8 @@
     <Compile Include="Systems\DisplayOrientationProperty.cs" />
     <Compile Include="Systems\HDRSupportedProperty.cs" />
     <Compile Include="Systems\AdaptiveBrightnessModeProperty.cs" />
+    <Compile Include="Systems\PanelBrightnessProperty.cs" />
+    <Compile Include="Systems\PanelBrightnessSupportedProperty.cs" />
     <Compile Include="Systems\AdaptiveBrightnessManager.cs" />
     <Compile Include="Systems\BrightnessManager.cs" />
     <Compile Include="Systems\CPUCoreConfigProperty.cs" />

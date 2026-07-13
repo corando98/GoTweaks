@@ -357,7 +357,28 @@ namespace XboxGamingBar
 
         private void Control_GotFocus(object sender, RoutedEventArgs e)
         {
-            // Card focus highlighting disabled - only controls show focus visuals
+            // Card focus highlighting disabled - only controls show focus visuals.
+            // Scroll the focused control into view so gamepad navigation down a long
+            // tab never leaves the focus ring off-screen.
+            BringFocusedControlIntoView(sender);
+        }
+
+        /// <summary>
+        /// Scrolls the just-focused control into view within its ScrollViewer, keeping the
+        /// gamepad focus ring visible when navigating down long tabs. StartBringIntoView is a
+        /// no-op when the element is already fully visible, so it's safe on every GotFocus.
+        /// </summary>
+        private void BringFocusedControlIntoView(object sender)
+        {
+            try
+            {
+                (sender as FrameworkElement)?.StartBringIntoView(new BringIntoViewOptions
+                {
+                    AnimationDesired = false,
+                    VerticalAlignmentRatio = 0.5 // center the control in the viewport
+                });
+            }
+            catch { /* best-effort scroll assist */ }
         }
 
         private void Control_LostFocus(object sender, RoutedEventArgs e)
@@ -376,6 +397,7 @@ namespace XboxGamingBar
         {
             // Clear card highlight when standalone controls (not in cards) get focus
             ClearCardFocus();
+            BringFocusedControlIntoView(sender);
         }
 
         private void ClearCardFocus()

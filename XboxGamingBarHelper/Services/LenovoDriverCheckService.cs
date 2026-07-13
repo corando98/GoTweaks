@@ -1023,6 +1023,14 @@ namespace XboxGamingBarHelper.Services
                 new[] { "vga", "graphics", "display", "video" },
                 // Audio: catalog "audio", Windows device "sound" / "audio".
                 new[] { "audio", "sound", "hdaudio" },
+                // Energy/Power management: the catalog package "Lenovo Energy Management"
+                // (category "Power Management") installs as an ACPI device whose DeviceName
+                // carries "power" but not "energy" — so catalog {energy,management} and device
+                // {acpi,virtual,power,...} share NO literal tokens and the matcher falsely
+                // reports the driver as not installed. Bridging energy<->power gives the
+                // 2-token overlap the threshold needs (fixes the false "Energy Management
+                // driver" update warning on Legion Go handhelds).
+                new[] { "energy", "power" },
                 // Cardreader: catalog "cardreader", Windows typically "card" / "reader".
                 new[] { "cardreader", "reader" },
                 // Fingerprint reader: catalog "fingerprinter" (typo in Lenovo's catalog), Windows says "fingerprint" / "biometric".

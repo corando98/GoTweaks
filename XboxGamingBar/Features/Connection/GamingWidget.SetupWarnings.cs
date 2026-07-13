@@ -84,6 +84,7 @@ namespace XboxGamingBar
                     SetupWarningsActionButton.IsEnabled = false;
                     // Helper restarts itself after a successful install; the next
                     // SetupWarnings push re-evaluates and clears the banner.
+                    ScheduleInstallButtonTimeout(SetupWarningsActionButton, null, "Install PawnIO", null);
                 }
                 else if (actionable?.Action == "usbip")
                 {
@@ -93,6 +94,7 @@ namespace XboxGamingBar
                     SetupWarningsActionButton.IsEnabled = false;
                     // Helper refreshes UsbipInstalled + re-pushes SetupWarnings when
                     // the installer exits; the banner updates (or clears) from that.
+                    ScheduleInstallButtonTimeout(SetupWarningsActionButton, null, "Install usbip-win2", null);
                 }
             }
             catch (Exception ex)
@@ -109,6 +111,7 @@ namespace XboxGamingBar
                 installUsbip?.TriggerInstall();
                 UsbipInstallButton.Content = "Installing...";
                 UsbipInstallButton.IsEnabled = false;
+                ScheduleInstallButtonTimeout(UsbipInstallButton, null, "Install usbip-win2", null);
             }
             catch (Exception ex)
             {

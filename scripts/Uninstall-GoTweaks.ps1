@@ -28,9 +28,24 @@ param(
 
 $ErrorActionPreference = 'Continue'
 
+# Self-elevate: if not already Administrator, relaunch this script through UAC
+# in a window that stays open. Without this, "Run with PowerShell" opens a
+# non-elevated transient window that just closes the instant the admin check
+# fails — nothing visible happens.
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Write-Error "Run this script as Administrator."
-    exit 1
+    Write-Host "GoTweaks uninstall needs administrator rights. Requesting elevation..." -ForegroundColor Yellow
+    $scriptPath = $PSCommandPath
+    if (-not $scriptPath) { $scriptPath = $MyInvocation.MyCommand.Definition }
+    $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$scriptPath`"")
+    if ($RemoveDrivers) { $argList += '-RemoveDrivers' }
+    try {
+        Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList $argList | Out-Null
+    }
+    catch {
+        Write-Warning "Elevation was cancelled or failed - cannot uninstall without administrator rights."
+        Read-Host "Press Enter to close"
+    }
+    exit
 }
 
 Write-Host "GoTweaks uninstall + system restoration" -ForegroundColor Cyan
@@ -88,3 +103,7 @@ try {
 }
 
 Write-Host "Done. A reboot is recommended if controllers were hidden or drivers removed." -ForegroundColor Cyan
+
+# Keep the elevated window open so the user can read the result instead of it
+# vanishing the moment the script ends.
+Read-Host "Press Enter to close"

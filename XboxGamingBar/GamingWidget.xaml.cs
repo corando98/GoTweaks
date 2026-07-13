@@ -731,6 +731,8 @@ namespace XboxGamingBar
         private readonly HDRSupportedProperty hdrSupported;
         private readonly HDREnabledProperty hdrEnabled;
         private readonly AdaptiveBrightnessModeProperty adaptiveBrightnessMode;
+        private readonly WidgetSliderProperty panelBrightness;
+        private readonly PanelBrightnessSupportedProperty panelBrightnessSupported;
         private readonly TrackedGameProperty trackedGame;
         private readonly RTSSInstalledProperty rtssInstalled;
         private readonly IsForegroundProperty isForeground;
@@ -1417,6 +1419,23 @@ namespace XboxGamingBar
             hdrSupported = new HDRSupportedProperty(HDRToggle, this);
             hdrEnabled = new HDREnabledProperty(HDRToggle, this);
             adaptiveBrightnessMode = new AdaptiveBrightnessModeProperty(AdaptiveBrightnessModeComboBox, this);
+            // Slider ValueChanged (PanelBrightnessSlider_ValueChanged) updates the % label on
+            // both user drags and helper-pushed sync (the base sets UI.Value), so no extra hook.
+            panelBrightness = new WidgetSliderProperty(50, Shared.Enums.Function.PanelBrightness, PanelBrightnessSlider, this);
+            panelBrightnessSupported = new PanelBrightnessSupportedProperty(PanelBrightnessSlider, this);
+            panelBrightnessSupported.SetAdditionalCallback(supported =>
+            {
+                // When docked to an external-only display, brightness isn't controllable —
+                // dim the row and swap the caption so the slider doesn't look interactive.
+                if (PanelBrightnessValueText != null)
+                    PanelBrightnessValueText.Opacity = supported ? 1.0 : 0.4;
+                if (PanelBrightnessRow != null)
+                    PanelBrightnessRow.Opacity = supported ? 1.0 : 0.5;
+                if (PanelBrightnessUnsupportedText != null)
+                    PanelBrightnessUnsupportedText.Text = supported
+                        ? "Adjusts the built-in display"
+                        : "Unavailable on an external display";
+            });
             trackedGame = new TrackedGameProperty(new TrackedGame());
             rtssInstalled = new RTSSInstalledProperty(PerformanceOverlaySlider, this);
             rtssInstalled.SetAdditionalCallback(UpdateFPSLimitControls);
@@ -1830,6 +1849,8 @@ namespace XboxGamingBar
                 hdrSupported,
                 hdrEnabled,
                 adaptiveBrightnessMode,
+                panelBrightness,
+                panelBrightnessSupported,
                 trackedGame,
                 rtssInstalled,
                 isForeground,
@@ -2123,6 +2144,10 @@ namespace XboxGamingBar
 
             // Load TDP preset customization settings
             LoadTdpPresetsSettings();
+
+            // Apply the "Hide Advanced Options" preference (default ON — hides the Performance
+            // Advanced card and OS Power Mode for a simpler default view).
+            LoadHideAdvancedOptions();
 
             // Initialize CPU State comboboxes with percentage values
             InitializeCPUStateComboBoxes();

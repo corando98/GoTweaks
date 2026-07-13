@@ -23,14 +23,19 @@ namespace XboxGamingBarHelper.Power
             // This prevents overwriting system settings on first startup/sync
             if (!_hasUserModified)
             {
-                // Check if the value actually changed from the initial system value
-                if (Value != _initialValue)
+                // Apply when the value diverged from the initial system read, OR when it arrives at
+                // runtime with the widget connected (a genuine user/profile change). The incoming value
+                // can legitimately EQUAL our stale initial when the real hardware state drifted in the
+                // meantime (another control/profile/power-plan changed it), in which case the old
+                // equality-only skip left boost in the wrong state. Only skip the pre-connect
+                // fresh-startup echo of an unchanged value.
+                if (Value != _initialValue || Program.IsPipeConnected)
                 {
                     _hasUserModified = true;
                 }
                 else
                 {
-                    // Value is same as initial - this is just a sync, don't write to system
+                    // Value is same as initial and no widget yet - fresh-startup sync, don't write to system
                     Logger.Debug($"CPU Boost: Skipping system write - value unchanged from initial ({Value})");
                     return;
                 }

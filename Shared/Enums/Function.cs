@@ -520,5 +520,15 @@
         // Empty array = all clear. Widget shows a dismissible warning banner; dismissal
         // is keyed on the array content so NEW warnings resurface it.
         SetupWarnings,                                      // string JSON - see format above
+
+        // Built-in display (panel) brightness, 0-100 %. Helper seeds the real current
+        // brightness on BatchGet via BrightnessManager (WMI); widget slider Set applies
+        // it live. Optional Quick-tab slider (#50), hidden by default under Customize.
+        PanelBrightness,                                    // int 0-100
+
+        // Read-only: is the built-in panel brightness controllable right now? False when
+        // docked to an external-only display (built-in panel not in active config). Widget
+        // grays out + blocks the brightness slider so it never silently no-ops. (#50)
+        PanelBrightnessSupported,                           // bool
     }
 }

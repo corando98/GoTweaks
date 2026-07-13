@@ -1802,6 +1802,27 @@ namespace XboxGamingBar
             }
         }
 
+        // A prereq install button flips to "Installing..." optimistically and relies on an
+        // …Installed bool going false->true to reset. If the install FAILS the value stays
+        // false, the helper's re-push of false is echo-suppressed (GenericProperty equality
+        // skip), the completion callback never fires, and the button is stuck on "Installing..."
+        // until app restart. This safety net resets any button still showing "Installing..."
+        // after the timeout so it can be retried without a restart.
+        private const int PREREQ_INSTALL_TIMEOUT_MS = 45000;
+
+        private async void ScheduleInstallButtonTimeout(Windows.UI.Xaml.Controls.Button button,
+            Windows.UI.Xaml.Controls.TextBlock statusText, string idleContent, string idleStatusText)
+        {
+            await Task.Delay(PREREQ_INSTALL_TIMEOUT_MS);
+            if (button != null && (button.Content as string) == "Installing...")
+            {
+                Logger.Warn("Prerequisite install did not report completion within the timeout - resetting button (install may have failed; check the helper log)");
+                button.Content = idleContent;
+                button.IsEnabled = true;
+                if (statusText != null && idleStatusText != null) statusText.Text = idleStatusText;
+            }
+        }
+
         private void LabsUsbipInstallButton_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -1817,6 +1838,8 @@ namespace XboxGamingBar
                 {
                     ViGEmBusStatusText.Text = "Status: Installing...";
                 }
+                ScheduleInstallButtonTimeout(ViGEmBusInstallButton, ViGEmBusStatusText,
+                    "Install usbip-win2", "Status: Install may have failed - check the log");
             }
             catch (Exception ex)
             {
@@ -1867,6 +1890,8 @@ namespace XboxGamingBar
                 }
 
                 installHidHide?.TriggerInstall();
+                ScheduleInstallButtonTimeout(ControllerEmulationHidHideInstallButton, ControllerEmulationHidHideStatusText,
+                    "Install HidHide", "HidHide: Install may have failed - check the log");
                 Logger.Info("HidHide installation triggered, waiting for helper response...");
             }
             catch (Exception ex)
@@ -1956,8 +1981,8 @@ namespace XboxGamingBar
 
                 legionLightColor?.OnColorChanged(args.NewColor);
 
-                // Save to controller profile (handler is detached during profile loading)
-                ControllerSettingChanged(sender, null);
+                // Save to controller profile (debounced - color picker fires continuously while dragging)
+                ControllerSliderSettingChanged(sender, null);
             }
             catch (Exception ex)
             {
@@ -1977,8 +2002,8 @@ namespace XboxGamingBar
                     int brightness = (int)LegionBrightnessSlider.Value;
                     LegionBrightnessValue.Text = $"{brightness}%";
                 }
-                // Save to controller profile
-                ControllerSettingChanged(sender, null);
+                // Save to controller profile (debounced - slider fires continuously while dragging)
+                ControllerSliderSettingChanged(sender, null);
             }
             catch (Exception ex)
             {
@@ -1999,8 +2024,8 @@ namespace XboxGamingBar
                     LegionSpeedValue.Text = $"{speed}%";
                 }
 
-                // Save to controller profile (ControllerSettingChanged checks for loading state)
-                ControllerSettingChanged(sender, null);
+                // Save to controller profile (debounced - slider fires continuously while dragging)
+                ControllerSliderSettingChanged(sender, null);
             }
             catch (Exception ex)
             {
