@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading;
 using NLog;
@@ -75,6 +76,18 @@ namespace XboxGamingBarHelper.Core
         private ushort _comboButton = 0;
         private const int COMBO_HOLD_MS = 50; // How long buttons must be held together
 
+        // Quick-tile controller combos (arbitrary >=2-button bitmask -> callback). Runs
+        // alongside the fixed legacy combos above. Standard buttons use XInput bit values;
+        // Legion back paddles arrive as high bits via SetExtraButtons (fed from
+        // LegionButtonMonitor.ButtonEdge, since XInput can't see them).
+        private readonly object _tileHotkeyLock = new object();
+        private readonly Dictionary<uint, Action> _tileHotkeys = new Dictionary<uint, Action>();
+        private readonly Dictionary<uint, string> _tileHotkeyNames = new Dictionary<uint, string>();
+        private volatile uint _extraButtonBits = 0;   // Legion paddle bits (0x10000+)
+        private uint _activeTileMask = 0;              // latched match, cleared on release (no re-fire)
+        private uint _tileComboCandidate = 0;
+        private DateTime _tileComboStart = DateTime.MinValue;
+
         // Thread control
         private Thread _monitorThread;
         private volatile bool _running;
@@ -113,6 +126,38 @@ namespace XboxGamingBarHelper.Core
         /// True when the polling thread is currently running.
         /// </summary>
         public bool IsRunning => _running;
+
+        /// <summary>True when any quick-tile combo is registered (keeps the poll thread alive).</summary>
+        public bool HasTileHotkeys { get { lock (_tileHotkeyLock) { return _tileHotkeys.Count > 0; } } }
+
+        /// <summary>Register a tile combo. mask is the OR of ControllerComboButtons bits (>=2).</summary>
+        public void RegisterTileHotkey(uint mask, Action callback, string name)
+        {
+            if (mask == 0 || callback == null) return;
+            lock (_tileHotkeyLock)
+            {
+                _tileHotkeys[mask] = callback;
+                _tileHotkeyNames[mask] = name ?? "";
+            }
+        }
+
+        public void ClearTileHotkeys()
+        {
+            lock (_tileHotkeyLock)
+            {
+                _tileHotkeys.Clear();
+                _tileHotkeyNames.Clear();
+            }
+            _activeTileMask = 0;
+            _tileComboCandidate = 0;
+            _tileComboStart = DateTime.MinValue;
+        }
+
+        /// <summary>
+        /// Feed the current Legion back-paddle state (high bits, Y1-Y3 / M1-M3) from
+        /// LegionButtonMonitor. These are OR-ed into the XInput mask when matching tile combos.
+        /// </summary>
+        public void SetExtraButtons(uint extraBits) => _extraButtonBits = extraBits;
 
         public ControllerHotkeyMonitor()
         {
@@ -188,6 +233,8 @@ namespace XboxGamingBarHelper.Core
             {
                 try
                 {
+                    ushort combinedXInput = 0;
+
                     // Poll all 4 possible controller slots and process input from any with button activity
                     // This handles cases where ViGEmController is on a different slot than the real controller
                     for (uint i = 0; i < 4; i++)
@@ -201,6 +248,8 @@ namespace XboxGamingBarHelper.Core
                                 Logger.Info($"ControllerHotkeyMonitor: Controller {i} connected");
                                 wasConnected[i] = true;
                             }
+
+                            combinedXInput |= state.Gamepad.wButtons;
 
                             // Process if state changed for this controller
                             if (state.dwPacketNumber != lastPacketNumbers[i])
@@ -221,6 +270,14 @@ namespace XboxGamingBarHelper.Core
                             wasConnected[i] = false;
                             lastPacketNumbers[i] = 0;
                         }
+                    }
+
+                    // Quick-tile combos are evaluated every pass (not gated on XInput packet
+                    // changes) so all-paddle combos and the hold timer still work when the
+                    // sticks are perfectly still. Cheap no-op when none are registered.
+                    if (HasTileHotkeys)
+                    {
+                        EvaluateTileHotkeys((uint)combinedXInput | _extraButtonBits);
                     }
                 }
                 catch (Exception ex)
@@ -321,6 +378,86 @@ namespace XboxGamingBarHelper.Core
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Match the current combined button state against registered tile combos. Fires the
+        /// most-specific (most-buttons) fully-satisfied combo after a short hold, and latches
+        /// it so it can't re-fire until the buttons are released.
+        /// </summary>
+        private void EvaluateTileHotkeys(uint combined)
+        {
+            KeyValuePair<uint, Action>[] snapshot;
+            lock (_tileHotkeyLock)
+            {
+                if (_tileHotkeys.Count == 0) return;
+                snapshot = new KeyValuePair<uint, Action>[_tileHotkeys.Count];
+                int n = 0;
+                foreach (var kv in _tileHotkeys) snapshot[n++] = kv;
+            }
+
+            // Pick the fully-satisfied combo with the most buttons (so Menu+A+M1 wins over Menu+A).
+            uint bestMask = 0;
+            Action bestCb = null;
+            int bestBits = 0;
+            foreach (var kv in snapshot)
+            {
+                uint mask = kv.Key;
+                int bits = CountBits(mask);
+                if (bits < 2) continue;
+                if ((combined & mask) == mask && bits > bestBits)
+                {
+                    bestBits = bits;
+                    bestMask = mask;
+                    bestCb = kv.Value;
+                }
+            }
+
+            if (bestMask == 0)
+            {
+                _tileComboCandidate = 0;
+                _tileComboStart = DateTime.MinValue;
+                // Clear the latch once the previously-fired combo's buttons are released.
+                if (_activeTileMask != 0 && (combined & _activeTileMask) != _activeTileMask)
+                    _activeTileMask = 0;
+                return;
+            }
+
+            // Already fired and still held - wait for release.
+            if (_activeTileMask == bestMask) return;
+
+            if (_tileComboCandidate != bestMask)
+            {
+                _tileComboCandidate = bestMask;
+                _tileComboStart = DateTime.Now;
+                return;
+            }
+
+            if (_tileComboStart != DateTime.MinValue &&
+                (DateTime.Now - _tileComboStart).TotalMilliseconds >= COMBO_HOLD_MS)
+            {
+                _activeTileMask = bestMask;
+                _tileComboCandidate = 0;
+                _tileComboStart = DateTime.MinValue;
+
+                string name;
+                lock (_tileHotkeyLock) { _tileHotkeyNames.TryGetValue(bestMask, out name); }
+                Logger.Info($"ControllerHotkeyMonitor: tile combo '{name}' (mask=0x{bestMask:X}) triggered");
+
+                var cb = bestCb;
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try { cb(); }
+                    catch (Exception ex) { Logger.Error($"ControllerHotkeyMonitor: tile combo callback error: {ex.Message}"); }
+                });
+            }
+        }
+
+        private static int CountBits(uint v)
+        {
+            int c = 0;
+            while (v != 0) { v &= (v - 1); c++; }
+            return c;
         }
 
         /// <summary>

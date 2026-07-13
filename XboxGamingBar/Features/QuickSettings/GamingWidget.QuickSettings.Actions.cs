@@ -45,6 +45,25 @@ namespace XboxGamingBar
     {
 
         /// <summary>
+        /// Re-dispatch a tile activation that came from a controller combo (helper push).
+        /// Runs the exact same path as a physical tile tap so behavior is identical.
+        /// </summary>
+        private void SimulateTileHotkeyFired(string tileId)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(tileId)) return;
+                Logger.Info($"Controller combo fired tile: {tileId}");
+                var fake = new Windows.UI.Xaml.Controls.Button { Tag = tileId };
+                QuickSettingsTile_Click(fake, null);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"SimulateTileHotkeyFired error: {ex.Message}");
+            }
+        }
+
+        /// <summary>
         /// Handle Quick Settings tile clicks
         /// </summary>
         private void QuickSettingsTile_Click(object sender, RoutedEventArgs e)

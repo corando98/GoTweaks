@@ -62,6 +62,7 @@ namespace XboxGamingBar
             public bool IsAction { get; set; } = false;   // True for action tiles (Task Manager, Explorer, etc.) - shown at bottom
             public string CustomShortcut { get; set; }    // For custom shortcut tiles
             public int Order { get; set; } = 0;           // Display order (lower = first)
+            public string ControllerHotkey { get; set; }  // Decimal string of a ControllerComboButtons bitmask, or null/"" if unbound
             public Button TileButton { get; set; }
             public TextBlock StateText { get; set; }
             public CheckBox VisibilityCheckBox { get; set; }
@@ -550,6 +551,10 @@ namespace XboxGamingBar
                     {
                         tile.Order = order;
                     }
+                    if (settings.Values.TryGetValue($"QS_{tile.Id}_Hotkey", out object hkVal) && hkVal is string hk)
+                    {
+                        tile.ControllerHotkey = hk;
+                    }
                 }
 
                 Logger.Info($"Quick Settings config loaded (columns: {qsColumnCount})");
@@ -576,9 +581,11 @@ namespace XboxGamingBar
                 {
                     settings.Values[$"QS_{tile.Id}_Visible"] = tile.IsVisible;
                     settings.Values[$"QS_{tile.Id}_Order"] = tile.Order;
+                    settings.Values[$"QS_{tile.Id}_Hotkey"] = tile.ControllerHotkey ?? "";
                 }
 
                 Logger.Info($"Quick Settings config saved (columns: {qsColumnCount})");
+                SendTileHotkeysToHelper();
             }
             catch (Exception ex)
             {
@@ -717,6 +724,174 @@ namespace XboxGamingBar
             catch (Exception ex)
             {
                 Logger.Error($"Error sending controller hotkey config: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Send all tiles that have a controller-combo binding to the helper as a JSON array
+        /// [{ "id", "name", "mask" }]. Sent on config save and on pipe connect.
+        /// </summary>
+        internal void SendTileHotkeysToHelper()
+        {
+            try
+            {
+                if (!App.IsConnected) return;
+
+                var arr = new Windows.Data.Json.JsonArray();
+                foreach (var tile in qsTileDefinitions)
+                {
+                    if (string.IsNullOrEmpty(tile.ControllerHotkey)) continue;
+                    if (!uint.TryParse(tile.ControllerHotkey, out uint mask) || mask == 0) continue;
+
+                    var o = new Windows.Data.Json.JsonObject
+                    {
+                        ["id"] = Windows.Data.Json.JsonValue.CreateStringValue(tile.Id),
+                        ["name"] = Windows.Data.Json.JsonValue.CreateStringValue(tile.Name ?? ""),
+                        ["mask"] = Windows.Data.Json.JsonValue.CreateNumberValue(mask)
+                    };
+                    arr.Add(o);
+                }
+
+                var request = new Windows.Foundation.Collections.ValueSet
+                {
+                    { "Command", (int)Shared.Enums.Command.Set },
+                    { "Function", (int)Shared.Enums.Function.TileHotkeyConfig },
+                    { "Content", arr.Stringify() }
+                };
+                App.PipeClient?.SendValueSet(request);
+                Logger.Info($"Sent {arr.Count} tile hotkey binding(s) to helper");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error sending tile hotkeys: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// The small "assign controller combo" button shown under each tile in edit mode.
+        /// Shows the current combo (e.g. "Menu+A") or "+ Combo" when unbound.
+        /// </summary>
+        private Button CreateTileComboBindButton(TileDefinition tile)
+        {
+            uint mask = 0;
+            if (!string.IsNullOrEmpty(tile.ControllerHotkey)) uint.TryParse(tile.ControllerHotkey, out mask);
+            bool bound = mask != 0;
+            string label = bound ? Shared.Input.ControllerComboButtons.MaskToString(mask) : "+ Combo";
+
+            var btn = new Button
+            {
+                Content = new TextBlock { Text = label, FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis },
+                Tag = tile.Id,
+                Margin = new Thickness(0, 2, 0, 0),
+                Padding = new Thickness(4, 2, 4, 2),
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                Foreground = new SolidColorBrush(bound
+                    ? Windows.UI.Color.FromArgb(255, 120, 200, 255)
+                    : Windows.UI.Color.FromArgb(255, 150, 150, 150))
+            };
+            btn.Click += (s, e) => OpenTileComboFlyout(tile, btn);
+            return btn;
+        }
+
+        /// <summary>
+        /// Popup to assign a controller-button combo to a tile. Multi-select checkbox list
+        /// (deliberately not press-to-capture: a physical button press would dismiss the Game
+        /// Bar overlay). Requires >= 2 buttons. Saving persists + syncs to the helper.
+        /// </summary>
+        private void OpenTileComboFlyout(TileDefinition tile, FrameworkElement anchor)
+        {
+            try
+            {
+                uint currentMask = 0;
+                if (!string.IsNullOrEmpty(tile.ControllerHotkey)) uint.TryParse(tile.ControllerHotkey, out currentMask);
+
+                var panel = new StackPanel { MinWidth = 240 };
+                panel.Children.Add(new TextBlock
+                {
+                    Text = $"Combo for {tile.Name}",
+                    FontWeight = Windows.UI.Text.FontWeights.SemiBold,
+                    Margin = new Thickness(0, 0, 0, 2)
+                });
+                panel.Children.Add(new TextBlock
+                {
+                    Text = "Pick 2 or more buttons. Hold them together to activate this tile.",
+                    FontSize = 11,
+                    Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 150, 150, 150)),
+                    TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(0, 0, 0, 6)
+                });
+
+                var grid = new Grid();
+                grid.ColumnDefinitions.Add(new ColumnDefinition());
+                grid.ColumnDefinitions.Add(new ColumnDefinition());
+                var buttons = Shared.Input.ControllerComboButtons.All;
+                int rows = (buttons.Length + 1) / 2;
+                for (int r = 0; r < rows; r++) grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+                var checks = new List<(CheckBox cb, uint bit)>();
+                for (int i = 0; i < buttons.Length; i++)
+                {
+                    var b = buttons[i];
+                    var cb = new CheckBox
+                    {
+                        Content = b.Label,
+                        IsChecked = (currentMask & b.Bit) == b.Bit,
+                        FontSize = 12,
+                        MinWidth = 0,
+                        Margin = new Thickness(0, -2, 0, -2)
+                    };
+                    checks.Add((cb, b.Bit));
+                    Grid.SetColumn(cb, i % 2);
+                    Grid.SetRow(cb, i / 2);
+                    grid.Children.Add(cb);
+                }
+                panel.Children.Add(grid);
+
+                var status = new TextBlock
+                {
+                    FontSize = 11,
+                    Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 220, 130, 130)),
+                    Margin = new Thickness(0, 4, 0, 0)
+                };
+                panel.Children.Add(status);
+
+                var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 0) };
+                var saveBtn = new Button { Content = "Save", Margin = new Thickness(0, 0, 6, 0) };
+                var clearBtn = new Button { Content = "Clear" };
+                row.Children.Add(saveBtn);
+                row.Children.Add(clearBtn);
+                panel.Children.Add(row);
+
+                var flyout = new Flyout { Content = new ScrollViewer { Content = panel, MaxHeight = 380 } };
+
+                saveBtn.Click += (s, e) =>
+                {
+                    uint mask = 0;
+                    foreach (var c in checks) if (c.cb.IsChecked == true) mask |= c.bit;
+                    if (Shared.Input.ControllerComboButtons.BitCount(mask) < 2)
+                    {
+                        status.Text = "Pick at least 2 buttons.";
+                        return;
+                    }
+                    tile.ControllerHotkey = mask.ToString();
+                    SaveQuickSettingsConfig();   // persists + SendTileHotkeysToHelper
+                    flyout.Hide();
+                    RebuildQuickSettingsTiles();
+                };
+                clearBtn.Click += (s, e) =>
+                {
+                    tile.ControllerHotkey = null;
+                    SaveQuickSettingsConfig();
+                    flyout.Hide();
+                    RebuildQuickSettingsTiles();
+                };
+
+                flyout.ShowAt(anchor);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"OpenTileComboFlyout error: {ex.Message}");
             }
         }
     }

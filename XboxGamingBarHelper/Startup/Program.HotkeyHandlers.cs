@@ -84,6 +84,11 @@ namespace XboxGamingBarHelper
                 controllerHotkeyMonitor = new ControllerHotkeyMonitor();
                 controllerHotkeyMonitor.LoadSettings();
 
+                // Bridge Legion back-paddle presses into the combo monitor (XInput can't see them).
+                Labs.LegionButtonMonitor.ButtonEdge -= OnLegionButtonEdgeForHotkeys;
+                Labs.LegionButtonMonitor.ButtonEdge += OnLegionButtonEdgeForHotkeys;
+                Logger.Info("ControllerHotkey: Legion paddle bridge wired to ButtonEdge (aux -> tile combos)");
+
                 // Set up callbacks for each combo
                 // These will execute the same actions as the Xbox Game Bar hotkey watchers
                 // Names must match widget's LocalSettings keys (without "Hotkey_" prefix)
@@ -122,7 +127,7 @@ namespace XboxGamingBarHelper
         private static void SyncControllerHotkeyMonitorRunState()
         {
             if (controllerHotkeyMonitor == null) return;
-            bool shouldRun = controllerHotkeyMonitor.AnyComboEnabled;
+            bool shouldRun = controllerHotkeyMonitor.AnyComboEnabled || controllerHotkeyMonitor.HasTileHotkeys;
             bool isRunning = controllerHotkeyMonitor.IsRunning;
             if (shouldRun && !isRunning)
             {
@@ -133,6 +138,120 @@ namespace XboxGamingBarHelper
             {
                 controllerHotkeyMonitor.Stop();
                 Logger.Info("Controller hotkey monitor stopped (no combos enabled)");
+            }
+        }
+
+        // ---- Quick-tile controller combos ----
+
+        private static uint _legionExtraBits = 0;
+
+        /// <summary>
+        /// Widget-&gt;helper: JSON array of tiles with a controller-combo binding
+        /// [{ "id":..., "name":..., "mask":&lt;uint&gt; }]. Registers each with the monitor.
+        /// </summary>
+        private static void ApplyTileHotkeys(string json)
+        {
+            try
+            {
+                if (controllerHotkeyMonitor == null)
+                {
+                    Logger.Warn("ApplyTileHotkeys: monitor not initialized");
+                    return;
+                }
+
+                controllerHotkeyMonitor.ClearTileHotkeys();
+
+                int count = 0;
+                if (!string.IsNullOrWhiteSpace(json))
+                {
+                    using (var doc = System.Text.Json.JsonDocument.Parse(json))
+                    {
+                        if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+                        {
+                            foreach (var el in doc.RootElement.EnumerateArray())
+                            {
+                                string id = el.TryGetProperty("id", out var idEl) ? idEl.GetString() : null;
+                                string name = el.TryGetProperty("name", out var nEl) ? nEl.GetString() : "";
+                                uint mask = 0;
+                                // mask can exceed int range (Legion paddle high bits) - read as long.
+                                if (el.TryGetProperty("mask", out var mEl) && mEl.TryGetInt64(out var m)) mask = (uint)m;
+                                if (string.IsNullOrEmpty(id) || mask == 0) continue;
+
+                                string capturedId = id;
+                                string capturedName = name;
+                                controllerHotkeyMonitor.RegisterTileHotkey(mask,
+                                    () => FireTileHotkeyToWidget(capturedId, capturedName), name);
+                                Logger.Info($"ControllerHotkey: registered tile combo '{name}' id={id} mask=0x{mask:X}");
+                                count++;
+                            }
+                        }
+                    }
+                }
+
+                SyncControllerHotkeyMonitorRunState();
+                Logger.Info($"ApplyTileHotkeys: registered {count} tile combo(s)");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"ApplyTileHotkeys error: {ex.Message}");
+            }
+        }
+
+        /// <summary>Helper-&gt;widget: tell the widget a tile combo fired so it runs the tile action.</summary>
+        private static void FireTileHotkeyToWidget(string tileId, string name)
+        {
+            try
+            {
+                if (!IsPipeConnected)
+                {
+                    Logger.Info($"Tile combo '{name}' fired but widget not connected - id={tileId}");
+                    return;
+                }
+                var msg = new Shared.IPC.PipeMessage
+                {
+                    Command = Shared.Enums.Command.Set,
+                    Function = Shared.Enums.Function.TileHotkeyFired,
+                    Content = tileId
+                };
+                SendPipeMessage(msg);
+                Logger.Info($"Tile combo '{name}' -> widget (id={tileId})");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"FireTileHotkeyToWidget error: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Bridges Legion back-paddle presses (Y1-Y3 / M1-M3, invisible to XInput) into the
+        /// combo monitor as high bits. Subscribed to LegionButtonMonitor.ButtonEdge.
+        /// </summary>
+        private static void OnLegionButtonEdgeForHotkeys(object sender, Labs.LegionButtonEdgeEventArgs e)
+        {
+            uint bit = LegionButtonToComboBit(e.Button);
+            if (bit == 0) return;
+            if (e.Pressed) _legionExtraBits |= bit;
+            else _legionExtraBits &= ~bit;
+            controllerHotkeyMonitor?.SetExtraButtons(_legionExtraBits);
+            // Debug-level trace of paddle edges reaching the combo bridge (kept for future
+            // diagnosis; not logged at INFO to avoid noise on every paddle press).
+            Logger.Debug($"ControllerHotkey: paddle {e.Button} {(e.Pressed ? "down" : "up")} -> bit=0x{bit:X}, extraBits=0x{_legionExtraBits:X}");
+        }
+
+        private static uint LegionButtonToComboBit(Labs.LegionInputButton b)
+        {
+            // Physical->LegionInputButton verified on hardware by pressing Y1,Y2,Y3,M1,M2,M3 in
+            // order (diagnostic log 2026-07-13): Y1=ExtraL1, Y2=ExtraL2, Y3=ExtraR1, M1=ExtraRM1,
+            // M2=ExtraR3, M3=ExtraR2. (The ViiperInputForwarder comment had Y1/Y2 and R2/R3 flipped.)
+            switch (b)
+            {
+                case Labs.LegionInputButton.ExtraL1:  return Shared.Input.ControllerComboButtons.LegionY1;
+                case Labs.LegionInputButton.ExtraL2:  return Shared.Input.ControllerComboButtons.LegionY2;
+                case Labs.LegionInputButton.ExtraR1:  return Shared.Input.ControllerComboButtons.LegionY3;
+                case Labs.LegionInputButton.ExtraRM1: return Shared.Input.ControllerComboButtons.LegionM1;
+                case Labs.LegionInputButton.ExtraR3:  return Shared.Input.ControllerComboButtons.LegionM2;
+                case Labs.LegionInputButton.ExtraR2:  return Shared.Input.ControllerComboButtons.LegionM3;
+                default: return 0;
             }
         }
 

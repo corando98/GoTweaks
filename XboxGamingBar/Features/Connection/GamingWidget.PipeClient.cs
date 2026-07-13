@@ -95,6 +95,19 @@ namespace XboxGamingBar
                     return;
                 }
 
+                // A quick-tile controller combo fired on the helper — run the tile action.
+                if (message.TryGetValue("Function", out object thFuncObj) &&
+                    Convert.ToInt32(thFuncObj) == (int)Shared.Enums.Function.TileHotkeyFired)
+                {
+                    if (message.TryGetValue("Content", out object thContent) && thContent is string tileId
+                        && !string.IsNullOrEmpty(tileId))
+                    {
+                        await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal,
+                            () => SimulateTileHotkeyFired(tileId));
+                    }
+                    return;
+                }
+
                 // Check for Quick Metrics push from helper
                 if (message.TryGetValue("Function", out object qmFuncObj) &&
                     Convert.ToInt32(qmFuncObj) == (int)Shared.Enums.Function.QuickMetrics)

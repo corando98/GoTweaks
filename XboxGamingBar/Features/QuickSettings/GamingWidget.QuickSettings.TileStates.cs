@@ -79,8 +79,26 @@ namespace XboxGamingBar
 
                 var tile = tilesToShow[i];
                 var tileButton = CreateTileButton(tile);
-                Grid.SetColumn(tileButton, colIndex * 2);
-                currentRow.Children.Add(tileButton);
+
+                // In edit mode, stack a controller-combo bind button under each tile so a
+                // combo can be assigned to activate it (helper fires it via ControllerHotkeyMonitor).
+                FrameworkElement cellContent = tileButton;
+                if (qsEditMode)
+                {
+                    var cell = new Grid();
+                    cell.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                    cell.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                    Grid.SetRow(tileButton, 0);
+                    cell.Children.Add(tileButton);
+
+                    var bindButton = CreateTileComboBindButton(tile);
+                    Grid.SetRow(bindButton, 1);
+                    cell.Children.Add(bindButton);
+                    cellContent = cell;
+                }
+
+                Grid.SetColumn(cellContent, colIndex * 2);
+                currentRow.Children.Add(cellContent);
 
                 colIndex++;
                 if (colIndex >= qsColumnCount)

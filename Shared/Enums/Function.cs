@@ -530,5 +530,14 @@
         // docked to an external-only display (built-in panel not in active config). Widget
         // grays out + blocks the brightness slider so it never silently no-ops. (#50)
         PanelBrightnessSupported,                           // bool
+
+        // Quick-tile controller combos. Widget -> helper: JSON array of tiles that have a
+        // controller-combo binding [{ "id":..., "name":..., "mask":<uint> }]. Helper
+        // registers each mask with ControllerHotkeyMonitor. Sent on save + on pipe connect.
+        TileHotkeyConfig,               // string JSON - tile combo bindings (widget -> helper)
+
+        // Helper -> widget push: a registered tile combo fired. Content = the tile id/tag.
+        // Widget re-dispatches it through the normal tile-click handler (SimulateTileHotkeyFired).
+        TileHotkeyFired,                // string - tile id/tag that the combo activated (helper -> widget)
     }
 }

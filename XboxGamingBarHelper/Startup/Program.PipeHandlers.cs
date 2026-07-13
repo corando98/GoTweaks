@@ -959,6 +959,12 @@ namespace XboxGamingBarHelper
                         ApplyControllerHotkeyConfig(configJson);
                     }
                 }
+                // Quick-tile controller combos: JSON array of tiles with a combo binding.
+                // Content may be "" to clear all bindings.
+                else if (functionValue == (int)Function.TileHotkeyConfig)
+                {
+                    ApplyTileHotkeys(request.Content?.ToString() ?? "");
+                }
                 // Profile Save Flags: which settings the widget wants captured per-game vs.
                 // left as device-wide globals. Routes helper-side writes in the AutoTDP and
                 // Legion controller setting handlers.
