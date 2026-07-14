@@ -162,12 +162,29 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         /// </summary>
         public void IngestDeviceStatus(LegionGoStatus status)
         {
+            _lastButtonMonitorStatusUtc = DateTime.UtcNow;
             OnControllerDeviceStatusUpdated(this, status);
         }
+
+        // Last time the button monitor fed a b0:01 status (it owns the HID handle on
+        // Legion Go 2, so its data is authoritative there).
+        private DateTime _lastButtonMonitorStatusUtc = DateTime.MinValue;
 
         private void OnControllerDeviceStatusUpdated(object sender, LegionGoStatus status)
         {
             if (status == null) return;
+
+            // While the button monitor is actively ingesting, drop status events from the
+            // controllerService's own read loop: on Go 2 its reads return default values
+            // (le=true, br=100, sp=50, no byte-6 flag knowledge), and the two sources
+            // alternating made the widget's light state flap on/off (observed 2026-07-14).
+            if (!ReferenceEquals(sender, this) &&
+                (DateTime.UtcNow - _lastButtonMonitorStatusUtc).TotalSeconds < 30)
+            {
+                Logger.Debug("Ignoring controllerService device-status while button monitor is active");
+                return;
+            }
+
             try
             {
                 // Cache the true hardware light brightness/color/speed from the readback so the
@@ -244,6 +261,32 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             catch (Exception ex)
             {
                 Logger.Warn($"Failed to sync device status to widget: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Re-pushes the cached controller battery/charging/connection state to the widget.
+        /// Called on every widget pipe connect: the button monitor only pushes on CHANGE, so
+        /// values set while no widget was connected (typical at boot — helper starts first,
+        /// battery pins at 100% docked and never changes again) would otherwise never reach
+        /// a widget that connects later, leaving it on its defaults ("--" / Detached).
+        /// ForceSetValue bypasses the equality-skip so the push always goes out.
+        /// </summary>
+        public void ResyncControllerStatusToWidget()
+        {
+            try
+            {
+                ControllerBatteryLeft.ForceSetValue(leftControllerBattery);
+                ControllerBatteryRight.ForceSetValue(rightControllerBattery);
+                ControllerChargingLeft.ForceSetValue(leftControllerCharging);
+                ControllerChargingRight.ForceSetValue(rightControllerCharging);
+                ControllerConnectedLeft.ForceSetValue(leftControllerConnected);
+                ControllerConnectedRight.ForceSetValue(rightControllerConnected);
+                Logger.Info($"Controller status resynced to widget: L={leftControllerBattery}% (conn={leftControllerConnected}) R={rightControllerBattery}% (conn={rightControllerConnected})");
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"ResyncControllerStatusToWidget failed: {ex.Message}");
             }
         }
 

@@ -2199,6 +2199,11 @@ namespace XboxGamingBarHelper.Labs
         ///   [8..10]=R,G,B, [11]=brightness%, [13]=speed-raw, [15]=vibration, [18]=touchpad,
         ///   [21,22]=L/R battery, [28..31]=firmware.
         /// </summary>
+        // Debounce state for the b0:01 byte-6 light flag (see RaiseDeviceStatus).
+        private bool? _confirmedLightOn;
+        private bool? _pendingLightOn;
+        private byte _lastLightFlagByte = 0xFF;
+
         private void RaiseDeviceStatus(byte[] buffer)
         {
             var handler = DeviceStatusUpdated;
@@ -2211,11 +2216,57 @@ namespace XboxGamingBarHelper.Labs
                 var status = Devices.Libraries.Legion.LegionGoController.TryParseDeviceStatus(copy);
                 if (status == null) return;
 
-                // Byte 6 is the dedicated on/off flag (0x01=on, 0x02=off), independent of the
-                // animation mode at byte 12. Verified via live capture 2026-05-29 — the canonical
-                // parser's mode!=0xFF heuristic can't tell Off from Solid here (both leave byte 12
-                // at 0x00), so set the explicit flag.
-                if (copy.Length > 6) status.LightOnFlag = copy[6] == 0x01;
+                // Byte 6 is the on/off flag (0x01=on, 0x02=off; Wireshark-confirmed 2026-07-14,
+                // and note the Go 2 firmware does NOT use the 0xFF mode sentinel — mode/RGB/
+                // brightness/speed all keep their values while the light is off, so byte 6 is the
+                // only off signal). However the b0:01 response is a burst of same-header frames
+                // and one frame per burst carries the OPPOSITE flag value (observed flapping
+                // T,T,T,F while the light was untouched), so a single frame is not trustworthy.
+                // Debounce: a state CHANGE requires two consecutive flag frames to agree; the
+                // lone stray frame per burst can therefore never flip the state. Frames with any
+                // other byte-6 value are dropped outright.
+                if (copy.Length > 6)
+                {
+                    bool frameOn;
+                    if (copy[6] == 0x01) frameOn = true;
+                    else if (copy[6] == 0x02) frameOn = false;
+                    else
+                    {
+                        Logger.Debug($"RaiseDeviceStatus: skipping b0:01 frame with byte6=0x{copy[6]:X2} (not an on/off flag frame)");
+                        return;
+                    }
+
+                    // Triage aid: dump the frame whenever the raw flag value transitions, so the
+                    // imposter frame's discriminator bytes can be mapped from user logs.
+                    if (copy[6] != _lastLightFlagByte)
+                    {
+                        _lastLightFlagByte = copy[6];
+                        Logger.Info($"b0:01 flag transition (byte6=0x{copy[6]:X2}): {BitConverter.ToString(copy, 0, Math.Min(32, copy.Length))}");
+                    }
+
+                    if (_confirmedLightOn == null)
+                    {
+                        _confirmedLightOn = frameOn;   // first observation seeds the state
+                    }
+                    else if (frameOn != _confirmedLightOn)
+                    {
+                        if (_pendingLightOn == frameOn)
+                        {
+                            _confirmedLightOn = frameOn;   // second consecutive agreement: real change
+                            _pendingLightOn = null;
+                        }
+                        else
+                        {
+                            _pendingLightOn = frameOn;     // first dissent: hold current state
+                        }
+                    }
+                    else
+                    {
+                        _pendingLightOn = null;            // dissent was a stray frame; reset
+                    }
+
+                    status.LightOnFlag = _confirmedLightOn;
+                }
                 handler(this, status);
             }
             catch (Exception ex)

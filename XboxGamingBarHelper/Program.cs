@@ -854,6 +854,24 @@ namespace XboxGamingBarHelper
                     // force so a freshly-connected widget always gets current state.
                     try { SendSetupWarningsToWidget(force: true); }
                     catch (Exception ex) { Logger.Warn($"Failed to push setup warnings on connect: {ex.Message}"); }
+                    // Controller battery/connection state is change-gated at the source, so a
+                    // widget connecting after the last change (boot: battery pinned at 100%)
+                    // would otherwise show "--" / Detached until something changes. The widget
+                    // can connect while the helper is still constructing its managers (observed:
+                    // connect at helper start +7s with legionManager still null), so wait for the
+                    // manager rather than silently no-op'ing.
+                    _ = System.Threading.Tasks.Task.Run(async () =>
+                    {
+                        try
+                        {
+                            for (int i = 0; i < 30 && legionManager == null; i++)
+                            {
+                                await System.Threading.Tasks.Task.Delay(1000);
+                            }
+                            legionManager?.ResyncControllerStatusToWidget();
+                        }
+                        catch (Exception ex) { Logger.Warn($"Failed to resync controller status on connect: {ex.Message}"); }
+                    });
                 };
                 pipeServer.Disconnected += (s, e) => Logger.Info("Widget disconnected from Named Pipe");
                 pipeServer.Start();
