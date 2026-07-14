@@ -39,8 +39,9 @@ namespace XboxGamingBarHelper.DefaultGameProfiles
     }
 
     /// <summary>
-    /// Property to force Default Game Profile feature on non-Z1/Z2 Extreme devices.
-    /// When enabled, uses Z1 Extreme (OMNI) profiles as fallback.
+    /// Master enable for the Default Game Profile feature. When off, profiles are never
+    /// looked up or applied. On undetected hardware, enabling falls back to Z1 Extreme
+    /// (OMNI) profiles. (Function/property names kept for wire compatibility.)
     /// </summary>
     internal class ForceDefaultGameProfileProperty : HelperProperty<bool, DefaultGameProfileManager>
     {

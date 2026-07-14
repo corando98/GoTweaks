@@ -33,8 +33,11 @@ namespace XboxGamingBarHelper.DefaultGameProfiles
         public DefaultGameProfileEnabledProperty ProfileEnabled { get; }
         public ForceDefaultGameProfileProperty ForceProfile { get; }
 
-        // Force setting (for non-Z1/Z2 devices)
-        private bool _forceEnabled;
+        // Master enable for the Default Game Profile feature.
+        // ON: detected hardware uses its native profiles; undetected hardware falls
+        // back to Z1 Extreme (OMNI) profiles. OFF: the feature is fully disabled.
+        private bool _dgpEnabled;
+        private const string DgpEnabledKey = "DefaultGameProfilesEnabled";
 
         // Current state
         private DefaultGameProfile? _currentProfile;
@@ -52,9 +55,9 @@ namespace XboxGamingBarHelper.DefaultGameProfiles
         private const int POWER_STATE_DEBOUNCE_MS = 2000; // 2 second debounce
 
         /// <summary>
-        /// Whether the default profile feature is available (has valid hardware detection or force enabled).
+        /// Whether the default profile feature is available (master switch on).
         /// </summary>
-        public bool IsFeatureAvailable => _service.HardwareVariant != LegionGoVariant.Unknown || _forceEnabled;
+        public bool IsFeatureAvailable => _dgpEnabled;
 
         /// <summary>
         /// Gets the underlying service for debug/export purposes.
@@ -86,6 +89,24 @@ namespace XboxGamingBarHelper.DefaultGameProfiles
             ProfileEnabled = new DefaultGameProfileEnabledProperty(this);
             ForceProfile = new ForceDefaultGameProfileProperty(this);
 
+            // Master enable: default ON for auto-detected hardware (preserves the
+            // always-on behavior those devices had), OFF elsewhere. A persisted value
+            // (from a previous widget push) overrides the device default.
+            if (Settings.LocalSettingsHelper.TryGetValue<bool>(DgpEnabledKey, out var savedDgpEnabled))
+            {
+                _dgpEnabled = savedDgpEnabled;
+            }
+            else
+            {
+                _dgpEnabled = _service.HardwareVariant != LegionGoVariant.Unknown;
+            }
+            ForceProfile.SetValueSilent(_dgpEnabled);
+            if (_dgpEnabled && _service.HardwareVariant == LegionGoVariant.Unknown)
+            {
+                _service.SetForcedProfileKey("OMNI");
+            }
+            Logger.Info($"DefaultGameProfileManager: Default Game Profiles {(_dgpEnabled ? "enabled" : "disabled")} (variant={_service.HardwareVariant})");
+
             // Subscribe to running game changes
             if (_systemManager?.RunningGame != null)
             {
@@ -101,40 +122,38 @@ namespace XboxGamingBarHelper.DefaultGameProfiles
         }
 
         /// <summary>
-        /// Called when the Force Default Game Profile setting changes from widget.
+        /// Called when the Enable Default Game Profiles master switch changes from the widget.
         /// </summary>
         public void OnForceSettingChanged(bool enabled)
         {
-            if (_forceEnabled == enabled) return;
+            if (_dgpEnabled == enabled) return;
 
-            _forceEnabled = enabled;
-            Logger.Info($"DefaultGameProfileManager: Force setting changed to {enabled}");
+            _dgpEnabled = enabled;
+            try { Settings.LocalSettingsHelper.SetValue(DgpEnabledKey, enabled); } catch { }
+            Logger.Info($"DefaultGameProfileManager: Default Game Profiles {(enabled ? "enabled" : "disabled")}");
 
             if (enabled)
             {
-                // Force enabled - use Z1 Extreme (OMNI) profiles as fallback
-                _service.SetForcedProfileKey("OMNI");
-                Logger.Info("DefaultGameProfileManager: Using OMNI (Z1 Extreme) profiles as fallback");
+                if (_service.HardwareVariant == LegionGoVariant.Unknown)
+                {
+                    // Undetected hardware - use Z1 Extreme (OMNI) profiles as fallback
+                    _service.SetForcedProfileKey("OMNI");
+                    Logger.Info("DefaultGameProfileManager: Using OMNI (Z1 Extreme) profiles as fallback");
+                }
+
+                // Evaluate the currently running game (it was never looked up while disabled)
+                if (_systemManager?.RunningGame?.Value.IsValid() == true)
+                {
+                    _currentGamePath = null;
+                    OnRunningGameChanged(this, new PropertyChangedEventArgs(nameof(_systemManager.RunningGame)));
+                }
             }
             else
             {
-                // Force disabled - use detected hardware only
+                // Feature off: stop matching profiles and unapply any active one
+                // (ClearCurrentProfile restores the saved TDP/FPS and hides the DGP card).
                 _service.SetForcedProfileKey(null);
-                Logger.Info("DefaultGameProfileManager: Using detected hardware profiles only");
-            }
-
-            // Re-check current game if any
-            if (!string.IsNullOrEmpty(_currentGamePath))
-            {
-                // Trigger re-evaluation by resetting path
-                var path = _currentGamePath;
-                _currentGamePath = null;
-
-                // Simulate game change to re-evaluate
-                if (_systemManager?.RunningGame?.Value.IsValid() == true)
-                {
-                    OnRunningGameChanged(this, new PropertyChangedEventArgs(nameof(_systemManager.RunningGame)));
-                }
+                ClearCurrentProfile();
             }
         }
 
@@ -149,6 +168,13 @@ namespace XboxGamingBarHelper.DefaultGameProfiles
             {
                 // No game running - clear state
                 ClearCurrentProfile();
+                return;
+            }
+
+            // Master switch off: don't even look up profiles. Any previously applied
+            // profile was unapplied when the switch was turned off.
+            if (!_dgpEnabled)
+            {
                 return;
             }
 

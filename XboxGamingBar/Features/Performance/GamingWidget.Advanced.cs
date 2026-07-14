@@ -316,12 +316,16 @@ namespace XboxGamingBar
             settings.Values["ForceParkMode"] = enabled;
         }
 
+        // True while the toggle is being updated programmatically (helper sync) so
+        // Toggled doesn't record a synced device default as an explicit user choice.
+        private bool isSyncingDgpEnabledToggle;
+
         private void ForceDefaultGameProfileToggle_Toggled(object sender, RoutedEventArgs e)
         {
-            if (ForceDefaultGameProfileToggle == null) return;
+            if (ForceDefaultGameProfileToggle == null || isSyncingDgpEnabledToggle) return;
 
             bool enabled = ForceDefaultGameProfileToggle.IsOn;
-            Logger.Info($"Force Default Game Profile toggled to: {enabled}");
+            Logger.Info($"Enable Default Game Profiles toggled to: {enabled}");
 
             // Send to helper
             forceDefaultGameProfile?.SetValue(enabled);
@@ -329,6 +333,26 @@ namespace XboxGamingBar
             // Save to local settings
             var settings = ApplicationData.Current.LocalSettings;
             settings.Values["ForceDefaultGameProfile"] = enabled;
+        }
+
+        /// <summary>
+        /// Reflects the helper's Default-Game-Profiles enabled state into the System-tab
+        /// toggle. The helper default is device-dependent (on for auto-detected hardware),
+        /// so the toggle can't just load a static local value.
+        /// </summary>
+        private void OnDgpEnabledSynced()
+        {
+            _ = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
+            {
+                if (ForceDefaultGameProfileToggle == null || forceDefaultGameProfile == null) return;
+                bool enabled = forceDefaultGameProfile.Value;
+                if (ForceDefaultGameProfileToggle.IsOn != enabled)
+                {
+                    isSyncingDgpEnabledToggle = true;
+                    try { ForceDefaultGameProfileToggle.IsOn = enabled; }
+                    finally { isSyncingDgpEnabledToggle = false; }
+                }
+            });
         }
         private void UpdateCPUCoreConfigSummary()
         {
