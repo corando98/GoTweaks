@@ -1,4 +1,4 @@
-using Microsoft.Gaming.XboxGameBar;
+﻿using Microsoft.Gaming.XboxGameBar;
 using Microsoft.Gaming.XboxGameBar.Input;
 using Microsoft.UI.Xaml.Controls;
 using NLog;
@@ -1062,9 +1062,11 @@ namespace XboxGamingBar
 
         private void SetControllerBatterySectionVisibility(bool visible)
         {
-            if (ControllerBatterySection != null)
+            // The device glyph box between them always stays visible.
+            if (LeftControllerCard != null && RightControllerCard != null)
             {
-                ControllerBatterySection.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+                LeftControllerCard.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+                RightControllerCard.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
                 Logger.Info($"Controller battery section visibility set to: {visible}");
             }
         }
@@ -1078,25 +1080,12 @@ namespace XboxGamingBar
             }
         }
         /// <summary>
-        /// Updates XY focus bindings in Performance tab based on Legion detection
+        /// No-op. Manual XYFocus wiring was replaced by NavigationDirectionDistance
+        /// spatial navigation + the LosingFocus shepherd. Kept because Legion
+        /// detection paths still call it.
         /// </summary>
         private void UpdatePerformanceTabXYFocus(bool isLegion)
         {
-            if (PerformanceOverlayComboBox != null && TDPModeComboBox != null && TDPSlider != null)
-            {
-                if (isLegion)
-                {
-                    // Legion: PerformanceOverlay -> TDPMode -> TDPSlider
-                    PerformanceOverlayComboBox.XYFocusDown = TDPModeComboBox;
-                    TDPSlider.XYFocusUp = TDPModeComboBox;
-                }
-                else
-                {
-                    // Non-Legion: PerformanceOverlay -> TDPSlider
-                    PerformanceOverlayComboBox.XYFocusDown = TDPSlider;
-                    TDPSlider.XYFocusUp = PerformanceOverlayComboBox;
-                }
-            }
         }
 
         /// <summary>
@@ -1115,77 +1104,12 @@ namespace XboxGamingBar
         }
 
         /// <summary>
-        /// Updates XY focus navigation for the Performance tab based on current state.
-        /// Flow: Nav -> DGP Toggle (if visible) -> PerGameProfile Toggle (if game detected) -> Performance Overlay -> ...
-        /// When DGP is ON: Nav -> DGP Toggle -> TDP Extras (skip disabled TDP/FPS controls)
+        /// No-op. Manual XYFocus wiring was replaced by NavigationDirectionDistance
+        /// spatial navigation + the LosingFocus shepherd. Kept because DGP
+        /// visibility/state-change paths still call it.
         /// </summary>
         private void UpdatePerformanceTabXYNavigation()
         {
-            // Early exit if UI elements aren't ready
-            if (PerformanceNavItem == null || PerformanceOverlayComboBox == null) return;
-
-            bool dgpVisible = DefaultGameProfileCard?.Visibility == Visibility.Visible;
-            bool dgpEnabled = defaultGameProfileEnabled?.Value == true;
-            bool gameDetected = runningGame?.Value.IsValid() == true;
-
-            Logger.Debug($"UpdatePerformanceTabXYNavigation: dgpVisible={dgpVisible}, dgpEnabled={dgpEnabled}, gameDetected={gameDetected}");
-
-            // Determine the chain of focusable elements
-            // Start from PerformanceNavItem going down
-
-            if (dgpVisible && DefaultProfileToggle != null)
-            {
-                // DGP is visible: Nav -> DefaultProfileToggle
-                PerformanceNavItem.XYFocusDown = DefaultProfileToggle;
-                DefaultProfileToggle.XYFocusUp = PerformanceNavItem;
-
-                if (dgpEnabled && TDPExtrasExpandToggle != null)
-                {
-                    // DGP is ON: skip disabled TDP/FPS controls, go to TDP Extras dropdown
-                    // (OS Power Mode and CPU Extras are still available)
-                    DefaultProfileToggle.XYFocusDown = TDPExtrasExpandToggle;
-                    TDPExtrasExpandToggle.XYFocusUp = DefaultProfileToggle;
-
-                    // Set navigation from TDP Extras down to OS Power Mode, and OS Power Mode up to TDP Extras
-                    if (OSPowerModeComboBox != null)
-                    {
-                        TDPExtrasExpandToggle.XYFocusDown = OSPowerModeComboBox;
-                        OSPowerModeComboBox.XYFocusUp = TDPExtrasExpandToggle;
-                    }
-                }
-                else if (gameDetected && PerGameProfileToggle != null)
-                {
-                    // DGP visible but OFF, game detected: DGP Toggle -> PerGameProfile Toggle -> Overlay
-                    DefaultProfileToggle.XYFocusDown = PerGameProfileToggle;
-                    PerGameProfileToggle.XYFocusUp = DefaultProfileToggle;
-                    PerGameProfileToggle.XYFocusDown = PerformanceOverlayComboBox;
-                    PerformanceOverlayComboBox.XYFocusUp = PerGameProfileToggle;
-                }
-                else
-                {
-                    // DGP visible but OFF, no game: DGP Toggle -> Overlay (skip disabled PerGameProfile)
-                    DefaultProfileToggle.XYFocusDown = PerformanceOverlayComboBox;
-                    PerformanceOverlayComboBox.XYFocusUp = DefaultProfileToggle;
-                }
-            }
-            else
-            {
-                // DGP not visible
-                if (gameDetected && PerGameProfileToggle != null)
-                {
-                    // No DGP, game detected: Nav -> PerGameProfile Toggle -> Overlay
-                    PerformanceNavItem.XYFocusDown = PerGameProfileToggle;
-                    PerGameProfileToggle.XYFocusUp = PerformanceNavItem;
-                    PerGameProfileToggle.XYFocusDown = PerformanceOverlayComboBox;
-                    PerformanceOverlayComboBox.XYFocusUp = PerGameProfileToggle;
-                }
-                else
-                {
-                    // No DGP, no game: Nav -> Overlay (skip disabled PerGameProfile)
-                    PerformanceNavItem.XYFocusDown = PerformanceOverlayComboBox;
-                    PerformanceOverlayComboBox.XYFocusUp = PerformanceNavItem;
-                }
-            }
         }
 
         /// <summary>
@@ -1694,28 +1618,6 @@ namespace XboxGamingBar
 
                 // Update XY navigation to skip disabled button
                 // TDPSettingsExpandButton.XYFocusUp must always point to SystemNavItem (for navigating out of card)
-                if (TdpMethodComboBox != null && TDPSettingsExpandButton != null)
-                {
-                    if (installed)
-                    {
-                        // Skip disabled Install button: ComboBox -> next slider
-                        TdpMethodComboBox.XYFocusDown = TDPLimitsMinSlider;
-                        if (TDPLimitsMinSlider != null)
-                        {
-                            TDPLimitsMinSlider.XYFocusUp = TdpMethodComboBox;
-                        }
-                    }
-                    else
-                    {
-                        TdpMethodComboBox.XYFocusDown = InstallPawnIOButton;
-                        if (TDPLimitsMinSlider != null && InstallPawnIOButton != null)
-                        {
-                            TDPLimitsMinSlider.XYFocusUp = InstallPawnIOButton;
-                        }
-                    }
-                    // Always allow navigating up from card header to nav bar
-                    TDPSettingsExpandButton.XYFocusUp = SystemNavItem;
-                }
             }
 
             if (PawnIOStatusText != null)
@@ -1918,11 +1820,6 @@ namespace XboxGamingBar
         /// </summary>
         private void SetCustomTDPVisibility(bool visible)
         {
-            if (LegionPerformanceModeComboBox != null && LegionFanFullSpeedToggle != null)
-            {
-                LegionPerformanceModeComboBox.XYFocusDown = LegionFanFullSpeedToggle;
-                LegionFanFullSpeedToggle.XYFocusUp = LegionPerformanceModeComboBox;
-            }
 
             // Fan curve card stays fully interactive in every power mode now. Per-mode
             // storage means each mode has its own saved curve + EC-override unlock state,
@@ -2418,11 +2315,6 @@ namespace XboxGamingBar
 
                 // Update XY focus to skip disabled controls
                 // TDPModeComboBox -> OSPowerModeComboBox (skip all TDP controls)
-                if (TDPModeComboBox != null && OSPowerModeComboBox != null)
-                {
-                    TDPModeComboBox.XYFocusDown = OSPowerModeComboBox;
-                    OSPowerModeComboBox.XYFocusUp = TDPModeComboBox;
-                }
 
                 Logger.Debug($"TDP slider disabled - using {modeName} mode");
             }
@@ -2572,23 +2464,11 @@ namespace XboxGamingBar
                 // TDPModeComboBox -> TDPSlider -> TDPExtrasExpandToggle -> [expanded: TDPBoost/AutoTDP/Sticky] -> OSPowerModeComboBox
                 if (TDPModeComboBox != null && OSPowerModeComboBox != null)
                 {
-                    TDPModeComboBox.XYFocusDown = TDPSlider;
-                    TDPSlider.XYFocusUp = TDPModeComboBox;
-                    TDPSlider.XYFocusDown = TDPExtrasExpandToggle;
-                    TDPExtrasExpandToggle.XYFocusUp = TDPSlider;
 
                     // Internal chain when TDP Extras is expanded
-                    TDPBoostToggle.XYFocusUp = TDPExtrasExpandToggle;
-                    TDPBoostToggle.XYFocusDown = AutoTDPToggle;
-                    AutoTDPToggle.XYFocusUp = TDPBoostToggle;
-                    AutoTDPToggle.XYFocusDown = StickyTDPToggle;
-                    StickyTDPToggle.XYFocusUp = AutoTDPToggle;
-                    StickyTDPToggle.XYFocusDown = OSPowerModeComboBox;
 
                     // TDPExtrasExpandToggle.XYFocusDown depends on expanded state
                     bool isTDPExtrasOpen = TDPExtrasContent?.Visibility == Visibility.Visible;
-                    TDPExtrasExpandToggle.XYFocusDown = isTDPExtrasOpen ? (DependencyObject)TDPBoostToggle : OSPowerModeComboBox;
-                    OSPowerModeComboBox.XYFocusUp = isTDPExtrasOpen ? (DependencyObject)StickyTDPToggle : TDPExtrasExpandToggle;
                     Logger.Debug($"XY focus restored for Custom mode (TDP Extras expanded: {isTDPExtrasOpen})");
                 }
             }

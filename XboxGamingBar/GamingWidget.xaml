@@ -223,8 +223,14 @@
         <!-- Modern ComboBox Style - System style with minor customizations -->
         <Style x:Key="ModernComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource DefaultComboBoxStyle}">
             <Setter Property="HorizontalAlignment" Value="Stretch"/>
-            <!-- No UseSystemFocusVisuals here: the ComboBox already shows focus via
-                 ComboBoxBorderBrushFocused, and a system ring on top doubles it. -->
+            <!-- High-visibility white focus ring for gamepad navigation, matching the slider/
+                 toggle/button styles. The ComboBox's own focused border brush is a near-invisible
+                 dark grey (#50555C), so gamepad users had no visible focus on dropdowns. -->
+            <Setter Property="UseSystemFocusVisuals" Value="True"/>
+            <Setter Property="FocusVisualPrimaryBrush" Value="White"/>
+            <Setter Property="FocusVisualSecondaryBrush" Value="Transparent"/>
+            <Setter Property="FocusVisualPrimaryThickness" Value="2"/>
+            <Setter Property="FocusVisualMargin" Value="-3,-3,-3,-3"/>
         </Style>
 
         <!-- Override ComboBox border colors to prevent highlight on focus/hover -->
@@ -492,7 +498,7 @@
             <Grid Grid.Row="1">
             <!-- QUICK SETTINGS TAB -->
             <Grid>
-                <ScrollViewer x:Name="QuickSettingsScrollViewer" XYFocusUpNavigationStrategy="Projection" XYFocusDownNavigationStrategy="Projection" VerticalScrollBarVisibility="Auto" Visibility="Visible"
+                <ScrollViewer x:Name="QuickSettingsScrollViewer" XYFocusUpNavigationStrategy="NavigationDirectionDistance" XYFocusDownNavigationStrategy="NavigationDirectionDistance" VerticalScrollBarVisibility="Auto" Visibility="Visible"
                               BringIntoViewOnFocusChange="True">
                     <StackPanel Padding="16,8,16,16">
 
@@ -843,7 +849,7 @@
                 </ScrollViewer>
 
                 <!-- PERFORMANCE TAB -->
-                <ScrollViewer x:Name="PerformanceScrollViewer" XYFocusUpNavigationStrategy="Projection" XYFocusDownNavigationStrategy="Projection" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
+                <ScrollViewer x:Name="PerformanceScrollViewer" XYFocusUpNavigationStrategy="NavigationDirectionDistance" XYFocusDownNavigationStrategy="NavigationDirectionDistance" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
                               BringIntoViewOnFocusChange="True">
                     <StackPanel Padding="16,8,16,16">
 
@@ -908,8 +914,7 @@
                                 </StackPanel>
                                 <ToggleSwitch x:Name="DefaultProfileToggle"
                                               Grid.Column="2"
-                                              Style="{StaticResource ModernToggleStyle}"
-                                              XYFocusUp="{x:Bind PerformanceNavItem}"/>
+                                              Style="{StaticResource ModernToggleStyle}"/>
                             </Grid>
                         </Border>
 
@@ -986,9 +991,7 @@
                                     <ToggleSwitch x:Name="PerGameProfileToggle"
                                                   Grid.Column="1"
                                                   Style="{StaticResource ModernToggleStyle}"
-                                                  IsEnabled="False"
-                                                  XYFocusUp="{x:Bind PerformanceNavItem}"
-                                                  XYFocusDown="{x:Bind PerformanceOverlayComboBox}"/>
+                                                  IsEnabled="False"/>
                                 </Grid>
                             </StackPanel>
                         </Border>
@@ -1009,8 +1012,7 @@
                                               Style="{StaticResource ModernComboBoxStyle}"
                                               Width="120"
                                               Grid.Column="1"
-                                              SelectionChanged="PerformanceOverlayComboBox_SelectionChanged"
-                                              XYFocusLeft="{x:Bind PerformanceNavItem}">
+                                              SelectionChanged="PerformanceOverlayComboBox_SelectionChanged">
                                         <ComboBoxItem Content="Off" Tag="0" IsSelected="True"/>
                                         <ComboBoxItem Content="Basic" Tag="1"/>
                                         <ComboBoxItem Content="Detailed" Tag="2"/>
@@ -1024,6 +1026,47 @@
                                         Minimum="0" Maximum="3"
                                         Value="0"
                                         ValueChanged="PerformanceOverlaySlider_ValueChanged"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- FPS Limit Card (moved to sit directly under the Performance Overlay card) -->
+                        <Border Style="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="FPS Limit" Style="{StaticResource CardTitleStyle}"/>
+                                        <TextBlock x:Name="FPSLimitCaption"
+                                                   Text=""
+                                                   Style="{StaticResource CardCaptionStyle}"
+                                                   Visibility="Collapsed"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="FPSLimitValue"
+                                               Grid.Column="1"
+                                               Text=""
+                                               FontSize="14"
+                                               Foreground="#4CAF50"
+                                               FontWeight="SemiBold"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,12,0"
+                                               Visibility="{Binding ElementName=FPSLimitToggle, Path=IsOn, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                    <ToggleSwitch x:Name="FPSLimitToggle"
+                                                  Grid.Column="2"
+                                                  Style="{StaticResource ModernToggleStyle}"
+                                                  IsEnabled="False" Width="52"/>
+                                </Grid>
+                                <Slider x:Name="FPSLimitSlider"
+                                        Style="{StaticResource ModernSliderStyle}"
+                                        Minimum="15" Maximum="144"
+                                        StepFrequency="1"
+                                        TickFrequency="15"
+                                        TickPlacement="Outside"
+                                        SnapsTo="StepValues"
+                                        Visibility="{Binding ElementName=FPSLimitToggle, Path=IsOn, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                             </StackPanel>
                         </Border>
 
@@ -1047,8 +1090,7 @@
                                               Grid.Column="1"
                                               Style="{StaticResource ModernComboBoxStyle}"
                                               SelectedIndex="1"
-                                              SelectionChanged="TDPModeComboBox_SelectionChanged"
-                                              XYFocusUp="{x:Bind PerformanceOverlayComboBox}">
+                                              SelectionChanged="TDPModeComboBox_SelectionChanged">
                                         <ComboBoxItem Content="Quiet" Tag="1"/>
                                         <ComboBoxItem Content="Balanced" Tag="2"/>
                                         <ComboBoxItem Content="Performance" Tag="3"/>
@@ -1072,7 +1114,6 @@
                                         TickPlacement="BottomRight"
                                         IsEnabled="False" Value="-5"
                                         ValueChanged="TDPSlider_ValueChanged_UpdateDisplay"
-                                        XYFocusDown="{x:Bind TDPExtrasExpandToggle}"
                                         />
                                 <Grid Margin="0,4,0,0">
                                     <TextBlock x:Name="CurrentTDPText"
@@ -1125,7 +1166,6 @@
                                                   VerticalAlignment="Center"
                                                   Background="Transparent"
                                                   BorderThickness="0"
-                                                  XYFocusDown="{x:Bind OSPowerModeComboBox}"
                                                   UseSystemFocusVisuals="True"
                                                   Padding="8,4"
                                                   Click="TDPExtrasExpandToggle_Click">
@@ -1147,8 +1187,7 @@
                                         <ToggleSwitch x:Name="TDPBoostToggle"
                                                       Grid.Column="1"
                                                       Style="{StaticResource ModernToggleStyle}"
-                                                      Toggled="TDPBoostToggle_Toggled"
-                                                      XYFocusUp="{x:Bind TDPExtrasExpandToggle}"/>
+                                                      Toggled="TDPBoostToggle_Toggled"/>
                                     </Grid>
                                     <!-- TDP Boost expanded panel: per-profile SPPT / FPPT deltas. Visible only
                                          when the TDPBoostToggle is on. Replaces the global System-tab boost
@@ -1176,8 +1215,7 @@
                                                 TickFrequency="1"
                                                 SnapsTo="Ticks"
                                                 Value="1"
-                                                ValueChanged="TDPBoostSPPTSlider_ValueChanged"
-                                                XYFocusDown="{x:Bind TDPBoostFPPTSlider}"/>
+                                                ValueChanged="TDPBoostSPPTSlider_ValueChanged"/>
 
                                         <!-- Peak (FPPT) delta -->
                                         <Grid Margin="0,4,0,0">
@@ -1198,8 +1236,7 @@
                                                 TickFrequency="1"
                                                 SnapsTo="Ticks"
                                                 Value="3"
-                                                ValueChanged="TDPBoostFPPTSlider_ValueChanged"
-                                                XYFocusUp="{x:Bind TDPBoostSPPTSlider}"/>
+                                                ValueChanged="TDPBoostFPPTSlider_ValueChanged"/>
                                     </StackPanel>
 
                                     <!-- AutoTDP -->
@@ -1353,9 +1390,7 @@
                                           Margin="0,12,0,0"
                                           Style="{StaticResource ModernComboBoxStyle}"
                                           SelectedIndex="1"
-                                          SelectionChanged="OSPowerModeComboBox_SelectionChanged"
-                                          XYFocusUp="{x:Bind TDPExtrasExpandToggle}"
-                                          XYFocusDown="{x:Bind CPUExtrasExpandToggle}">
+                                          SelectionChanged="OSPowerModeComboBox_SelectionChanged">
                                     <ComboBoxItem Content="Best Power Efficiency"/>
                                     <ComboBoxItem Content="Balanced"/>
                                     <ComboBoxItem Content="Best Performance"/>
@@ -1384,7 +1419,6 @@
                                                   BorderThickness="0"
                                                   Padding="8,4"
                                                   Click="CPUExtrasExpandToggle_Click"
-                                                  XYFocusUp="{x:Bind OSPowerModeComboBox}"
                                                   UseSystemFocusVisuals="True">
                                         <FontIcon x:Name="CPUExtrasExpandIcon" Glyph="&#xE70D;" FontSize="12"/>
                                     </ToggleButton>
@@ -1431,48 +1465,6 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- FPS Limit Card -->
-                        <Border Style="{StaticResource CardStyle}">
-                            <StackPanel>
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                        <TextBlock Text="FPS Limit" Style="{StaticResource CardTitleStyle}"/>
-                                        <TextBlock x:Name="FPSLimitCaption"
-                                                   Text=""
-                                                   Style="{StaticResource CardCaptionStyle}"
-                                                   Visibility="Collapsed"/>
-                                    </StackPanel>
-                                    <TextBlock x:Name="FPSLimitValue"
-                                               Grid.Column="1"
-                                               Text=""
-                                               FontSize="14"
-                                               Foreground="#4CAF50"
-                                               FontWeight="SemiBold"
-                                               VerticalAlignment="Center"
-                                               Margin="0,0,12,0"
-                                               Visibility="{Binding ElementName=FPSLimitToggle, Path=IsOn, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                                    <ToggleSwitch x:Name="FPSLimitToggle"
-                                                  Grid.Column="2"
-                                                  Style="{StaticResource ModernToggleStyle}"
-                                                  IsEnabled="False" Width="52"
-                                                  XYFocusUp="{x:Bind CPUExtrasExpandToggle}"
-                                                  XYFocusDown="{x:Bind AdvancedExpandButton}"/>
-                                </Grid>
-                                <Slider x:Name="FPSLimitSlider"
-                                        Style="{StaticResource ModernSliderStyle}"
-                                        Minimum="15" Maximum="144"
-                                        StepFrequency="1"
-                                        TickFrequency="15"
-                                        TickPlacement="Outside"
-                                        SnapsTo="StepValues"
-                                        Visibility="{Binding ElementName=FPSLimitToggle, Path=IsOn, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                            </StackPanel>
-                        </Border>
 
                         <!-- Advanced Card (Collapsible) - Power Plan, Core Parking & Affinity -->
                         <Border x:Name="AdvancedCard" Style="{StaticResource CardStyle}">
@@ -1551,8 +1543,7 @@
                                             <ComboBox x:Name="ACPowerPlanComboBox"
                                                       Margin="0,8,0,0"
                                                       Style="{StaticResource ModernComboBoxStyle}"
-                                                      SelectionChanged="ACPowerPlanComboBox_SelectionChanged"
-                                                      XYFocusDown="{x:Bind DCPowerPlanComboBox}"/>
+                                                      SelectionChanged="ACPowerPlanComboBox_SelectionChanged"/>
                                         </StackPanel>
 
                                         <!-- DC Power Plan -->
@@ -1562,9 +1553,7 @@
                                             <ComboBox x:Name="DCPowerPlanComboBox"
                                                       Margin="0,8,0,0"
                                                       Style="{StaticResource ModernComboBoxStyle}"
-                                                      SelectionChanged="DCPowerPlanComboBox_SelectionChanged"
-                                                      XYFocusUp="{x:Bind ACPowerPlanComboBox}"
-                                                      XYFocusDown="{x:Bind PowerPlanAutoSwitchToggle}"/>
+                                                      SelectionChanged="DCPowerPlanComboBox_SelectionChanged"/>
                                         </StackPanel>
 
                                         <!-- Auto-switch Toggle -->
@@ -1581,8 +1570,7 @@
                                                           Grid.Column="1"
                                                           IsOn="False"
                                                           Toggled="PowerPlanAutoSwitchToggle_Toggled"
-                                                          Style="{StaticResource ModernToggleStyle}"
-                                                          XYFocusUp="{x:Bind DCPowerPlanComboBox}"/>
+                                                          Style="{StaticResource ModernToggleStyle}"/>
                                         </Grid>
                                     </StackPanel>
 
@@ -1742,7 +1730,7 @@
                 </ScrollViewer>
 
                 <!-- GAME TAB -->
-                <ScrollViewer x:Name="GameScrollViewer" XYFocusUpNavigationStrategy="Projection" XYFocusDownNavigationStrategy="Projection" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
+                <ScrollViewer x:Name="GameScrollViewer" XYFocusUpNavigationStrategy="NavigationDirectionDistance" XYFocusDownNavigationStrategy="NavigationDirectionDistance" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
                               BringIntoViewOnFocusChange="True">
                     <StackPanel Padding="16,8,16,16">
 
@@ -1762,9 +1750,7 @@
                                     </StackPanel>
                                     <ToggleSwitch x:Name="PowerSourceProfileToggle"
                                                   Grid.Column="1"
-                                                  Style="{StaticResource ModernToggleStyle}" Width="47"
-                                                  XYFocusUp="{x:Bind ProfilesNavItem}"
-                                                  XYFocusDown="{x:Bind ProfileSettingsExpandToggle}"/>
+                                                  Style="{StaticResource ModernToggleStyle}" Width="47"/>
                                 </Grid>
                                 <TextBlock x:Name="PowerSourceProfileScopeText"
                                            Margin="0,8,0,0"
@@ -2525,7 +2511,7 @@
                 </ScrollViewer>
 
                 <!-- GRAPHICS TAB -->
-                <ScrollViewer x:Name="AMDScrollViewer" XYFocusUpNavigationStrategy="Projection" XYFocusDownNavigationStrategy="Projection" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
+                <ScrollViewer x:Name="AMDScrollViewer" XYFocusUpNavigationStrategy="NavigationDirectionDistance" XYFocusDownNavigationStrategy="NavigationDirectionDistance" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
                               BringIntoViewOnFocusChange="True">
                     <StackPanel Padding="16,8,16,16">
 
@@ -2545,8 +2531,7 @@
                                           Width="150"
                                           Grid.Column="1"
                                           IsEnabled="False"
-                                          Style="{StaticResource ModernComboBoxStyle}"
-                                          XYFocusUp="{x:Bind GraphicsNavItem}">
+                                          Style="{StaticResource ModernComboBoxStyle}">
                                     <x:String>1920x1080</x:String>
                                 </ComboBox>
                             </Grid>
@@ -2568,8 +2553,7 @@
                                           Width="120"
                                           Grid.Column="1"
                                           IsEnabled="False"
-                                          Style="{StaticResource ModernComboBoxStyle}"
-                                          XYFocusUp="{x:Bind GraphicsNavItem}">
+                                          Style="{StaticResource ModernComboBoxStyle}">
                                     <x:String>60 Hz</x:String>
                                 </ComboBox>
                             </Grid>
@@ -2931,7 +2915,7 @@
                 </ScrollViewer>
 
                 <!-- SYSTEM TAB -->
-                <ScrollViewer x:Name="SystemScrollViewer" XYFocusUpNavigationStrategy="Projection" XYFocusDownNavigationStrategy="Projection" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
+                <ScrollViewer x:Name="SystemScrollViewer" XYFocusUpNavigationStrategy="NavigationDirectionDistance" XYFocusDownNavigationStrategy="NavigationDirectionDistance" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
                               BringIntoViewOnFocusChange="True">
                     <StackPanel Padding="16,8,16,16">
 
@@ -2958,8 +2942,6 @@
                                                   BorderThickness="0"
                                                   Padding="8,4"
                                                   Click="TDPSettingsExpandButton_Click"
-                                                  XYFocusUp="{x:Bind SystemNavItem}"
-                                                  XYFocusDown="{x:Bind OSDCustomizeExpandButton}"
                                                   UseSystemFocusVisuals="True">
                                         <FontIcon x:Name="TDPSettingsExpandIcon" Glyph="&#xE70D;" FontSize="12"/>
                                     </ToggleButton>
@@ -3005,9 +2987,7 @@
                                         <ComboBox x:Name="TdpMethodComboBox"
                                                   Width="160"
                                                   Grid.Column="1"
-                                                  Style="{StaticResource ModernComboBoxStyle}"
-                                                  XYFocusUp="{x:Bind TDPSettingsExpandButton}"
-                                                  XYFocusDown="{x:Bind InstallPawnIOButton}">
+                                                  Style="{StaticResource ModernComboBoxStyle}">
                                             <ComboBoxItem x:Name="TdpMethodWmiItem" Content="Manufacturer WMI" Tag="ManufacturerWMI" Visibility="Collapsed"/>
                                             <ComboBoxItem x:Name="TdpMethodPawnIOItem" Content="PawnIO" Tag="PawnIO"/>
                                             <ComboBoxItem x:Name="TdpMethodWinRing0Item" Content="WinRing0 (Legacy)" Tag="WinRing0"/>
@@ -3031,9 +3011,7 @@
                                                 Grid.Column="1"
                                                 Content="Install"
                                                 Style="{StaticResource ModernButtonStyle}"
-                                                Click="InstallPawnIOButton_Click"
-                                                XYFocusUp="{x:Bind TdpMethodComboBox}"
-                                                XYFocusDown="{x:Bind TDPLimitsMinSlider}"/>
+                                                Click="InstallPawnIOButton_Click"/>
                                     </Grid>
 
                                     <!-- Separator -->
@@ -3084,8 +3062,6 @@
                                             SnapsTo="Ticks"
                                             Value="4"
                                             ValueChanged="TDPLimitsMinSlider_ValueChanged"
-                                            XYFocusUp="{x:Bind InstallPawnIOButton}"
-                                            XYFocusDown="{x:Bind TDPLimitsMaxSlider}"
                                             />
 
                                     <!-- Maximum TDP -->
@@ -3108,8 +3084,6 @@
                                             SnapsTo="Ticks"
                                             Value="35"
                                             ValueChanged="TDPLimitsMaxSlider_ValueChanged"
-                                            XYFocusUp="{x:Bind TDPLimitsMinSlider}"
-                                            XYFocusDown="{x:Bind UseCustomTDPPresetsToggle}"
                                             />
 
                                     <!-- Separator -->
@@ -3136,8 +3110,7 @@
                                         <ToggleSwitch x:Name="UseCustomTDPPresetsToggle"
                                                       Grid.Column="1"
                                                       Style="{StaticResource ModernToggleStyle}"
-                                                      Toggled="UseCustomTDPPresetsToggle_Toggled"
-                                                      XYFocusUp="{x:Bind TDPBoostFPPTSlider}"/>
+                                                      Toggled="UseCustomTDPPresetsToggle_Toggled"/>
                                     </Grid>
 
                                     <!-- Presets List (shown when custom presets enabled) -->
@@ -3353,8 +3326,6 @@
                                                   BorderThickness="0"
                                                   Padding="8,4"
                                                   Click="OSDCustomizeExpandButton_Click"
-                                                  XYFocusUp="{x:Bind TDPSettingsExpandButton}"
-                                                  XYFocusDown="{x:Bind HotkeysExpandButton}"
                                                   UseSystemFocusVisuals="True">
                                         <FontIcon x:Name="OSDCustomizeExpandIcon" Glyph="&#xE70D;" FontSize="12"/>
                                     </ToggleButton>
@@ -3724,8 +3695,6 @@
                                                   BorderThickness="0"
                                                   Padding="8,4"
                                                   Click="HotkeysExpandButton_Click"
-                                                  XYFocusUp="{x:Bind OSDCustomizeExpandButton}"
-                                                  XYFocusDown="{x:Bind AutoHibernateToggle}"
                                                   UseSystemFocusVisuals="True">
                                         <FontIcon x:Name="HotkeysExpandIcon" Glyph="&#xE70D;" FontSize="12"/>
                                     </ToggleButton>
@@ -4043,8 +4012,6 @@
                                                   BorderThickness="0"
                                                   Padding="8,4"
                                                   Click="ControllerEmulationExpandButton_Click"
-                                                  XYFocusUp="{x:Bind HotkeysExpandButton}"
-                                                  XYFocusDown="{x:Bind AutoHibernateToggle}"
                                                   UseSystemFocusVisuals="True">
                                         <FontIcon x:Name="ControllerEmulationExpandIcon" Glyph="&#xE70D;" FontSize="12"/>
                                     </ToggleButton>
@@ -4070,8 +4037,7 @@
                                                   IsOn="False"
                                                   Style="{StaticResource ModernToggleStyle}"
                                                   IsEnabled="False"
-                                                  Toggled="ControllerEmulationEnabledToggle_Toggled"
-                                                  XYFocusUp="{x:Bind ControllerEmulationExpandButton}"/>
+                                                  Toggled="ControllerEmulationEnabledToggle_Toggled"/>
                                 </Grid>
 
                                 <StackPanel x:Name="ControllerEmulationContent" Visibility="Collapsed" Margin="0,12,0,0">
@@ -4174,9 +4140,7 @@
                                                   Grid.Column="1"
                                                   IsOn="False"
                                                   Style="{StaticResource ModernToggleStyle}"
-                                                  IsEnabled="False"
-                                                  XYFocusUp="{x:Bind ControllerEmulationEnabledToggle}"
-                                                  XYFocusDown="{x:Bind ControllerEmulationHideStockControllerToggle}"/>
+                                                  IsEnabled="False"/>
                                 </Grid>
 
                                 <Grid Margin="0,12,0,0">
@@ -4194,9 +4158,7 @@
                                                   Grid.Column="1"
                                                   IsOn="True"
                                                   Style="{StaticResource ModernToggleStyle}"
-                                                  IsEnabled="False"
-                                                  XYFocusUp="{x:Bind ControllerEmulationImprovedInputToggle}"
-                                                  XYFocusDown="{x:Bind ControllerEmulationHideTargetComboBox}"/>
+                                                  IsEnabled="False"/>
                                 </Grid>
 
                                 <Grid Margin="0,12,0,0">
@@ -4214,8 +4176,6 @@
                                               Grid.Column="1"
                                               Width="220"
                                               Style="{StaticResource ModernComboBoxStyle}"
-                                              XYFocusUp="{x:Bind ControllerEmulationHideStockControllerToggle}"
-                                              XYFocusDown="{x:Bind GyroActivationExpandToggle}"
                                               IsEnabled="False">
                                         <ComboBoxItem Content="Auto (Native handheld only)" Tag="0" IsSelected="True"/>
                                         <ComboBoxItem Content="Native handheld controller" Tag="1"/>
@@ -5774,7 +5734,7 @@
                         </StackPanel>
                         </Border>
 
-                        <!-- Force Default Game Profiles Card -->
+                        <!-- Enable Default Game Profiles Card -->
                         <Border Style="{StaticResource CardStyle}">
                             <StackPanel>
                                 <Grid>
@@ -5783,8 +5743,8 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                        <TextBlock Text="Force Default Game Profiles" Style="{StaticResource CardTitleStyle}"/>
-                                        <TextBlock Text="Enable Microsoft Default Game Profiles on unsupported devices"
+                                        <TextBlock Text="Enable Default Game Profiles" Style="{StaticResource CardTitleStyle}"/>
+                                        <TextBlock Text="Use Microsoft Default Game Profiles for supported games"
                                                    Style="{StaticResource CardCaptionStyle}"
                                                    TextWrapping="Wrap"/>
                                     </StackPanel>
@@ -5800,7 +5760,7 @@
                                         <TextBlock Foreground="#A0C0D0"
                                                    FontSize="11"
                                                    TextWrapping="Wrap">
-                                            Microsoft Default Game Profiles provide optimized TDP and FPS settings for specific games. This feature is officially supported on ASUS ROG Ally devices. Legion Go devices with Z1/Z2 Extreme processors are automatically detected and do not need this toggle. Enable this for other AMD devices to use Z1 Extreme (OMNI) profiles.
+                                            Microsoft Default Game Profiles provide optimized TDP and FPS settings for specific games. When this is off, GoTweaks will not apply Default Game Profiles at all. It is on by default on devices with native profile support (Legion Go Z1/Z2 Extreme); on other AMD devices, turning it on uses Z1 Extreme (OMNI) profiles as a fallback.
                                         </TextBlock>
                                         <HyperlinkButton Content="Learn more about Game Profiles"
                                                          NavigateUri="https://developer.microsoft.com/en-us/games/articles/2025/11/introducing-game-profiles-for-asus-rog-xbox-ally-gaming-handhelds/"
@@ -5833,8 +5793,7 @@
                                     <ToggleSwitch x:Name="AutoHibernateToggle"
                                                   Grid.Column="1"
                                                   IsOn="False"
-                                                  Style="{StaticResource ModernToggleStyle}"
-                                                  XYFocusUp="{x:Bind HotkeysExpandButton}"/>
+                                                  Style="{StaticResource ModernToggleStyle}"/>
                                 </Grid>
 
                                 <StackPanel Visibility="{Binding ElementName=AutoHibernateToggle, Path=IsOn, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -6366,7 +6325,7 @@
                 </ScrollViewer>
 
                 <!-- SCALING TAB -->
-                <ScrollViewer x:Name="ScalingScrollViewer" XYFocusUpNavigationStrategy="Projection" XYFocusDownNavigationStrategy="Projection" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
+                <ScrollViewer x:Name="ScalingScrollViewer" XYFocusUpNavigationStrategy="NavigationDirectionDistance" XYFocusDownNavigationStrategy="NavigationDirectionDistance" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
                               BringIntoViewOnFocusChange="True">
                     <StackPanel Padding="16,8,16,16">
 
@@ -6385,14 +6344,12 @@
                                             Content="Show Window"
                                             Margin="0,0,8,0"
                                             Visibility="Collapsed"
-                                            Click="ShowLosslessScalingWindowButton_Click"
-                                            XYFocusUp="{x:Bind ScalingNavItem}"/>
+                                            Click="ShowLosslessScalingWindowButton_Click"/>
                                     <Button x:Name="LaunchLosslessScalingButton"
                                             Grid.Column="2"
                                             Content="Launch"
                                             Visibility="Collapsed"
-                                            Click="LaunchLosslessScalingButton_Click"
-                                            XYFocusUp="{x:Bind ScalingNavItem}"/>
+                                            Click="LaunchLosslessScalingButton_Click"/>
                                 </Grid>
                                 <TextBlock x:Name="LosslessScalingStatusText"
                                            Text="Not Installed"
@@ -6423,8 +6380,7 @@
                                             Content="Create Profile"
                                             VerticalAlignment="Center"
                                             IsEnabled="False"
-                                            Click="LosslessScalingCreateProfileButton_Click"
-                                            XYFocusUp="{x:Bind ScalingNavItem}"/>
+                                            Click="LosslessScalingCreateProfileButton_Click"/>
                                 </Grid>
                             </StackPanel>
                         </Border>
@@ -6437,6 +6393,8 @@
                                       FontSize="16"
                                       FontWeight="SemiBold"
                                       Margin="0,10,0,0"
+                                      Background="{StaticResource SystemAccentBrush}"
+                                      Foreground="White"
                                       Style="{StaticResource StandaloneToggleButtonStyle}"/>
 
                         <!-- Apply and Restart Button -->
@@ -6929,32 +6887,36 @@
                 </ScrollViewer>
 
                 <!-- LEGION TAB -->
-                <ScrollViewer x:Name="LegionScrollViewer" XYFocusUpNavigationStrategy="Projection" XYFocusDownNavigationStrategy="Projection" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
+                <ScrollViewer x:Name="LegionScrollViewer" XYFocusUpNavigationStrategy="NavigationDirectionDistance" XYFocusDownNavigationStrategy="NavigationDirectionDistance" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
                               BringIntoViewOnFocusChange="True">
                     <StackPanel Padding="16,8,16,16">
 
                         <!-- Controller Status Card -->
                         <Border Style="{StaticResource CardStyle}">
                             <StackPanel>
-                                <TextBlock x:Name="LegionDeviceNameText" Text="Legion Go Controller" Style="{StaticResource CardTitleStyle}"/>
-                                <TextBlock x:Name="LegionControllerStatusText"
-                                           Text="Not detected"
-                                           FontSize="14"
-                                           Foreground="#888888"
-                                           Margin="0,4,0,0"/>
+                                <!-- Left Controller / Device Glyph / Right Controller, flanking row.
+                                     All three boxes share the same height; the middle box carries the
+                                     Legion Go 2 device glyph and name. Left/Right boxes are individually
+                                     collapsible (hidden on devices without detachable controllers) via
+                                     SetControllerBatterySectionVisibility. -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="25*"/>
+                                        <ColumnDefinition Width="50*"/>
+                                        <ColumnDefinition Width="25*"/>
+                                    </Grid.ColumnDefinitions>
 
-                                <!-- Controller Battery Info (hidden on devices without detachable controllers) -->
-                                <StackPanel x:Name="ControllerBatterySection">
-                                    <Grid Margin="0,12,0,0">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-
-                                        <!-- Left Controller -->
-                                        <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                                            <TextBlock Text="Left Controller" FontSize="12" Foreground="#888888" Margin="0,0,0,4"/>
-                                            <StackPanel Orientation="Horizontal">
+                                    <!-- Left Controller -->
+                                    <Border x:Name="LeftControllerCard" Grid.Column="0" Height="132"
+                                            Background="#1A1C1E"
+                                            CornerRadius="14" Margin="0,0,8,0">
+                                        <Grid>
+                                        <Image Source="/Assets/LegionGo2ControllerLeft.png"
+                                               Opacity="0.4" Stretch="UniformToFill"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="12,10">
+                                            <TextBlock Text="Left Controller" FontSize="12" Foreground="#888888" Margin="0,0,0,4" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                                 <FontIcon Glyph="&#xE83F;" FontSize="14" Foreground="#AAAAAA" Margin="0,0,6,0"/>
                                                 <TextBlock x:Name="LeftControllerBatteryText"
                                                            Text="--%"
@@ -6971,13 +6933,45 @@
                                                        Text="--"
                                                        FontSize="11"
                                                        Foreground="#888888"
-                                                       Margin="0,2,0,0"/>
+                                                       Margin="0,2,0,0"
+                                                       HorizontalAlignment="Center"/>
                                         </StackPanel>
+                                        </Grid>
+                                    </Border>
 
-                                        <!-- Right Controller -->
-                                        <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                                            <TextBlock Text="Right Controller" FontSize="12" Foreground="#888888" Margin="0,0,0,4"/>
-                                            <StackPanel Orientation="Horizontal">
+                                    <!-- Device Glyph + name, stacked together in one taller box.
+                                         The glyph swaps between Normal/LeftDim/RightDim/BothDim variants
+                                         to mirror controller attach state (UpdateLegionDeviceGlyph). -->
+                                    <Border Grid.Column="1" Height="132" CornerRadius="18"
+                                            Background="#1A1C1E"
+                                            Margin="8,0,8,0">
+                                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <Image x:Name="LegionDeviceGlyphImage" MaxHeight="84" Stretch="Uniform"
+                                                   HorizontalAlignment="Center">
+                                                <Image.Source>
+                                                    <SvgImageSource UriSource="ms-appx:///Assets/LegionGo2Controller.svg"
+                                                                    RasterizePixelWidth="511"
+                                                                    RasterizePixelHeight="230"/>
+                                                </Image.Source>
+                                            </Image>
+                                            <TextBlock x:Name="LegionDeviceNameText" Text="Legion Go Controller"
+                                                       Style="{StaticResource CardTitleStyle}"
+                                                       HorizontalAlignment="Center" TextAlignment="Center"
+                                                       Margin="0,8,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Right Controller -->
+                                    <Border x:Name="RightControllerCard" Grid.Column="2" Height="132"
+                                            Background="#1A1C1E"
+                                            CornerRadius="14" Margin="8,0,0,0">
+                                        <Grid>
+                                        <Image Source="/Assets/LegionGo2ControllerRight.png"
+                                               Opacity="0.4" Stretch="UniformToFill"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="12,10">
+                                            <TextBlock Text="Right Controller" FontSize="12" Foreground="#888888" Margin="0,0,0,4" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                                 <FontIcon Glyph="&#xE83F;" FontSize="14" Foreground="#AAAAAA" Margin="0,0,6,0"/>
                                                 <TextBlock x:Name="RightControllerBatteryText"
                                                            Text="--%"
@@ -6994,10 +6988,23 @@
                                                        Text="--"
                                                        FontSize="11"
                                                        Foreground="#888888"
-                                                       Margin="0,2,0,0"/>
+                                                       Margin="0,2,0,0"
+                                                       HorizontalAlignment="Center"/>
                                         </StackPanel>
-                                    </Grid>
-                                </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </Grid>
+
+                                <!-- Overall status: Attached / Connected / Not detected -->
+                                <TextBlock x:Name="LegionControllerStatusText"
+                                           Text="Not detected"
+                                           FontSize="13"
+                                           Foreground="#888888"
+                                           HorizontalAlignment="Center"
+                                           Margin="0,8,0,0"/>
+
+                                <!-- Separator -->
+                                <Border Height="1" Background="#33FFFFFF" Margin="0,10,0,0"/>
 
                                 <!-- Device Info -->
                                 <TextBlock x:Name="LegionControllerPidVidText"
@@ -7061,27 +7068,37 @@
                                                    Text="—" FontSize="11" Foreground="#FFFFFF"
                                                    HorizontalAlignment="Right"/>
                                     </Grid>
-
-                                    <!-- Controller auto-sleep (idle power-off) timeout -->
-                                    <Grid Margin="0,8,0,0">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="Controller sleep" VerticalAlignment="Center" Foreground="#AAAAAA" FontSize="13"/>
-                                        <ComboBox x:Name="LegionControllerSleepComboBox" Grid.Column="1" Width="110"
-                                                  Style="{StaticResource ModernComboBoxStyle}" SelectedIndex="3"
-                                                  SelectionChanged="LegionControllerSleepComboBox_SelectionChanged">
-                                            <ComboBoxItem Content="Never" Tag="0"/>
-                                            <ComboBoxItem Content="5 min" Tag="5"/>
-                                            <ComboBoxItem Content="10 min" Tag="10"/>
-                                            <ComboBoxItem Content="15 min" Tag="15"/>
-                                            <ComboBoxItem Content="20 min" Tag="20"/>
-                                            <ComboBoxItem Content="30 min" Tag="30"/>
-                                        </ComboBox>
-                                    </Grid>
                                 </StackPanel>
                             </StackPanel>
+                        </Border>
+
+                        <!-- Controller Settings Section -->
+                        <TextBlock Text="Controller Settings" Style="{StaticResource SectionHeaderStyle}"/>
+
+                        <!-- Controller Sleep Card (shown once the controller reports device status) -->
+                        <Border x:Name="ControllerSleepCard" Style="{StaticResource CardStyle}" Visibility="Collapsed">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Text="Controller Sleep" Style="{StaticResource CardTitleStyle}"/>
+                                    <TextBlock Text="Power off idle detached controllers automatically"
+                                               FontSize="11" Foreground="#888888" TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <ComboBox x:Name="LegionControllerSleepComboBox" Grid.Column="1" Width="110"
+                                          VerticalAlignment="Center"
+                                          Style="{StaticResource ModernComboBoxStyle}" SelectedIndex="3"
+                                          SelectionChanged="LegionControllerSleepComboBox_SelectionChanged">
+                                    <ComboBoxItem Content="Never" Tag="0"/>
+                                    <ComboBoxItem Content="5 min" Tag="5"/>
+                                    <ComboBoxItem Content="10 min" Tag="10"/>
+                                    <ComboBoxItem Content="15 min" Tag="15"/>
+                                    <ComboBoxItem Content="20 min" Tag="20"/>
+                                    <ComboBoxItem Content="30 min" Tag="30"/>
+                                </ComboBox>
+                            </Grid>
                         </Border>
 
                         <!-- Touchpad & Vibration Card (hidden on devices without HID touchpad support) -->
@@ -7105,8 +7122,7 @@
                                                   Background="Transparent"
                                                   BorderThickness="0"
                                                   Padding="8,4"
-                                                  Click="TouchpadVibrationExpandToggle_Click"
-                                                  XYFocusUp="{x:Bind LegionNavItem}">
+                                                  Click="TouchpadVibrationExpandToggle_Click">
                                         <FontIcon x:Name="TouchpadVibrationExpandIcon" Glyph="&#xE70D;" FontSize="12"/>
                                     </ToggleButton>
                                 </Grid>
@@ -7121,9 +7137,7 @@
                                         <ToggleSwitch x:Name="LegionTouchpadToggle"
                                                       Grid.Column="1"
                                                       Style="{StaticResource ModernToggleStyle}"
-                                                      IsOn="True"
-                                                      XYFocusUp="{x:Bind LegionNavItem}"
-                                                      XYFocusDown="{x:Bind LegionVibrationComboBox}"/>
+                                                      IsOn="True"/>
                                     </Grid>
 
                                     <!-- Vibration Intensity -->
@@ -7284,10 +7298,8 @@
                             </Border>
                         </StackPanel>
 
-                        <!-- Lighting Section (hidden on devices without HID RGB lighting support) -->
+                        <!-- Lighting (part of Controller Settings; hidden on devices without HID RGB lighting support) -->
                         <StackPanel x:Name="LightingSection">
-                        <!-- Lighting Section Header -->
-                        <TextBlock Text="LIGHTING" Style="{StaticResource SectionHeaderStyle}"/>
 
                         <!-- Lighting Card -->
                         <Border Style="{StaticResource CardStyle}">
@@ -7528,7 +7540,7 @@
                         <!-- Controller Remapping Section (hidden on devices without HID controller remap support) -->
                         <StackPanel x:Name="ControllerRemappingSection">
                         <!-- Controller Remapping Section Header -->
-                        <TextBlock Text="CONTROLLER REMAPPING" Style="{StaticResource SectionHeaderStyle}"/>
+                        <TextBlock Text="Controller Remapping" Style="{StaticResource SectionHeaderStyle}"/>
 
                         <!-- Per-Game Controller Profile Card -->
                         <Border Style="{StaticResource CardStyle}">
@@ -8101,7 +8113,7 @@
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="Stick" VerticalAlignment="Center" Foreground="#AAAAAA" FontSize="14"/>
                                     <ComboBox x:Name="LegionJoystickAsMouseComboBox" Grid.Column="1"
-                                              Width="120" HorizontalAlignment="Left"
+                                              Width="120" HorizontalAlignment="Right"
                                               Style="{StaticResource ModernComboBoxStyle}">
                                         <ComboBoxItem Content="Disabled" Tag="0"/>
                                         <ComboBoxItem Content="Left Stick" Tag="1"/>
@@ -8192,7 +8204,7 @@
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Text="Hair Triggers" FontSize="13" Foreground="#AAAAAA" VerticalAlignment="Center"/>
-                                        <ToggleSwitch x:Name="LegionHairTriggersToggle" Grid.Column="1" OnContent="" OffContent="" Margin="0,0,-8,0"/>
+                                        <ToggleSwitch x:Name="LegionHairTriggersToggle" Grid.Column="1" Style="{StaticResource ModernToggleStyle}" HorizontalAlignment="Right" OnContent="" OffContent="" Margin="0,0,-8,0"/>
                                     </Grid>
 
                                     <!-- Left Trigger -->
@@ -8820,10 +8832,13 @@
                         </Border>
 
                         <!-- Performance Mode Section Header -->
-                        <TextBlock Text="PERFORMANCE MODE" Style="{StaticResource SectionHeaderStyle}"/>
+                        <!-- Power Profile card removed from the Legion tab (duplicate of the Performance
+                             tab's TDP Mode). Hidden rather than deleted because LegionPerformanceModeComboBox
+                             is still read by the mode-sync code. -->
+                        <TextBlock Text="Performance Mode" Style="{StaticResource SectionHeaderStyle}" Visibility="Collapsed"/>
 
                         <!-- Performance Mode Card -->
-                        <Border Style="{StaticResource CardStyle}">
+                        <Border Style="{StaticResource CardStyle}" Visibility="Collapsed">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -8839,8 +8854,7 @@
                                           Grid.Column="1"
                                           Style="{StaticResource ModernComboBoxStyle}"
                                           SelectedIndex="1"
-                                          SelectionChanged="LegionPerformanceModeComboBox_SelectionChanged"
-                                          XYFocusDown="{x:Bind LegionFanFullSpeedToggle}">
+                                          SelectionChanged="LegionPerformanceModeComboBox_SelectionChanged">
                                     <ComboBoxItem Content="Quiet" Tag="1"/>
                                     <ComboBoxItem Content="Balanced" Tag="2"/>
                                     <ComboBoxItem Content="Performance" Tag="3"/>
@@ -8852,6 +8866,9 @@
                         <!-- The Legion-tab Custom SPL / SPPL / FPPT sliders were removed in favor of the
                              Performance tab's master TDP slider + per-profile TDP Boost deltas (Fast/Peak +W
                              inline under the TDP Boost toggle). One source of truth, no two-sliders-fight. -->
+
+                        <!-- Fan Settings Section -->
+                        <TextBlock Text="Fan Settings" Style="{StaticResource SectionHeaderStyle}"/>
 
                         <!-- Fan Full Speed Card -->
                         <Border Style="{StaticResource CardStyle}">
@@ -8903,7 +8920,7 @@
                                          Performance=3, Custom=255. -->
                                     <ComboBox x:Name="FanCurvePresetComboBox"
                                               Grid.Column="1"
-                                              Width="120"
+                                              Width="160"
                                               VerticalAlignment="Center"
                                               Margin="0,0,8,0"
                                               SelectionChanged="FanCurvePresetComboBox_SelectionChanged">
@@ -9121,7 +9138,7 @@
                         </Border>
 
                         <!-- Battery Section Header -->
-                        <TextBlock Text="BATTERY" Style="{StaticResource SectionHeaderStyle}"/>
+                        <TextBlock Text="Battery" Style="{StaticResource SectionHeaderStyle}"/>
 
                         <!-- Battery Charge Limit Card -->
                         <Border Style="{StaticResource CardStyle}">
@@ -9143,7 +9160,7 @@
                         </Border>
 
                         <!-- LABS Section Header -->
-                        <TextBlock Text="LABS" Style="{StaticResource SectionHeaderStyle}"/>
+                        <TextBlock Text="Labs" Style="{StaticResource SectionHeaderStyle}"/>
 
                         <!-- Labs Description -->
                         <TextBlock Text="Experimental features - use at your own risk"
@@ -9181,7 +9198,7 @@
                         <!-- Driver Updates Card (Lenovo): machine type + installed BIOS +
                              direct link to the correct Lenovo downloads page, with a
                              best-effort live driver list fetched from pcsupport.lenovo.com -->
-                        <TextBlock Text="DRIVER UPDATES" Style="{StaticResource SectionHeaderStyle}"/>
+                        <TextBlock Text="Driver Updates" Style="{StaticResource SectionHeaderStyle}"/>
                         <Border x:Name="DriverUpdatesCard" Style="{StaticResource CardStyle}">
                             <StackPanel>
                                 <Grid>
@@ -9326,7 +9343,7 @@
                 </ScrollViewer>
 
                 <!-- GPD TAB -->
-                <ScrollViewer x:Name="GPDScrollViewer" XYFocusUpNavigationStrategy="Projection" XYFocusDownNavigationStrategy="Projection" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
+                <ScrollViewer x:Name="GPDScrollViewer" XYFocusUpNavigationStrategy="NavigationDirectionDistance" XYFocusDownNavigationStrategy="NavigationDirectionDistance" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
                               BringIntoViewOnFocusChange="True">
                     <StackPanel Padding="16,8,16,16">
 
@@ -9344,7 +9361,7 @@
 
                         <!-- Fan Control Card (Win 5 specific) -->
                         <StackPanel x:Name="GPDFanControlSection" Visibility="Collapsed">
-                            <TextBlock Text="FAN CONTROL" Style="{StaticResource SectionHeaderStyle}"/>
+                            <TextBlock Text="Fan Control" Style="{StaticResource SectionHeaderStyle}"/>
 
                             <Border Style="{StaticResource CardStyle}">
                                 <StackPanel>
@@ -9370,8 +9387,7 @@
                                                       Grid.Column="1"
                                                       Style="{StaticResource ModernToggleStyle}"
                                                       IsOn="False"
-                                                      Toggled="GPDFanCurveToggle_Toggled"
-                                                      XYFocusUp="{x:Bind GPDNavItem}"/>
+                                                      Toggled="GPDFanCurveToggle_Toggled"/>
                                     </Grid>
 
                                     <!-- Manual Fan Controls (visible when curve OFF) -->
@@ -9534,7 +9550,7 @@
 
                         <!-- Button Remapping Section (Win 5 specific) -->
                         <StackPanel x:Name="GPDButtonRemapSection" Visibility="Collapsed">
-                            <TextBlock Text="BUTTON REMAPPING" Style="{StaticResource SectionHeaderStyle}"/>
+                            <TextBlock Text="Button Remapping" Style="{StaticResource SectionHeaderStyle}"/>
 
                             <Border Style="{StaticResource CardStyle}">
                                 <StackPanel>

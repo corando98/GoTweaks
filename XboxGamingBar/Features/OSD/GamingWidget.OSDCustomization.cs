@@ -1,4 +1,4 @@
-using Microsoft.Gaming.XboxGameBar;
+﻿using Microsoft.Gaming.XboxGameBar;
 using Microsoft.Gaming.XboxGameBar.Input;
 using Microsoft.UI.Xaml.Controls;
 using NLog;
@@ -902,11 +902,6 @@ namespace XboxGamingBar
             }
 
             // Update XY focus chain based on expanded state
-            if (TDPExtrasExpandToggle != null && OSPowerModeComboBox != null)
-            {
-                TDPExtrasExpandToggle.XYFocusDown = isTDPExtrasExpanded ? (DependencyObject)TDPBoostToggle : OSPowerModeComboBox;
-                OSPowerModeComboBox.XYFocusUp = isTDPExtrasExpanded ? (DependencyObject)StickyTDPToggle : TDPExtrasExpandToggle;
-            }
         }
         private void CPUExtrasExpandToggle_Click(object sender, RoutedEventArgs e)
         {
@@ -1236,11 +1231,14 @@ namespace XboxGamingBar
                 {
                     if (ForceDefaultGameProfileToggle != null)
                     {
-                        ForceDefaultGameProfileToggle.IsOn = enabled;
+                        isSyncingDgpEnabledToggle = true;
+                        try { ForceDefaultGameProfileToggle.IsOn = enabled; }
+                        finally { isSyncingDgpEnabledToggle = false; }
                     }
-                    // Send to helper on startup
+                    // Send to helper on startup (explicit user choice overrides the
+                    // helper's device-dependent default)
                     forceDefaultGameProfile?.SetValue(enabled);
-                    Logger.Info($"Loaded Force Default Game Profile setting: {enabled}");
+                    Logger.Info($"Loaded Default Game Profiles enabled setting: {enabled}");
                 }
             }
             catch (Exception ex)

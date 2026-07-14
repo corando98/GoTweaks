@@ -1065,6 +1065,7 @@ namespace XboxGamingBar
         private readonly CoreParkingPercentProperty coreParkingPercent;
         private readonly ForceParkModeProperty forceParkMode;
         private readonly ForceDefaultGameProfileProperty forceDefaultGameProfile;
+        private readonly WidgetProperty<int> legionControllerSleepMinutes;
 
         // TDP Boost properties
         private readonly TDPBoostEnabledProperty tdpBoostEnabled;
@@ -1413,6 +1414,9 @@ namespace XboxGamingBar
             // exactly one tab — without it, holding a trigger would cycle tabs continuously.
             this.PreviewKeyDown += GamingWidget_PreviewKeyDown;
             this.PreviewKeyUp += GamingWidget_PreviewKeyUp;
+            // Vertical end-stops for gamepad navigation: keep focus from escaping the
+            // active tab's content at the bottom, and route top-exits to the active tab.
+            this.LosingFocus += GamingWidget_LosingFocus;
             // Clear any latched LT/RT "held" state whenever the widget regains focus.
             // HidHide CyclePort during emulation setup can hide the physical pad while
             // a trigger was physically pressed; the KeyUp never arrives so the widget
@@ -1809,6 +1813,11 @@ namespace XboxGamingBar
             coreParkingPercent = new CoreParkingPercentProperty(100); // 100% = all cores active
             forceParkMode = new ForceParkModeProperty(false);
             forceDefaultGameProfile = new ForceDefaultGameProfileProperty(false);
+            forceDefaultGameProfile.PropertyChanged += (s, args) => OnDgpEnabledSynced();
+            // Headless: the helper pushes the persisted controller-sleep timeout on connect;
+            // the combo itself is seeded from the GoTweaks status apply path, so this only
+            // needs to exist to route the message (was logging "Property ... not found").
+            legionControllerSleepMinutes = new WidgetProperty<int>(15, null, Shared.Enums.Function.LegionControllerSleepMinutes);
 
             // TDP Boost properties (defaults: enabled=false, SPPT=1W, FPPT=3W)
             tdpBoostEnabled = new TDPBoostEnabledProperty(false);
@@ -2142,6 +2151,7 @@ namespace XboxGamingBar
                 defaultGameProfileData,
                 defaultGameProfileEnabled,
                 forceDefaultGameProfile,
+                legionControllerSleepMinutes,
                 // Profile Detection Settings
                 profileMatchByExe,
                 profileGamesOnly
@@ -2518,6 +2528,8 @@ namespace XboxGamingBar
                 RightControllerConnectionText.Text = rightConnected ? "Attached" : "Detached";
 
                 UpdateLegionControllerOverallStatus(leftConnected, rightConnected, leftBattery, rightBattery);
+                UpdateLegionDeviceGlyph(leftConnected, rightConnected,
+                    leftConnected || leftBattery >= 0, rightConnected || rightBattery >= 0);
             }
             catch (Exception ex)
             {
@@ -2614,12 +2626,127 @@ namespace XboxGamingBar
         /// device-status JSON has data, instead of gating solely on device-status —
         /// the two properties can arrive independently and out of order.
         /// </summary>
+        // ---- Device glyph: attach state + live stick-light color/effect ----
+        // The glyph is rendered from Assets/LegionGo2ControllerTemplate.svg: detached
+        // controller halves drop to half opacity, and the stick-light rings are filled
+        // with the current lighting color (rainbow gradient for the Dynamic/Spiral
+        // effects), scaled by brightness. Gray rings when the light is off.
+        private bool glyphLeftConnected, glyphRightConnected;
+        private bool glyphLeftPresent, glyphRightPresent;
+        private bool glyphLightEnabled;
+        private int glyphLightMode, glyphLightR, glyphLightG, glyphLightB, glyphLightBrightness;
+        private string glyphTemplate;
+        private string lastDeviceGlyphKey;
+        private bool glyphRefreshRunning, glyphRefreshPending;
+
+        private void UpdateLegionDeviceGlyph(bool leftConnected, bool rightConnected, bool leftPresent, bool rightPresent)
+        {
+            glyphLeftConnected = leftConnected;
+            glyphRightConnected = rightConnected;
+            glyphLeftPresent = leftPresent;
+            glyphRightPresent = rightPresent;
+            RefreshLegionDeviceGlyph();
+        }
+
+        private async void RefreshLegionDeviceGlyph()
+        {
+            if (LegionDeviceGlyphImage == null) return;
+            if (glyphRefreshRunning) { glyphRefreshPending = true; return; }
+            glyphRefreshRunning = true;
+            try
+            {
+                do
+                {
+                    glyphRefreshPending = false;
+                    await RenderLegionDeviceGlyphOnceAsync();
+                } while (glyphRefreshPending);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"RefreshLegionDeviceGlyph failed: {ex.Message}");
+            }
+            finally
+            {
+                glyphRefreshRunning = false;
+            }
+        }
+
+        private async Task RenderLegionDeviceGlyphOnceAsync()
+        {
+            string key = $"{glyphLeftConnected}|{glyphRightConnected}|{glyphLeftPresent}|{glyphRightPresent}|{glyphLightEnabled}|{glyphLightMode}|{glyphLightR},{glyphLightG},{glyphLightB}|{glyphLightBrightness}";
+            if (key == lastDeviceGlyphKey) return;
+
+            if (glyphTemplate == null)
+            {
+                var file = await Windows.Storage.StorageFile.GetFileFromApplicationUriAsync(
+                    new Uri("ms-appx:///Assets/LegionGo2ControllerTemplate.svg"));
+                glyphTemplate = await Windows.Storage.FileIO.ReadTextAsync(file);
+            }
+
+            string fill;
+            string fillOpacity;
+            if (!glyphLightEnabled)
+            {
+                fill = "#899099";   // unlit: blend with the outline art
+                fillOpacity = "1";
+            }
+            else if (glyphLightMode >= 2)
+            {
+                fill = "url(#stickRainbow)";   // Dynamic / Spiral: multicolor effects
+                fillOpacity = BrightnessToFillOpacity();
+            }
+            else
+            {
+                fill = $"rgb({glyphLightR},{glyphLightG},{glyphLightB})";   // Solid / Pulse
+                fillOpacity = BrightnessToFillOpacity();
+            }
+
+            // Per side: attached = in place at full opacity; detached-but-reporting =
+            // shifted away from the screen (physically detached, still connected);
+            // no signal at all = dimmed in place.
+            string svgText = glyphTemplate
+                .Replace("{LOP}", glyphLeftPresent ? "1" : "0.5")
+                .Replace("{ROP}", glyphRightPresent ? "1" : "0.5")
+                .Replace("{LTX}", (glyphLeftPresent && !glyphLeftConnected) ? "-6" : "0")
+                .Replace("{RTX}", (glyphRightPresent && !glyphRightConnected) ? "6" : "0")
+                .Replace("{LFILL}", fill)
+                .Replace("{RFILL}", fill)
+                .Replace("{SFO}", fillOpacity);
+
+            var svg = new Windows.UI.Xaml.Media.Imaging.SvgImageSource
+            {
+                RasterizePixelWidth = 511,
+                RasterizePixelHeight = 230,
+            };
+            using (var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream())
+            {
+                var bytes = System.Text.Encoding.UTF8.GetBytes(svgText);
+                await stream.WriteAsync(System.Runtime.InteropServices.WindowsRuntime.WindowsRuntimeBufferExtensions.AsBuffer(bytes));
+                stream.Seek(0);
+                await svg.SetSourceAsync(stream);
+            }
+            LegionDeviceGlyphImage.Source = svg;
+            lastDeviceGlyphKey = key;
+        }
+
+        private string BrightnessToFillOpacity()
+        {
+            // Keep a visible floor so a low-brightness light still reads as "on".
+            int br = Math.Max(0, Math.Min(100, glyphLightBrightness));
+            double o = 0.45 + 0.55 * (br / 100.0);
+            return o.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
         private void UpdateLegionControllerInfoSectionVisibility()
         {
             if (LegionControllerInfoSection == null) return;
             bool hasVidPid = !string.IsNullOrEmpty(controllerVidPid?.Value);
             bool hasDeviceStatus = !string.IsNullOrEmpty(controllerDeviceStatus?.Value);
-            LegionControllerInfoSection.Visibility = (hasVidPid || hasDeviceStatus) ? Visibility.Visible : Visibility.Collapsed;
+            var vis = (hasVidPid || hasDeviceStatus) ? Visibility.Visible : Visibility.Collapsed;
+            LegionControllerInfoSection.Visibility = vis;
+            // The Controller Sleep card (Controller Settings section) is fed by the same
+            // GoTweaks device status, so it follows the same visibility.
+            if (ControllerSleepCard != null) ControllerSleepCard.Visibility = vis;
         }
 
         private void LegionControllerDeviceStatus_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -2703,7 +2830,11 @@ namespace XboxGamingBar
                     }
                     else
                     {
-                        LegionControllerLightText.Text = $"{LightModeLabel(lightMode)} · {brightness}% · speed {speed}%";
+                        // Speed only applies to animated modes; Solid (device readback lm=0) has no
+                        // speed, so omit it. (Device lm: 0=Solid, 1=Pulse, 2=Dynamic, 3=Spiral.)
+                        LegionControllerLightText.Text = lightMode == 0
+                            ? $"{LightModeLabel(lightMode)} · {brightness}%"
+                            : $"{LightModeLabel(lightMode)} · {brightness}% · speed {speed}%";
                     }
                 }
                 if (LegionControllerLightSwatch != null)
@@ -2720,6 +2851,13 @@ namespace XboxGamingBar
                     LegionControllerVibrationText.Text = VibrationLabel(vibration);
                 if (LegionControllerTouchpadText != null)
                     LegionControllerTouchpadText.Text = touchpad ? "On" : "Off";
+
+                // Mirror the stick-light state onto the device glyph.
+                glyphLightEnabled = lightEnabled;
+                glyphLightMode = lightMode;
+                glyphLightR = r; glyphLightG = g; glyphLightB = b;
+                glyphLightBrightness = brightness;
+                RefreshLegionDeviceGlyph();
 
                 Logger.Info("UpdateLegionControllerDeviceStatusDisplay: EXIT ok");
             }

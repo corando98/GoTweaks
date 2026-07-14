@@ -517,6 +517,10 @@
     </AppxManifest>
   </ItemGroup>
   <ItemGroup>
+    <Content Include="Assets\LegionGo2Controller.svg" />
+    <Content Include="Assets\LegionGo2ControllerTemplate.svg" />
+    <Content Include="Assets\LegionGo2ControllerLeft.png" />
+    <Content Include="Assets\LegionGo2ControllerRight.png" />
     <Content Include="Assets\Icons\icon.light.targetsize-16.png" />
     <Content Include="Assets\Icons\icon.light.targetsize-20.png" />
     <Content Include="Assets\Icons\icon.light.targetsize-24.png" />
