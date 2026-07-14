@@ -160,7 +160,9 @@ namespace XboxGamingBar
 
         private void OnDAServiceStatusReceived(int status)
         {
-            // Status: 0 = Stopped/Disabled, 1 = Running, 2 = Not Found, 3 = Stopping, 4 = Starting
+            // Status reflects the startup state: 0 = Disabled (no boot auto-start; Legion Space
+            // still launchable on demand), 1 = Enabled (auto-starts at boot), 2 = Not Found.
+            // (3/4 are legacy transient codes the helper no longer sends.)
             _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
             {
                 if (DAServiceStatusText == null || ToggleDAServiceButton == null)
@@ -168,16 +170,16 @@ namespace XboxGamingBar
 
                 switch (status)
                 {
-                    case 0: // Stopped/Disabled
+                    case 0: // Disabled (no auto-start; still launchable on demand)
                         daServiceIsRunning = false;
-                        DAServiceStatusText.Text = "Service disabled - Legion L/R buttons disabled";
+                        DAServiceStatusText.Text = "Auto-start off - Legion Space won't run at boot (still launchable)";
                         DAServiceStatusText.Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0, 200, 83)); // Green
                         ToggleDAServiceButton.Content = "Enable";
                         ToggleDAServiceButton.IsEnabled = true;
                         break;
-                    case 1: // Running
+                    case 1: // Enabled (auto-starts at boot)
                         daServiceIsRunning = true;
-                        DAServiceStatusText.Text = "Service running - Legion Space controls buttons";
+                        DAServiceStatusText.Text = "Auto-start on - Legion Space runs at boot";
                         DAServiceStatusText.Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 170, 0)); // Orange
                         ToggleDAServiceButton.Content = "Disable";
                         ToggleDAServiceButton.IsEnabled = true;

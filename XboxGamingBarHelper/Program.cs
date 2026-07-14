@@ -374,10 +374,12 @@ namespace XboxGamingBarHelper
             {
                 try
                 {
-                    Logger.Warn("ProcessExit fired — releasing EC fan + HidHide suppression before shutdown");
+                    Logger.Warn("ProcessExit fired — releasing EC fan + HidHide suppression + VIIPER bus before shutdown");
                     legionManager?.EmergencyReleaseFanOverride();
                     try { controllerEmulationManager?.SuppressionManager?.Disable(); }
                     catch (Exception ex) { Logger.Warn($"ProcessExit HidHide.Disable threw: {ex.Message}"); }
+                    try { viiperEmulationManager?.Dispose(); }
+                    catch (Exception ex) { Logger.Warn($"ProcessExit VIIPER.Dispose threw: {ex.Message}"); }
                     LogManager.Flush();
                 }
                 catch { }
@@ -386,10 +388,12 @@ namespace XboxGamingBarHelper
             {
                 try
                 {
-                    Logger.Error($"UnhandledException — releasing EC fan + HidHide suppression. Exception: {e.ExceptionObject}");
+                    Logger.Error($"UnhandledException — releasing EC fan + HidHide suppression + VIIPER bus. Exception: {e.ExceptionObject}");
                     legionManager?.EmergencyReleaseFanOverride();
                     try { controllerEmulationManager?.SuppressionManager?.Disable(); }
                     catch (Exception ex) { Logger.Warn($"UnhandledException HidHide.Disable threw: {ex.Message}"); }
+                    try { viiperEmulationManager?.Dispose(); }
+                    catch (Exception ex) { Logger.Warn($"UnhandledException VIIPER.Dispose threw: {ex.Message}"); }
                     LogManager.Flush();
                 }
                 catch { }
@@ -1414,6 +1418,7 @@ namespace XboxGamingBarHelper
                 systemManager.AdaptiveBrightnessMode,
                 systemManager.PanelBrightness,
                 systemManager.PanelBrightnessSupported,
+                systemManager.TouchscreenEnabled,
                 systemManager.CPUCoreConfig,
                 systemManager.CPUCoreActiveConfig,
                 systemManager.CoreParkingPercent,

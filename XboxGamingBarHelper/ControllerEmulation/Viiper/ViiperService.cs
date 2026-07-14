@@ -136,13 +136,15 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             }
             Logger.Info($"VIIPER device added: {typeName} (bus={busId}, dev={deviceId}, vid=0x{vid:X4}, pid=0x{pid:X4})");
 
-            // NOTE: do NOT call viiper_device_attach here. libviiper's viiper_device_add[_ex]
-            // already attaches the device internally — calling attach a second time produces
-            // a *duplicate* USBIP attachment, surfacing two emulated controllers to Windows
-            // (caught during local test of build 2067 with steam-generic mode). Diagnostic
-            // visibility for "did Windows actually see the device?" comes from the existing
-            // ViiperInputForwarder 5s stats line: reportsSent > 0 + user reports no input
-            // means attach worked but downstream consumption didn't.
+            // libviiper's viiper_device_add is *supposed* to auto-attach the device to the
+            // local UDE bus, but on some usbip-win2 UDE installs that internal attach silently
+            // no-ops: add returns success and the device is exported on 127.0.0.1:3241, yet no
+            // child ever appears under the UDE host controller and no gamepad reaches Windows
+            // (verified on-device 2026-07-08, LeGo2 + usbip-win2 0.9.7.8). Drive the standard
+            // usbip client explicitly to land it. UsbipCli is idempotent — a device already
+            // attached (e.g. the internal auto-attach DID fire) is skipped, so this never
+            // produces the duplicate USBIP attachment the old auto-attach-only path warned of.
+            UsbipCli.AttachExportedDevices();
 
             RegisterFeedbackCallback(busId, deviceId);
             return new ViiperAddDeviceResult(true, deviceId);

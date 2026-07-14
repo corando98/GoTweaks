@@ -557,10 +557,18 @@ namespace XboxGamingBar
 
         private async void DesktopView_CloseRequested(object sender, SystemNavigationCloseRequestedPreviewEventArgs e)
         {
-            // No widget alive → this is a plain desktop app close; let it through.
-            if (gamingXboxGameBarWidget == null)
+            // Only intervene when Game Bar is ACTIVELY showing the widget on screen right now.
+            // A widget instance can exist (gamingXboxGameBarWidget != null) long after Game Bar's
+            // overlay was last opened - Game Bar backgrounds it instead of destroying it - and in
+            // that case closing the desktop window carries no visible risk: nothing is on screen
+            // for Windows to disrupt, and even if the process suspends, Game Bar just cold-starts
+            // the widget fresh next time it's opened, same as any normal launch. Only redirect to
+            // minimize when the overlay is actually up (widget.Visible), the one moment closing
+            // the last OS-visible window really could suspend the process out from under a
+            // visible Game Bar session and show "Something went wrong with this widget".
+            if (gamingXboxGameBarWidget == null || gamingXboxGameBarWidget.Visible != true)
             {
-                Logger.Info("Desktop window close: no active widget, closing normally");
+                Logger.Info($"Desktop window close: widget not currently visible in Game Bar (exists={gamingXboxGameBarWidget != null}), closing normally");
                 return;
             }
 

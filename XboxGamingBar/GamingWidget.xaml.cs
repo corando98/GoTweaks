@@ -634,10 +634,39 @@ namespace XboxGamingBar
                 ButtonBorder = Windows.UI.Color.FromArgb(255, 88, 91, 112),       // #585B70
                 TileOff = Windows.UI.Color.FromArgb(255, 24, 24, 37),             // #181825
                 TileOn = Windows.UI.Color.FromArgb(255, 166, 227, 161)            // #A6E3A1 (green)
+            }},
+            // Win11 - ported from the Rayekkk/GoTweaks-Lite fork (commits f04f1e78 +
+            // 77a24806 + e1cb6ef9): flat neutral cards/tiles (#35393F) with a
+            // translucent white hairline border, accent signalled by a bottom bar on
+            // tiles instead of a background tint. AccentColor below is a static
+            // fallback (Windows blue swatch) - at apply time GetThemeAccentBrush
+            // substitutes the live SystemAccentColorLight2.
+            { "Win11", new ThemeColors {
+                Name = "Win11",
+                PageBackground = Windows.UI.Color.FromArgb(255, 37, 40, 44),      // #25282C (fork kept default)
+                CardBackground = Windows.UI.Color.FromArgb(255, 0x35, 0x39, 0x3F),// #35393F flat neutral
+                CardBorder = Windows.UI.Color.FromArgb(0x22, 255, 255, 255),      // #22FFFFFF translucent hairline
+                AccentColor = Windows.UI.Color.FromArgb(255, 0x4C, 0xC2, 0xFF),   // #4CC2FF (fallback; live accent used at runtime)
+                TextPrimary = Windows.UI.Color.FromArgb(255, 255, 255, 255),      // #FFFFFF
+                TextSecondary = Windows.UI.Color.FromArgb(255, 160, 160, 160),    // #A0A0A0
+                ButtonBackground = Windows.UI.Color.FromArgb(255, 62, 67, 75),    // #3E434B (fork kept default)
+                ButtonBorder = Windows.UI.Color.FromArgb(0x22, 255, 255, 255),    // #22FFFFFF
+                TileOff = Windows.UI.Color.FromArgb(255, 0x35, 0x39, 0x3F),       // #35393F flat neutral
+                TileOn = Windows.UI.Color.FromArgb(255, 0x35, 0x39, 0x3F)         // same - "on" is signalled by the accent bar
             }}
         };
 
         private string currentThemeName = "Default";
+
+        /// <summary>
+        /// True when the Win11 theme is active. The Win11 theme is a structural
+        /// variant, not just a palette: Quick Settings tiles signal on/off via a
+        /// bottom accent bar instead of a background tint, the metrics grid uses
+        /// an icon-over-value-over-label layout with dividers, and cards get
+        /// CornerRadius 10 / BorderThickness 1. Consulted by CreateTileButton,
+        /// UpdateQuickSettingsTileStates, RebuildMetricsGrid and the theme walker.
+        /// </summary>
+        private bool IsWin11Theme => currentThemeName == "Win11";
 
         // Xbox Game Bar logic
         private XboxGameBarWidget widget = null;
@@ -715,6 +744,7 @@ namespace XboxGamingBar
         private readonly CurrentTDPProperty currentTdp;
         private readonly RunningGameProperty runningGame;
         private readonly PerGameProfileProperty perGameProfile;
+        private readonly DeleteGameProfileProperty deleteGameProfile;
         private readonly CPUBoostProperty cpuBoost;
         private readonly CPUEPPProperty cpuEPP;
         private readonly MaxCPUStateProperty maxCPUState;
@@ -730,6 +760,7 @@ namespace XboxGamingBar
         private readonly DisplayOrientationProperty displayOrientation;
         private readonly HDRSupportedProperty hdrSupported;
         private readonly HDREnabledProperty hdrEnabled;
+        private readonly TouchscreenEnabledProperty touchscreenEnabled;
         private readonly AdaptiveBrightnessModeProperty adaptiveBrightnessMode;
         private readonly WidgetSliderProperty panelBrightness;
         private readonly PanelBrightnessSupportedProperty panelBrightnessSupported;
@@ -1403,6 +1434,7 @@ namespace XboxGamingBar
                 UpdateDetectedGameScrollAnimation();
             });
             perGameProfile = new PerGameProfileProperty(PerGameProfileToggle, this);
+            deleteGameProfile = new DeleteGameProfileProperty();
             cpuBoost = new CPUBoostProperty(CPUBoostToggle, this);
             cpuEPP = new CPUEPPProperty(80, CPUEPPSlider, this);
             maxCPUState = new MaxCPUStateProperty();
@@ -1420,6 +1452,7 @@ namespace XboxGamingBar
             displayOrientation = new DisplayOrientationProperty();
             hdrSupported = new HDRSupportedProperty(HDRToggle, this);
             hdrEnabled = new HDREnabledProperty(HDRToggle, this);
+            touchscreenEnabled = new TouchscreenEnabledProperty();
             adaptiveBrightnessMode = new AdaptiveBrightnessModeProperty(AdaptiveBrightnessModeComboBox, this);
             // Slider ValueChanged (PanelBrightnessSlider_ValueChanged) updates the % label on
             // both user drags and helper-pushed sync (the base sets UI.Value), so no extra hook.
@@ -1837,6 +1870,7 @@ namespace XboxGamingBar
                 tdp,
                 runningGame,
                 perGameProfile,
+                deleteGameProfile,
                 cpuBoost,
                 cpuEPP,
                 maxCPUState,
@@ -1852,6 +1886,7 @@ namespace XboxGamingBar
                 displayOrientation,
                 hdrSupported,
                 hdrEnabled,
+                touchscreenEnabled,
                 adaptiveBrightnessMode,
                 panelBrightness,
                 panelBrightnessSupported,
@@ -2481,10 +2516,48 @@ namespace XboxGamingBar
                 }
                 RightControllerChargingIcon.Visibility = rightCharging ? Visibility.Visible : Visibility.Collapsed;
                 RightControllerConnectionText.Text = rightConnected ? "Attached" : "Detached";
+
+                UpdateLegionControllerOverallStatus(leftConnected, rightConnected, leftBattery, rightBattery);
             }
             catch (Exception ex)
             {
                 Logger.Error($"Error updating Legion controller battery display: {ex.Message}");
+            }
+        }
+
+        // #4CAF50 matches the "good" green used by GetBatteryBrush and the battery text.
+        private static readonly Windows.UI.Xaml.Media.SolidColorBrush _legionControllerStatusGreen =
+            new Windows.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x4C, 0xAF, 0x50));
+        private static readonly Windows.UI.Xaml.Media.SolidColorBrush _legionControllerStatusGray =
+            new Windows.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x88, 0x88, 0x88));
+
+        /// <summary>
+        /// Drives the top-of-card status line: "Attached" when at least one controller is
+        /// physically docked, "Connected" when detached-but-paired (wireless) controllers are
+        /// still reporting data, "Not detected" when neither controller has any signal yet.
+        /// </summary>
+        private void UpdateLegionControllerOverallStatus(bool leftConnected, bool rightConnected, int leftBattery, int rightBattery)
+        {
+            if (LegionControllerStatusText == null) return;
+
+            bool anyAttached = leftConnected || rightConnected;
+            bool anyPresent = anyAttached || leftBattery >= 0 || rightBattery >= 0
+                               || !string.IsNullOrEmpty(controllerVidPid?.Value);
+
+            if (anyAttached)
+            {
+                LegionControllerStatusText.Text = "Attached";
+                LegionControllerStatusText.Foreground = _legionControllerStatusGreen;
+            }
+            else if (anyPresent)
+            {
+                LegionControllerStatusText.Text = "Connected";
+                LegionControllerStatusText.Foreground = _legionControllerStatusGreen;
+            }
+            else
+            {
+                LegionControllerStatusText.Text = "Not detected";
+                LegionControllerStatusText.Foreground = _legionControllerStatusGray;
             }
         }
 
@@ -2520,11 +2593,33 @@ namespace XboxGamingBar
                 {
                     LegionControllerPidVidText.Text = "VID:PID --";
                 }
+                UpdateLegionControllerInfoSectionVisibility();
+
+                // VID:PID can arrive before battery/connected data does — re-evaluate the
+                // top status line so it doesn't sit on "Not detected" longer than necessary.
+                UpdateLegionControllerOverallStatus(
+                    controllerConnectedLeft?.Value ?? false,
+                    controllerConnectedRight?.Value ?? false,
+                    controllerBatteryLeft?.Value ?? -1,
+                    controllerBatteryRight?.Value ?? -1);
             }
             catch (Exception ex)
             {
                 Logger.Error($"Error updating Legion controller VID:PID display: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Shows the Controller Information table as soon as EITHER VID:PID or the
+        /// device-status JSON has data, instead of gating solely on device-status —
+        /// the two properties can arrive independently and out of order.
+        /// </summary>
+        private void UpdateLegionControllerInfoSectionVisibility()
+        {
+            if (LegionControllerInfoSection == null) return;
+            bool hasVidPid = !string.IsNullOrEmpty(controllerVidPid?.Value);
+            bool hasDeviceStatus = !string.IsNullOrEmpty(controllerDeviceStatus?.Value);
+            LegionControllerInfoSection.Visibility = (hasVidPid || hasDeviceStatus) ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void LegionControllerDeviceStatus_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -2565,10 +2660,9 @@ namespace XboxGamingBar
             {
                 Logger.Info("UpdateLegionControllerDeviceStatusDisplay: ENTER");
                 string json = controllerDeviceStatus?.Value ?? "";
+                UpdateLegionControllerInfoSectionVisibility();
                 if (string.IsNullOrEmpty(json))
                 {
-                    if (LegionControllerInfoSection != null)
-                        LegionControllerInfoSection.Visibility = Visibility.Collapsed;
                     return;
                 }
 
@@ -2598,8 +2692,6 @@ namespace XboxGamingBar
 
                 Logger.Info($"UpdateLegionControllerDeviceStatusDisplay: parsed fw={fw} le={lightEnabled} lm={lightMode} br={brightness} sp={speed} vb={vibration} tp={touchpad}");
 
-                if (LegionControllerInfoSection != null)
-                    LegionControllerInfoSection.Visibility = Visibility.Visible;
                 if (LegionControllerFirmwareText != null)
                     LegionControllerFirmwareText.Text = string.IsNullOrEmpty(fw) ? "—" : fw;
 
@@ -3269,6 +3361,22 @@ namespace XboxGamingBar
             Logger.Info("Registering this GamingWidget instance as the active widget.");
             App.RegisterActiveGamingWidget(this);
             Logger.Info("GamingWidget instance registered as active.");
+
+            // Re-bind this instance's pipe handlers unconditionally, even if the pipe is
+            // already connected. Game Bar can recreate the GamingWidget Page in place
+            // (display-mode/dock changes) without ever dropping the named pipe. When that
+            // happens the code below takes the "already connected" branch and never calls
+            // TryConnectPipeAsync — which is the ONLY other place these handlers get
+            // (re)subscribed. Without this, the new active instance never receives live
+            // pipe pushes (e.g. Function.QuickMetrics), so anything driven purely by push
+            // (like the Quick Metrics row) freezes at its last value / "--" until the
+            // widget is fully closed and reopened, forcing a real reconnect. -= before +=
+            // keeps this idempotent for the fresh-connect path, where TryConnectPipeAsync
+            // does the same subscription right after.
+            App.PipeMessageReceived -= PipeClient_MessageReceived;
+            App.PipeMessageReceived += PipeClient_MessageReceived;
+            App.PipeDisconnected -= PipeClient_Disconnected;
+            App.PipeDisconnected += PipeClient_Disconnected;
 
             //while (!System.Diagnostics.Debugger.IsAttached)
             //{

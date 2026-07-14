@@ -187,6 +187,13 @@ namespace XboxGamingBarHelper.Systems
             get { return panelBrightnessSupported; }
         }
 
+        private const string TouchscreenEnabledKey = "TouchscreenEnabled";
+        private readonly TouchscreenEnabledProperty touchscreenEnabled;
+        public TouchscreenEnabledProperty TouchscreenEnabled
+        {
+            get { return touchscreenEnabled; }
+        }
+
         private readonly AdaptiveBrightnessModeProperty adaptiveBrightnessMode;
         public AdaptiveBrightnessModeProperty AdaptiveBrightnessMode
         {
@@ -286,6 +293,19 @@ namespace XboxGamingBarHelper.Systems
             adaptiveBrightnessMode = new AdaptiveBrightnessModeProperty(this);
             panelBrightness = new PanelBrightnessProperty(this);
             panelBrightnessSupported = new PanelBrightnessSupportedProperty(this);
+
+            // Touch screen: persist the user's last choice across helper restarts. Default true
+            // (touch active) if never set. No need to re-apply on startup - Device Manager's
+            // disabled state is itself persistent at the OS level (survives reboots/helper
+            // restarts on its own), we're just mirroring it in the UI. Default true also means
+            // a fresh install never starts with touch off.
+            bool touchscreenInitial = true;
+            if (XboxGamingBarHelper.Settings.LocalSettingsHelper.TryGetValue<bool>(TouchscreenEnabledKey, out var savedTouchscreenEnabled))
+            {
+                touchscreenInitial = savedTouchscreenEnabled;
+            }
+            touchscreenEnabled = new TouchscreenEnabledProperty(touchscreenInitial, this);
+
             // Master AB toggle lives inside the OSD/Display bundle and is only re-sent on
             // widget change — so a helper restart loses the in-memory "requested" flag.
             // Persist it locally and re-apply on startup so mode flips work after restarts.
@@ -1630,6 +1650,26 @@ namespace XboxGamingBarHelper.Systems
         {
             // Re-apply the current requested state so the right backend ends up running.
             ApplyAdaptiveBrightnessBackend(adaptiveBrightnessRequested, mode);
+        }
+
+        // Disables/enables the built-in touch screen digitizer via SetupAPI (Device Manager's
+        // own "Disable device" mechanism). Matches by HID compatible ID (UP:000D_U:0004 =
+        // Digitizer usage page + Touch Screen usage), not the friendly name/VID/PID - the
+        // friendly name is localized by Windows ("HID-compliant touch screen" becomes e.g.
+        // "Ekran dotykowy zgodny z HID" on Polish Windows) so name matching silently found
+        // nothing on non-English installs; the compatible ID is generic and never localized.
+        public void SetTouchscreenEnabled(bool enabled)
+        {
+            try { XboxGamingBarHelper.Settings.LocalSettingsHelper.SetValue(TouchscreenEnabledKey, enabled); } catch { }
+            try
+            {
+                int touched = SetupApi.SetHidDeviceEnabled("UP:000D_U:0004", enabled);
+                Logger.Info($"SetTouchscreenEnabled({enabled}): {touched} matching HID device(s) toggled");
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"SetTouchscreenEnabled({enabled}) failed: {ex.Message}");
+            }
         }
 
         private void ApplyAdaptiveBrightnessBackend(bool requested, Shared.Enums.AdaptiveBrightnessMode mode)

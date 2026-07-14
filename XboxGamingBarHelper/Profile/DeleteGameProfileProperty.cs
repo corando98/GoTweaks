@@ -35,6 +35,11 @@ namespace XboxGamingBarHelper.Profile
                 {
                     Logger.Warn($"Failed to delete profile for: {Value} (not found)");
                 }
+
+                // Reset the trigger to empty (silently, no echo) so deleting the SAME game
+                // name again later in this helper session isn't dropped by the equal-value
+                // dedupe in GenericProperty.SetValue.
+                SetValueSilent("");
             }
         }
     }

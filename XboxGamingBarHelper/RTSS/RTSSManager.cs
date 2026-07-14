@@ -60,6 +60,12 @@ namespace XboxGamingBarHelper.RTSS
 
         private RivatunerStatisticsServerState rtssState;
 
+        // Tracks the RTSS process running-state across Update() ticks so we can act
+        // exactly once on a not-running→running transition (init the FPS limiter +
+        // re-apply the current limit). Evaluated regardless of OSD level so FPS
+        // limiting works even with the OSD turned off.
+        private bool rtssWasRunning = false;
+
         // Frametime graph settings - uses <G=<FT>> tag processed by RTSSSharedMemoryNET
         // Width/height are hardcoded in ProcessGraphTags (-32 chars wide, -2 lines tall)
         private float currentMinFt = 0f;
@@ -342,11 +348,15 @@ namespace XboxGamingBarHelper.RTSS
                 var parts = configString.Split(';');
                 foreach (var part in parts)
                 {
-                    var kv = part.Split(':');
-                    if (kv.Length != 2) continue;
+                    if (string.IsNullOrWhiteSpace(part)) continue;
 
-                    var key = kv[0];
-                    var value = kv[1];
+                    // Match ParseOSDConfig: split on the FIRST colon only, so a value
+                    // that itself contains ':' isn't dropped by an exact-2-parts check.
+                    var colonIndex = part.IndexOf(':');
+                    if (colonIndex <= 0) continue;
+
+                    var key = part.Substring(0, colonIndex);
+                    var value = colonIndex < part.Length - 1 ? part.Substring(colonIndex + 1) : "";
 
                     switch (key)
                     {
@@ -496,8 +506,27 @@ namespace XboxGamingBarHelper.RTSS
             {
                 Logger.Debug("Rivatuner Statistics Server is not installed.");
                 rtssState = RivatunerStatisticsServerState.NotInstalled;
+                rtssWasRunning = false;
                 return;
             }
+
+            // Detect the RTSS not-running→running transition once (independent of OSD
+            // level). On that edge, (re)initialize the FPS limiter — this recovers the
+            // case where RTSS was installed/started AFTER the helper (the ctor's one-shot
+            // Initialize would otherwise leave the limiter disabled until a helper
+            // restart) — and re-apply the current FPS limit, which SetFPSLimit silently
+            // drops while RTSS is closed.
+            bool isRTSSRunning = RTSSHelper.IsRunning();
+            if (isRTSSRunning && !rtssWasRunning)
+            {
+                Logger.Info("RTSS became available — (re)initializing FPS limiter and re-applying FPS limit.");
+                RTSSFPSLimiter.Initialize();
+                if (fpsLimit.Value > 0)
+                {
+                    RTSSFPSLimiter.SetFPSLimit(fpsLimit.Value);
+                }
+            }
+            rtssWasRunning = isRTSSRunning;
 
             if (onScreenDisplayLevel == 0)
             {
@@ -518,7 +547,7 @@ namespace XboxGamingBarHelper.RTSS
                 return;
             }
 
-            if (!RTSSHelper.IsRunning())
+            if (!isRTSSRunning)
             {
                 if (SettingsManager.GetInstance().AutoStartRTSS)
                 {

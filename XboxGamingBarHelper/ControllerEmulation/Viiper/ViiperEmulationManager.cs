@@ -531,6 +531,11 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             }
             guideOnlyPhysicalXInputSlot = -1;
 
+            // Detach our UDE imports first (we attach explicitly via usbip.exe on add — see
+            // UsbipCli), then tear down the server side.
+            try { UsbipCli.DetachAll(); }
+            catch (Exception ex) { Logger.Warn($"VIIPER guide-only usbip detach threw: {ex.Message}"); }
+
             try
             {
                 if (activeDeviceId != 0)
@@ -1074,6 +1079,11 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
                 catch (Exception ex) { Logger.Warn($"VIIPER HidHide Disable threw: {ex.Message}"); }
                 viiperOwnsSuppression = false;
             }
+
+            // Detach our UDE imports first (we attach explicitly via usbip.exe on add — see
+            // UsbipCli), then tear down the server side.
+            try { UsbipCli.DetachAll(); }
+            catch (Exception ex) { Logger.Warn($"usbip detach threw: {ex.Message}"); }
 
             try
             {

@@ -897,7 +897,9 @@ namespace XboxGamingBarHelper
                     {
                         int action = Convert.ToInt32(request.Content);
                         ControlDAService(action);
-                        System.Threading.Thread.Sleep(500);
+                        // No sleep needed: ControlDAService applies the permanent startup-type change
+                        // synchronously (the background task only handles the slow stop/start), and
+                        // GetDAServiceStatus reports that StartType — so it's already accurate here.
                         int status = GetDAServiceStatus();
                         response = new global::Windows.Foundation.Collections.ValueSet();
                         response.Add(nameof(Function), (int)Function.Labs_DAServiceStatus);
@@ -1437,7 +1439,7 @@ namespace XboxGamingBarHelper
 
                     try
                     {
-                        string result = Services.SystemRestoreService.PrepareForUninstall();
+                        string result = Services.SystemRestoreService.PrepareForUninstall(legionManager, systemManager, viiperEmulationManager);
                         response.Add(nameof(Function), functionValue);
                         response.Add("Content", result);
                         response.Add("UpdatedTime", DateTimeOffset.Now.ToUnixTimeMilliseconds());

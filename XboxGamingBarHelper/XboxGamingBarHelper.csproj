@@ -567,6 +567,7 @@
     <Compile Include="Settings\EmulationBackendProperty.cs" />
     <Compile Include="ControllerEmulation\Viiper\LibViiper.cs" />
     <Compile Include="ControllerEmulation\Viiper\ViiperService.cs" />
+    <Compile Include="ControllerEmulation\Viiper\UsbipCli.cs" />
     <Compile Include="ControllerEmulation\Viiper\ViiperModels.cs" />
     <Compile Include="ControllerEmulation\Viiper\VirtualButtonNames.cs" />
     <Compile Include="ControllerEmulation\Viiper\InputStateSnapshot.cs" />
@@ -624,6 +625,7 @@
     <Compile Include="Systems\AdaptiveBrightnessModeProperty.cs" />
     <Compile Include="Systems\PanelBrightnessProperty.cs" />
     <Compile Include="Systems\PanelBrightnessSupportedProperty.cs" />
+    <Compile Include="Systems\TouchscreenEnabledProperty.cs" />
     <Compile Include="Systems\AdaptiveBrightnessManager.cs" />
     <Compile Include="Systems\BrightnessManager.cs" />
     <Compile Include="Systems\CPUCoreConfigProperty.cs" />
@@ -639,6 +641,7 @@
     <Compile Include="Windows\PowerGuids.cs" />
     <Compile Include="Windows\PowrProf.cs" />
     <Compile Include="Windows\ProcessWindow.cs" />
+    <Compile Include="Windows\SetupApi.cs" />
     <Compile Include="Windows\User32.cs" />
     <Compile Include="Systems\SystemManager.cs" />
     <Compile Include="Devices\DeviceConfig.cs" />

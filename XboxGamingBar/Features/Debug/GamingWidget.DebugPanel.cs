@@ -109,7 +109,7 @@ namespace XboxGamingBar
             {
                 var cardBgBrush = new SolidColorBrush(theme.CardBackground);
                 var cardBorderBrush = new SolidColorBrush(theme.CardBorder);
-                var accentBrush = new SolidColorBrush(theme.AccentColor);
+                var accentBrush = GetThemeAccentBrush(theme);
                 var textSecondaryBrush = new SolidColorBrush(theme.TextSecondary);
 
                 // Update all Border elements (cards)
@@ -121,12 +121,57 @@ namespace XboxGamingBar
             {
                 Logger.Error($"Error applying theme to visual tree: {ex.Message}");
             }
+
+            // The Win11 theme is a structural variant of the Quick Settings tiles
+            // (bottom accent bar + Fluent icons vs background tint) and of the
+            // metrics grid (icon-over-value columns with dividers). Those are
+            // code-built, so when the Win11-ness of the active theme no longer
+            // matches what they were built for, rebuild them now (also covers the
+            // startup path when the saved theme is applied after the tiles exist).
+            try
+            {
+                if (quickSettingsInitialized && quickSettingsBuiltForWin11 != IsWin11Theme)
+                {
+                    UpdateQuickSettingsThemeBrushes();
+                    RebuildQuickSettingsTiles();
+                    UpdateQuickSettingsTileStates();
+                    RebuildMetricsGrid();
+                    Logger.Info($"Quick Settings tiles/metrics rebuilt for theme '{themeName}' (Win11={IsWin11Theme})");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error rebuilding Quick Settings for theme change: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Accent brush for a theme. The Win11 theme follows the user's live
+        /// Windows accent color (SystemAccentColorLight2) instead of the static
+        /// palette entry; every other theme uses its fixed AccentColor.
+        /// </summary>
+        private SolidColorBrush GetThemeAccentBrush(ThemeColors theme)
+        {
+            if (theme.Name == "Win11")
+            {
+                try
+                {
+                    return new SolidColorBrush((Windows.UI.Color)Application.Current.Resources["SystemAccentColorLight2"]);
+                }
+                catch
+                {
+                    // Fall through to the static fallback color
+                }
+            }
+            return new SolidColorBrush(theme.AccentColor);
         }
 
         private void ApplyThemeToVisualTree(DependencyObject parent, ThemeColors theme,
             SolidColorBrush cardBgBrush, SolidColorBrush cardBorderBrush,
             SolidColorBrush accentBrush, SolidColorBrush textSecondaryBrush)
         {
+            bool win11 = theme.Name == "Win11";
+
             int childCount = VisualTreeHelper.GetChildrenCount(parent);
             for (int i = 0; i < childCount; i++)
             {
@@ -135,13 +180,32 @@ namespace XboxGamingBar
                 // Update Border elements (cards use CardStyle with specific properties)
                 if (child is Border border)
                 {
-                    // Check if this looks like a card (has corner radius and padding typical of CardStyle)
+                    // Check if this looks like a card (has corner radius and padding typical
+                    // of CardStyle). Matches TopLeft 8 (classic CardStyle) OR 10 (after the
+                    // Win11 pass below reshaped it) so cards stay recognizable in both modes.
                     // Skip borders with LinearGradientBrush backgrounds (custom gradients for "smart" features like DGP card)
-                    if (border.CornerRadius.TopLeft == 8 && border.Padding.Left == 12 &&
+                    if ((border.CornerRadius.TopLeft == 8 || border.CornerRadius.TopLeft == 10) &&
+                        border.Padding.Left == 12 &&
                         !(border.Background is LinearGradientBrush))
                     {
                         border.Background = cardBgBrush;
                         border.BorderBrush = cardBorderBrush;
+
+                        // Win11 card geometry (fork f04f1e78): CornerRadius 8->10 and
+                        // BorderThickness 2->1; restore the CardStyle defaults when any
+                        // other theme is applied. Only flip between the two known card
+                        // signatures so borders that merely share the radius/padding but
+                        // have a different thickness are left alone.
+                        if (win11 && border.CornerRadius.TopLeft == 8 && border.BorderThickness.Left == 2)
+                        {
+                            border.CornerRadius = new CornerRadius(10);
+                            border.BorderThickness = new Thickness(1);
+                        }
+                        else if (!win11 && border.CornerRadius.TopLeft == 10 && border.BorderThickness.Left == 1)
+                        {
+                            border.CornerRadius = new CornerRadius(8);
+                            border.BorderThickness = new Thickness(2);
+                        }
                     }
                 }
 
@@ -159,6 +223,23 @@ namespace XboxGamingBar
                         else if (brush.Color.R == 160 && brush.Color.G == 160 && brush.Color.B == 160)
                         {
                             textBlock.Foreground = textSecondaryBrush;
+                        }
+                    }
+
+                    // Win11 typography (fork f04f1e78): card titles / section headers
+                    // (CardTitleStyle 18pt, CardTitleStyleCompact 20pt - the only Bold
+                    // TextBlocks at those sizes) go Bold -> SemiBold; restored when a
+                    // non-Win11 theme is applied. No XAML TextBlock ships SemiBold at
+                    // 18/20pt, so the reverse conversion can't catch innocents.
+                    if (textBlock.FontSize == 18 || textBlock.FontSize == 20)
+                    {
+                        if (win11 && textBlock.FontWeight.Weight == Windows.UI.Text.FontWeights.Bold.Weight)
+                        {
+                            textBlock.FontWeight = Windows.UI.Text.FontWeights.SemiBold;
+                        }
+                        else if (!win11 && textBlock.FontWeight.Weight == Windows.UI.Text.FontWeights.SemiBold.Weight)
+                        {
+                            textBlock.FontWeight = Windows.UI.Text.FontWeights.Bold;
                         }
                     }
                 }
@@ -1373,9 +1454,13 @@ namespace XboxGamingBar
                 var dialog = new Windows.UI.Popups.MessageDialog(
                     "This will:\n\n" +
                     "• Remove the scheduled task\n" +
-                    "• Restore original CPU Boost settings\n" +
-                    "• Restore original EPP settings\n" +
-                    "• Re-enable Legion Space service (if disabled)\n\n" +
+                    "• Restore original CPU Boost, EPP, Max/Min CPU State and Power Mode settings\n" +
+                    "• Re-enable Legion Space service (if disabled)\n" +
+                    "• Re-enable the touchscreen (if disabled)\n" +
+                    "• Release any active custom fan curve\n" +
+                    "• Stop controller emulation and clear HidHide rules\n\n" +
+                    "This does not remove drivers (PawnIO, usbip-win2, HidHide) or the deployed " +
+                    "helper copy - for a full cleanup, run Uninstall-GoTweaks.ps1 after uninstalling.\n\n" +
                     "After this, you can safely uninstall the app.",
                     "Prepare for Uninstall");
 

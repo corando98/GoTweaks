@@ -33,6 +33,11 @@ namespace XboxGamingBarHelper.LosslessScaling
 
         private const string PROCESS_NAME = "LosslessScaling";
         private const int STEAM_APP_ID = 993090;
+
+        // Minimum length for a profile's window-title filter to be eligible for the
+        // loose substring matching strategies. Without this a filter like "a"/"go"
+        // would match almost any game and select the wrong profile.
+        private const int MIN_FILTER_MATCH_LENGTH = 3;
         private static readonly string SETTINGS_PATH = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Lossless Scaling",
@@ -157,9 +162,26 @@ namespace XboxGamingBarHelper.LosslessScaling
 
         // State tracking
         private bool isScalingActive = false;
-        private int isRunningPollCount = 0;
         private bool isRunningLastResult = false;
-        private bool isRunningLogged = false;
+
+        // Guards the throttle/cache/current-game fields below, which are touched from
+        // both the manager Update() timer thread and pipe/profile threads (SetCurrentGame,
+        // property-change handlers). Kept for short synchronous sections only — never
+        // held across an await.
+        private readonly object stateLock = new object();
+
+        // IsRunning() result cache. The poll enumerates processes on every Update()
+        // tick and is also read by several action paths; a short TTL de-dupes those
+        // reads. Paths that just launched or killed LS call IsRunning() directly so the
+        // fresh result is observed at once (and the cache refreshed).
+        private bool cachedIsRunning = false;
+        private DateTime lastRunningCheck = DateTime.MinValue;
+        private static readonly TimeSpan RunningCacheTtl = TimeSpan.FromMilliseconds(1000);
+
+        // Installation re-detection throttle (so the Scale tab can appear/disappear
+        // at runtime without a helper restart when LS is installed/uninstalled).
+        private DateTime lastInstalledCheck = DateTime.MinValue;
+        private static readonly TimeSpan InstalledRecheckInterval = TimeSpan.FromSeconds(10);
 
         public LosslessScalingManager() : base()
         {
@@ -230,10 +252,40 @@ namespace XboxGamingBarHelper.LosslessScaling
         {
             base.Update();
 
-            bool currentlyRunning = IsRunning();
+            bool currentlyRunning = IsRunningCached();
             if (losslessScalingRunning.Value != currentlyRunning)
             {
                 losslessScalingRunning.SetValue(currentlyRunning, DateTime.Now.Ticks);
+
+                // LS exited → no scaling can be active. Reset the best-effort tracker so
+                // the next enable starts from a known state. (Toggles made via LS's own
+                // hotkey while it runs cannot be observed — that stays a blind spot.)
+                if (!currentlyRunning)
+                {
+                    lock (stateLock) { isScalingActive = false; }
+                }
+            }
+
+            // Periodically re-detect installation so the Scale tab (and Quick Settings
+            // tile) appear/disappear without a helper restart when the user installs,
+            // uninstalls, or first-launches LS while GoTweaks is already running.
+            bool doInstalledCheck;
+            lock (stateLock)
+            {
+                doInstalledCheck = DateTime.UtcNow - lastInstalledCheck >= InstalledRecheckInterval;
+                if (doInstalledCheck)
+                {
+                    lastInstalledCheck = DateTime.UtcNow;
+                }
+            }
+            if (doInstalledCheck)
+            {
+                bool currentlyInstalled = IsInstalled();
+                if (losslessScalingInstalled.Value != currentlyInstalled)
+                {
+                    Logger.Info($"Lossless Scaling installation state changed → {currentlyInstalled}");
+                    losslessScalingInstalled.SetValue(currentlyInstalled, DateTime.Now.Ticks);
+                }
             }
         }
 
@@ -242,10 +294,15 @@ namespace XboxGamingBarHelper.LosslessScaling
         /// </summary>
         public void SetCurrentGame(string gameName, string exePath)
         {
-            if (currentGameExePath == exePath)
-                return;
+            // Compound check-then-act on the shared field: guard so two threads
+            // (Update timer vs. profile/pipe) can't both pass the dedup for the same game.
+            lock (stateLock)
+            {
+                if (currentGameExePath == exePath)
+                    return;
+                currentGameExePath = exePath;
+            }
 
-            currentGameExePath = exePath;
             Logger.Info($"Current game changed to: {gameName} ({exePath})");
 
             // Find profile for this game - try multiple matching strategies
@@ -255,7 +312,7 @@ namespace XboxGamingBarHelper.LosslessScaling
                 profileName = "Default";
             }
 
-            currentProfileName = profileName;
+            lock (stateLock) { currentProfileName = profileName; }
             losslessScalingCurrentProfile.SetValue(profileName, DateTime.Now.Ticks);
 
             // Load settings from the profile
@@ -269,23 +326,39 @@ namespace XboxGamingBarHelper.LosslessScaling
 
         private bool IsInstalled()
         {
-            // Check both settings file and exe exist
-            // Settings file alone isn't enough - user may have uninstalled but settings remain
-            if (!File.Exists(SETTINGS_PATH))
-            {
-                return false;
-            }
-
+            // Presence of the LosslessScaling.exe (located via the Steam library) is
+            // the source of truth. Settings.xml is created only on the FIRST LS launch,
+            // so requiring it here would hide the Scale tab for a freshly-installed but
+            // never-run LS. When Settings.xml is missing we simply fall back to the
+            // built-in LosslessScalingSettings defaults.
             string exePath = FindLosslessScalingExePath();
             return !string.IsNullOrEmpty(exePath) && File.Exists(exePath);
         }
 
+        /// <summary>
+        /// Cached view of <see cref="IsRunning"/> for high-frequency callers. Returns the
+        /// last result within <see cref="RunningCacheTtl"/>, otherwise re-polls. Paths that
+        /// just launched or killed LS call <see cref="IsRunning"/> directly so the fresh
+        /// result is observed at once (and the cache refreshed).
+        /// </summary>
+        private bool IsRunningCached()
+        {
+            lock (stateLock)
+            {
+                if (DateTime.UtcNow - lastRunningCheck < RunningCacheTtl)
+                {
+                    return cachedIsRunning;
+                }
+            }
+            return IsRunning();
+        }
+
         private bool IsRunning()
         {
-            // vvalente30 issue #79: helper kept reporting Running=False for 10 min
-            // while LS was actually running. Either LS exe name varies between
-            // installs, or GetProcessesByName silently throws on his machine.
-            // Log the first few polls + every state transition to find out which.
+            // Only log on a state transition (or a genuine failure) to keep the helper
+            // log clean — this is polled frequently.
+            // (vvalente30 issue #79: LS process name can be absent or the enumeration
+            // can throw on some machines — the Warn below surfaces that case.)
             int procCount = -1;
             string error = null;
             try
@@ -304,33 +377,36 @@ namespace XboxGamingBarHelper.LosslessScaling
 
             bool isRunning = procCount > 0;
 
-            bool stateChanged = isRunning != isRunningLastResult;
-            bool logFirstFew = isRunningPollCount < 5;
-            if (stateChanged || logFirstFew || error != null || !isRunningLogged)
+            lock (stateLock)
             {
                 if (error != null)
                 {
-                    Logger.Warn($"Lossless Scaling IsRunning() poll #{isRunningPollCount} threw — {error}");
+                    Logger.Warn($"Lossless Scaling IsRunning() poll threw — {error}");
                 }
-                else
+                else if (isRunning != isRunningLastResult)
                 {
-                    Logger.Info($"Lossless Scaling IsRunning() poll #{isRunningPollCount}: name='{PROCESS_NAME}' procs={procCount} → {isRunning}{(stateChanged ? " (state changed)" : "")}");
+                    Logger.Info($"Lossless Scaling running state changed → {isRunning} (procs={procCount})");
                 }
-                isRunningLogged = true;
+
+                isRunningLastResult = isRunning;
+                cachedIsRunning = isRunning;
+                lastRunningCheck = DateTime.UtcNow;
             }
 
-            isRunningPollCount++;
-            isRunningLastResult = isRunning;
             return isRunning;
         }
 
         public async Task<bool> LaunchLosslessScalingAsync()
         {
-            if (IsRunning())
+            if (IsRunningCached())
             {
                 Logger.Info("Lossless Scaling is already running.");
                 return true;
             }
+
+            // A freshly launched LS always starts with scaling OFF, so reset the
+            // best-effort tracker here. The enable handler then toggles it on if needed.
+            lock (stateLock) { isScalingActive = false; }
 
             try
             {
@@ -418,17 +494,17 @@ namespace XboxGamingBarHelper.LosslessScaling
 
                 if (string.IsNullOrEmpty(steamPath))
                 {
-                    Logger.Warn("Could not find Steam installation path in registry");
+                    Logger.Debug("Could not find Steam installation path in registry");
                     return null;
                 }
 
-                Logger.Info($"Found Steam path: {steamPath}");
+                Logger.Debug($"Found Steam path: {steamPath}");
 
                 // Check default steamapps location first
                 string defaultLibrary = Path.Combine(steamPath, "steamapps", "common", "Lossless Scaling", "LosslessScaling.exe");
                 if (File.Exists(defaultLibrary))
                 {
-                    Logger.Info($"Found Lossless Scaling at default location: {defaultLibrary}");
+                    Logger.Debug($"Found Lossless Scaling at default location: {defaultLibrary}");
                     return defaultLibrary;
                 }
 
@@ -446,13 +522,13 @@ namespace XboxGamingBarHelper.LosslessScaling
 
                         if (File.Exists(lsPath))
                         {
-                            Logger.Info($"Found Lossless Scaling in library: {lsPath}");
+                            Logger.Debug($"Found Lossless Scaling in library: {lsPath}");
                             return lsPath;
                         }
                     }
                 }
 
-                Logger.Warn("Could not find Lossless Scaling executable in any Steam library");
+                Logger.Debug("Could not find Lossless Scaling executable in any Steam library");
                 return null;
             }
             catch (Exception ex)
@@ -517,7 +593,7 @@ namespace XboxGamingBarHelper.LosslessScaling
 
         private void ToggleScaling()
         {
-            if (!IsRunning())
+            if (!IsRunningCached())
             {
                 Logger.Warn("Cannot toggle scaling: Lossless Scaling is not running");
                 return;
@@ -533,8 +609,13 @@ namespace XboxGamingBarHelper.LosslessScaling
             {
                 Logger.Info($"Sending {currentHotkeyDescription} hotkey to toggle Lossless Scaling...");
                 inputInjector.InjectKeyboardInput(toggleScalingKeyboardCombo);
-                isScalingActive = !isScalingActive;
-                Logger.Info($"Scaling toggled to: {isScalingActive}");
+                bool nowActive;
+                lock (stateLock)
+                {
+                    isScalingActive = !isScalingActive;
+                    nowActive = isScalingActive;
+                }
+                Logger.Info($"Scaling toggled to: {nowActive}");
             }
             catch (Exception ex)
             {
@@ -785,7 +866,7 @@ namespace XboxGamingBarHelper.LosslessScaling
                     foreach (var profile in profiles)
                     {
                         var pathFilter = profile.Element("Path")?.Value;
-                        if (string.IsNullOrEmpty(pathFilter))
+                        if (string.IsNullOrEmpty(pathFilter) || pathFilter.Length < MIN_FILTER_MATCH_LENGTH)
                             continue;
 
                         // Check if game name contains the path filter (Lossless Scaling style matching)
@@ -808,12 +889,12 @@ namespace XboxGamingBarHelper.LosslessScaling
                 if (!string.IsNullOrEmpty(exePath))
                 {
                     string exeName = System.IO.Path.GetFileNameWithoutExtension(exePath);
-                    if (!string.IsNullOrEmpty(exeName))
+                    if (!string.IsNullOrEmpty(exeName) && exeName.Length >= MIN_FILTER_MATCH_LENGTH)
                     {
                         foreach (var profile in profiles)
                         {
                             var pathFilter = profile.Element("Path")?.Value;
-                            if (string.IsNullOrEmpty(pathFilter))
+                            if (string.IsNullOrEmpty(pathFilter) || pathFilter.Length < MIN_FILTER_MATCH_LENGTH)
                                 continue;
 
                             if (exeName.IndexOf(pathFilter, StringComparison.OrdinalIgnoreCase) >= 0 ||
@@ -1023,7 +1104,7 @@ namespace XboxGamingBarHelper.LosslessScaling
                 Logger.Info($"Created profile '{gameName}' for '{exePath}'");
 
                 // Update current profile
-                currentProfileName = gameName;
+                lock (stateLock) { currentProfileName = gameName; }
                 losslessScalingCurrentProfile.SetValue(gameName, DateTime.Now.Ticks);
             }
             catch (Exception ex)
@@ -1103,7 +1184,9 @@ namespace XboxGamingBarHelper.LosslessScaling
                     }
                 }
 
-                if (isScalingActive != shouldBeEnabled)
+                bool active;
+                lock (stateLock) { active = isScalingActive; }
+                if (active != shouldBeEnabled)
                 {
                     ToggleScaling();
                 }
@@ -1124,7 +1207,9 @@ namespace XboxGamingBarHelper.LosslessScaling
                 Logger.Info("Save and Restart triggered");
 
                 // Write settings to the current profile
-                WriteSettingsToProfile(currentProfileName);
+                string profileToWrite;
+                lock (stateLock) { profileToWrite = currentProfileName; }
+                WriteSettingsToProfile(profileToWrite);
 
                 // Kill Lossless Scaling if running
                 if (IsRunning())

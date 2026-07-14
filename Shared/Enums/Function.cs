@@ -545,5 +545,11 @@
         // Resolved per emulated type in the VIIPER forwarder (touchpad only exists on Sony/Deck).
         Viiper_DesktopButtonTarget,     // string - Legion "Desktop" front button -> emulated button
         Viiper_PageButtonTarget,        // string - Legion "Page" front button -> emulated button
+
+        // Enable/disable the built-in touch screen digitizer via SetupAPI device disable
+        // (HIDClass device matched by compatible ID UP:000D_U:0004 - never the localized
+        // friendly name). Not Legion-specific hardware, but only surfaced on Legion Go for now.
+        // (Ported from Rayekkk fork d790f307; appended at the END per the positional-wire-id rule.)
+        TouchscreenEnabled,             // bool - true = touch input active, false = digitizer disabled
     }
 }

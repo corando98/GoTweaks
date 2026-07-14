@@ -5930,6 +5930,7 @@
                                             <ComboBoxItem Content="Dracula"/>
                                             <ComboBoxItem Content="Nord"/>
                                             <ComboBoxItem Content="Catppuccin"/>
+                                            <ComboBoxItem Content="Win11"/>
                                         </ComboBox>
                                     </Grid>
 
@@ -6937,9 +6938,9 @@
                             <StackPanel>
                                 <TextBlock x:Name="LegionDeviceNameText" Text="Legion Go Controller" Style="{StaticResource CardTitleStyle}"/>
                                 <TextBlock x:Name="LegionControllerStatusText"
-                                           Text="Connected"
+                                           Text="Not detected"
                                            FontSize="14"
-                                           Foreground="#4CAF50"
+                                           Foreground="#888888"
                                            Margin="0,4,0,0"/>
 
                                 <!-- Controller Battery Info (hidden on devices without detachable controllers) -->

@@ -111,6 +111,7 @@
     <Compile Include="Data\AMD\AMDImageSharpeningSharpnessProperty.cs" />
     <Compile Include="Data\AMD\AMDDisplayColorProperties.cs" />
     <Compile Include="Data\AutoStartRTSSProperty.cs" />
+    <Compile Include="Data\Profile\DeleteGameProfileProperty.cs" />
     <Compile Include="Data\Profile\ProfileMatchByExeProperty.cs" />
     <Compile Include="Data\Profile\ProfileGamesOnlyProperty.cs" />
     <Compile Include="Data\Profile\ProfileCustomGamePathProperty.cs" />
@@ -276,6 +277,7 @@
     <Compile Include="Data\AdaptiveBrightnessModeProperty.cs" />
     <Compile Include="Data\RTSSInstalledProperty.cs" />
     <Compile Include="Data\PanelBrightnessSupportedProperty.cs" />
+    <Compile Include="Data\TouchscreenEnabledProperty.cs" />
     <Compile Include="Data\FPSLimitProperty.cs" />
     <Compile Include="Data\OSPowerModeProperty.cs" />
     <Compile Include="Data\RunningGameProperty.cs" />

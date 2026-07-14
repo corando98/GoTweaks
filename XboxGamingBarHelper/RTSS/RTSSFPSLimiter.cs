@@ -51,8 +51,12 @@ namespace XboxGamingBarHelper.RTSS
         /// </summary>
         public static bool Initialize()
         {
-            if (_isInitialized)
-                return _isAvailable;
+            // Only short-circuit once we've SUCCEEDED. A prior failed attempt
+            // (RTSS not installed / DLL missing at helper start) must be able to
+            // re-attempt later — callers gate this on the RTSS not-running→running
+            // transition, so re-attempts are rare, not per-tick.
+            if (_isInitialized && _isAvailable)
+                return true;
 
             _isInitialized = true;
 
