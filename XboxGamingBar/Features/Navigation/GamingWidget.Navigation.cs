@@ -273,7 +273,7 @@ namespace XboxGamingBar
 
             var cardBgBrush = new SolidColorBrush(theme.CardBackground);
             var cardBorderBrush = new SolidColorBrush(theme.CardBorder);
-            var accentBrush = new SolidColorBrush(theme.AccentColor);
+            var accentBrush = GetThemeAccentBrush(theme); // Win11 follows the live Windows accent
             var textSecondaryBrush = new SolidColorBrush(theme.TextSecondary);
 
             // Apply to all scroll viewers (only visible ones will have loaded content)

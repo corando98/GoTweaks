@@ -2316,7 +2316,7 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                 period: EC_FAN_TICK_MS);
         }
 
-        private void StopEcFanCurveLoop()
+        internal void StopEcFanCurveLoop()
         {
             if (ecFanCurveTimer == null) return;
             ecFanCurveTimer.Dispose();

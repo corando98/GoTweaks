@@ -154,17 +154,63 @@ namespace XboxGamingBar
                 Logger.Info($"Deleted per-game power split setting for {gameName}");
             }
 
-            if (profileDeleted)
+            // Also delete the game's controller profile so "delete" is a clean reset of the
+            // whole game. Without this, the per-game controller remaps/lighting (stored in a
+            // separate ControllerProfile_Game_<name> container) and the "disabled" preference
+            // survive the delete and reappear the next time the game is detected.
+            bool controllerDeleted = false;
+            string controllerKey = $"ControllerProfile_Game_{gameName}";
+            if (settings.Containers.ContainsKey(controllerKey))
             {
-                // If we deleted the current game's profile, disable per-game toggle
-                if (gameName == currentGameName && PerGameProfileToggle?.IsOn == true)
+                settings.DeleteContainer(controllerKey);
+                Logger.Info($"Deleted controller profile for {gameName}");
+                controllerDeleted = true;
+            }
+            string controllerDisabledKey = $"ControllerProfileDisabled_{gameName}";
+            if (settings.Values.ContainsKey(controllerDisabledKey))
+            {
+                settings.Values.Remove(controllerDisabledKey);
+            }
+
+            // Tell the helper to delete its per-game profile XML (profiles/<exe>.xml).
+            // The helper implements this (ProfileManager.DeleteProfile) but the widget never
+            // triggered it, so a deleted profile left an orphaned XML the helper could still
+            // match and re-apply when the game reappeared. ForceSetValue so a repeat delete of
+            // the same name still sends (the trigger value would otherwise dedupe).
+            deleteGameProfile?.ForceSetValue(gameName);
+            Logger.Info($"Sent DeleteGameProfile to helper for {gameName}");
+
+            if (profileDeleted || controllerDeleted)
+            {
+                // If we deleted the current game's profile(s), reset its per-game toggles so the
+                // UI falls back to the global profiles instead of pointing at deleted containers.
+                if (gameName == currentGameName)
                 {
-                    Logger.Info($"Deleted profile for current game {gameName}, disabling per-game toggle");
-                    PerGameProfileToggle.IsOn = false;
+                    if (PerGameProfileToggle?.IsOn == true)
+                    {
+                        Logger.Info($"Deleted profile for current game {gameName}, disabling per-game toggle");
+                        PerGameProfileToggle.IsOn = false;
+                    }
+                    if (LegionControllerProfileToggle?.IsOn == true)
+                    {
+                        Logger.Info($"Deleted controller profile for current game {gameName}, disabling per-game controller toggle");
+                        LegionControllerProfileToggle.IsOn = false;
+                    }
+
+                    // The controller toggle-off handler re-writes the "disabled" preference;
+                    // remove it again so a deleted game returns to a pristine (global) state.
+                    if (settings.Values.ContainsKey(controllerDisabledKey))
+                    {
+                        settings.Values.Remove(controllerDisabledKey);
+                    }
                 }
 
-                // Refresh the display
+                // Refresh the display and the saved-controller-profiles list (if expanded).
                 UpdateProfileDisplay();
+                if (isSavedProfilesExpanded)
+                {
+                    RefreshSavedProfilesList();
+                }
             }
         }
 

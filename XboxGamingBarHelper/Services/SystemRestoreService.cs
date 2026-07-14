@@ -4,8 +4,10 @@ using System.Diagnostics;
 using System.IO;
 using System.ServiceProcess;
 using System.Text.Json;
+using XboxGamingBarHelper.Devices.Libraries.Legion;
 using XboxGamingBarHelper.Power;
 using XboxGamingBarHelper.Services;
+using XboxGamingBarHelper.Systems;
 
 namespace XboxGamingBarHelper.Services
 {
@@ -53,6 +55,20 @@ namespace XboxGamingBarHelper.Services
             // DAService original state
             public bool? OriginalDAServiceEnabled { get; set; }
             public bool DAServiceSaved { get; set; } = false;
+
+            // Max CPU State original values
+            public uint? OriginalMaxCpuStateAC { get; set; }
+            public uint? OriginalMaxCpuStateDC { get; set; }
+            public bool MaxCpuStateSaved { get; set; } = false;
+
+            // Min CPU State original values
+            public uint? OriginalMinCpuStateAC { get; set; }
+            public uint? OriginalMinCpuStateDC { get; set; }
+            public bool MinCpuStateSaved { get; set; } = false;
+
+            // OS Power Mode (power slider) original value
+            public int? OriginalOsPowerMode { get; set; }
+            public bool OsPowerModeSaved { get; set; } = false;
 
             // Scheduled task was created
             public bool ScheduledTaskCreated { get; set; } = false;
@@ -183,6 +199,71 @@ namespace XboxGamingBarHelper.Services
         }
 
         /// <summary>
+        /// Saves the original Maximum CPU State values before first modification.
+        /// Call this BEFORE changing Max CPU State for the first time.
+        /// </summary>
+        public static void SaveOriginalMaxCpuState(uint currentAC, uint currentDC)
+        {
+            Initialize();
+
+            if (_restoreData.MaxCpuStateSaved)
+            {
+                Logger.Debug("Max CPU State original values already saved, skipping");
+                return;
+            }
+
+            _restoreData.OriginalMaxCpuStateAC = currentAC;
+            _restoreData.OriginalMaxCpuStateDC = currentDC;
+            _restoreData.MaxCpuStateSaved = true;
+            Save();
+
+            Logger.Info($"Saved original Max CPU State values: AC={currentAC}, DC={currentDC}");
+        }
+
+        /// <summary>
+        /// Saves the original Minimum CPU State values before first modification.
+        /// Call this BEFORE changing Min CPU State for the first time.
+        /// </summary>
+        public static void SaveOriginalMinCpuState(uint currentAC, uint currentDC)
+        {
+            Initialize();
+
+            if (_restoreData.MinCpuStateSaved)
+            {
+                Logger.Debug("Min CPU State original values already saved, skipping");
+                return;
+            }
+
+            _restoreData.OriginalMinCpuStateAC = currentAC;
+            _restoreData.OriginalMinCpuStateDC = currentDC;
+            _restoreData.MinCpuStateSaved = true;
+            Save();
+
+            Logger.Info($"Saved original Min CPU State values: AC={currentAC}, DC={currentDC}");
+        }
+
+        /// <summary>
+        /// Saves the original OS Power Mode (power slider) value before first modification.
+        /// Call this BEFORE changing the OS Power Mode for the first time.
+        /// </summary>
+        public static void SaveOriginalOsPowerMode(int currentMode)
+        {
+            Initialize();
+
+            if (_restoreData.OsPowerModeSaved)
+            {
+                Logger.Debug("OS Power Mode original value already saved, skipping");
+                return;
+            }
+
+            _restoreData.OriginalOsPowerMode = currentMode;
+            _restoreData.OsPowerModeSaved = true;
+            Save();
+
+            Logger.Info($"Saved original OS Power Mode value: {currentMode}");
+        }
+
+        /// <summary>
         /// Marks that a scheduled task was created.
         /// </summary>
         public static void MarkScheduledTaskCreated()
@@ -195,8 +276,14 @@ namespace XboxGamingBarHelper.Services
         /// <summary>
         /// Prepares the system for uninstall by reverting all changes.
         /// </summary>
+        /// <param name="legionManager">Optional - releases the EC fan override if a custom fan curve is active.</param>
+        /// <param name="systemManager">Optional - re-enables the touchscreen if GoTweaks disabled it.</param>
+        /// <param name="viiperManager">Optional - stops any live VIIPER emulation session (usbip detach, HidHide, virtual pad teardown).</param>
         /// <returns>A summary of actions taken</returns>
-        public static string PrepareForUninstall()
+        public static string PrepareForUninstall(
+            LegionManager legionManager = null,
+            SystemManager systemManager = null,
+            XboxGamingBarHelper.ControllerEmulation.Viiper.ViiperEmulationManager viiperManager = null)
         {
             Initialize();
 
@@ -319,6 +406,164 @@ namespace XboxGamingBarHelper.Services
             else
             {
                 results.AppendLine("- DAService: No original state saved (was not modified)");
+            }
+
+            // 5. Restore Maximum CPU State %
+            if (_restoreData.MaxCpuStateSaved && _restoreData.OriginalMaxCpuStateAC.HasValue)
+            {
+                try
+                {
+                    Logger.Info($"Uninstall: Restoring Max CPU State to AC={_restoreData.OriginalMaxCpuStateAC}, DC={_restoreData.OriginalMaxCpuStateDC}");
+                    PowerManager.SetMaxCPUState(true, _restoreData.OriginalMaxCpuStateAC.Value);
+                    if (_restoreData.OriginalMaxCpuStateDC.HasValue)
+                    {
+                        PowerManager.SetMaxCPUState(false, _restoreData.OriginalMaxCpuStateDC.Value);
+                    }
+                    results.AppendLine($"✓ Max CPU State restored to: AC={_restoreData.OriginalMaxCpuStateAC}%, DC={_restoreData.OriginalMaxCpuStateDC}%");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"Uninstall: Failed to restore Max CPU State: {ex.Message}");
+                    results.AppendLine($"✗ Failed to restore Max CPU State: {ex.Message}");
+                }
+            }
+            else
+            {
+                results.AppendLine("- Max CPU State: No original value saved (was not modified)");
+            }
+
+            // 6. Restore Minimum CPU State %
+            if (_restoreData.MinCpuStateSaved && _restoreData.OriginalMinCpuStateAC.HasValue)
+            {
+                try
+                {
+                    Logger.Info($"Uninstall: Restoring Min CPU State to AC={_restoreData.OriginalMinCpuStateAC}, DC={_restoreData.OriginalMinCpuStateDC}");
+                    PowerManager.SetMinCPUState(true, _restoreData.OriginalMinCpuStateAC.Value);
+                    if (_restoreData.OriginalMinCpuStateDC.HasValue)
+                    {
+                        PowerManager.SetMinCPUState(false, _restoreData.OriginalMinCpuStateDC.Value);
+                    }
+                    results.AppendLine($"✓ Min CPU State restored to: AC={_restoreData.OriginalMinCpuStateAC}%, DC={_restoreData.OriginalMinCpuStateDC}%");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"Uninstall: Failed to restore Min CPU State: {ex.Message}");
+                    results.AppendLine($"✗ Failed to restore Min CPU State: {ex.Message}");
+                }
+            }
+            else
+            {
+                results.AppendLine("- Min CPU State: No original value saved (was not modified)");
+            }
+
+            // 7. Restore OS Power Mode (power slider)
+            if (_restoreData.OsPowerModeSaved && _restoreData.OriginalOsPowerMode.HasValue)
+            {
+                try
+                {
+                    Logger.Info($"Uninstall: Restoring OS Power Mode to {_restoreData.OriginalOsPowerMode}");
+                    PowerManager.SetOSPowerMode(_restoreData.OriginalOsPowerMode.Value);
+                    results.AppendLine($"✓ OS Power Mode restored to: {_restoreData.OriginalOsPowerMode}");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"Uninstall: Failed to restore OS Power Mode: {ex.Message}");
+                    results.AppendLine($"✗ Failed to restore OS Power Mode: {ex.Message}");
+                }
+            }
+            else
+            {
+                results.AppendLine("- OS Power Mode: No original value saved (was not modified)");
+            }
+
+            // 8. Re-enable the touchscreen if GoTweaks disabled it (SetupAPI device state
+            // persists across reboots and survives an uninstall until manually reverted).
+            if (systemManager != null)
+            {
+                try
+                {
+                    if (systemManager.TouchscreenEnabled != null && systemManager.TouchscreenEnabled.Value == false)
+                    {
+                        Logger.Info("Uninstall: Re-enabling touchscreen...");
+                        systemManager.SetTouchscreenEnabled(true);
+                        results.AppendLine("✓ Touchscreen re-enabled");
+                    }
+                    else
+                    {
+                        results.AppendLine("- Touchscreen: Already enabled (was not modified)");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"Uninstall: Failed to re-enable touchscreen: {ex.Message}");
+                    results.AppendLine($"✗ Failed to re-enable touchscreen: {ex.Message}");
+                }
+            }
+
+            // 9. Release the EC fan override (register 0xC6C8) if a custom fan curve is
+            // active, handing fan control back to Lenovo firmware. Otherwise a stuck RPM
+            // survives helper shutdown - the crash-safety hooks only cover process exit,
+            // not this in-app "prepare for uninstall" flow.
+            if (legionManager != null)
+            {
+                try
+                {
+                    Logger.Info("Uninstall: Releasing EC fan override...");
+                    legionManager.StopEcFanCurveLoop();
+                    results.AppendLine("✓ EC fan override released (firmware fan control restored)");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"Uninstall: Failed to release EC fan override: {ex.Message}");
+                    results.AppendLine($"✗ Failed to release EC fan override: {ex.Message}");
+                }
+            }
+
+            // 10. Stop any live VIIPER emulation session (usbip detach, HidHide suppression,
+            // virtual pad teardown) before the controller-related cleanup below.
+            if (viiperManager != null)
+            {
+                try
+                {
+                    Logger.Info("Uninstall: Stopping VIIPER emulation...");
+                    viiperManager.Stop();
+                    results.AppendLine("✓ VIIPER emulation stopped");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"Uninstall: Failed to stop VIIPER emulation: {ex.Message}");
+                    results.AppendLine($"✗ Failed to stop VIIPER emulation: {ex.Message}");
+                }
+            }
+
+            // 11. Clear our HidHide cloaking rules (blocked device IDs + registered app
+            // paths) so no controller stays hidden from other apps after uninstall.
+            try
+            {
+                Logger.Info("Uninstall: Restoring HidHide state...");
+                UninstallService.RestoreHidHide();
+                results.AppendLine("✓ HidHide cloaking rules cleared");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Uninstall: Failed to restore HidHide state: {ex.Message}");
+                results.AppendLine($"✗ Failed to restore HidHide state: {ex.Message}");
+            }
+
+            // 12. Sweep any orphaned VIIPER/ViGEm phantom virtual pads left behind by a
+            // prior crash or ungraceful shutdown.
+            try
+            {
+                Logger.Info("Uninstall: Sweeping phantom virtual pads...");
+                ControllerEmulation.Viiper.ViiperPnpCleanup.CleanupPresentViiperPhantomsBlocking();
+                ControllerEmulation.Viiper.ViiperPnpCleanup.CleanupPresentVigemPhantomsBlocking();
+                ControllerEmulation.Viiper.ViiperPnpCleanup.CleanupAllKnownGhosts();
+                results.AppendLine("✓ Phantom virtual pads swept");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Uninstall: Failed to sweep phantom virtual pads: {ex.Message}");
+                results.AppendLine($"✗ Failed to sweep phantom virtual pads: {ex.Message}");
             }
 
             results.AppendLine();

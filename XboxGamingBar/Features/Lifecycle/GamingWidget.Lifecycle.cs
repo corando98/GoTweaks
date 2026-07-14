@@ -89,6 +89,13 @@ namespace XboxGamingBar
             App.UnregisterActiveGamingWidget(this);
             Logger.Info("GamingWidget instance unregistered.");
 
+            // Detach this instance's pipe handlers. The active-instance guards inside those
+            // handlers already make a stale instance's callbacks a no-op, but leaving them
+            // subscribed across repeated Game-Bar-driven instance recreations lets dead
+            // GamingWidget instances pile up on the static App.PipeMessageReceived event.
+            App.PipeMessageReceived -= PipeClient_MessageReceived;
+            App.PipeDisconnected -= PipeClient_Disconnected;
+
             // Unsubscribe from Lossless Scaling property changes
             if (losslessScalingInstalled != null)
             {

@@ -2507,6 +2507,14 @@ namespace XboxGamingBarHelper.Labs
             int reconnectDelayMs = 1000;
             const int MAX_RECONNECT_DELAY_MS = 10000;
             const uint READ_TIMEOUT_MS = 100; // Short timeout so we can check isRunning frequently
+            // Consecutive read TIMEOUTS (handle still valid but no reports arriving). A timeout
+            // is NOT a read error, so the failure-based reconnect below never fires on it — the
+            // monitor could sit dead for ~100s when a HidHide cycle-port (fired by controller
+            // emulation to hide the physical pad) re-enumerates the Legion USB composite and
+            // stales our MI_02 handle. After ~2s of silence force a reconnect so the LegionHid
+            // input source + battery/status polling recover in a couple seconds instead.
+            int consecutiveReadTimeouts = 0;
+            const int READ_TIMEOUTS_BEFORE_RECONNECT = 20; // 20 x 100ms = ~2s of no reports
 
             // Controller heartbeat - send init command every 3 seconds to keep controller in initialized mode
             // Legion Space uses 5 second timeout, so 3 seconds gives us margin
@@ -2609,8 +2617,29 @@ namespace XboxGamingBarHelper.Labs
 
                             if (waitResult == WAIT_TIMEOUT)
                             {
-                                // Timeout - cancel and check if we should continue
+                                // Timeout - cancel the pending read.
                                 CancelIo(hidHandle);
+
+                                // Prolonged read starvation: the handle still looks valid but
+                                // the device has stopped delivering reports (typically after a
+                                // HidHide cycle-port re-enumerated the Legion USB composite during
+                                // controller emulation, staling this MI_02 handle). A timeout is
+                                // not a read error, so the failure-based reconnect never fires and
+                                // the monitor sits dead until the device happens to resume (~100s
+                                // observed). After ~2s of silence, drop the handle so the loop top
+                                // reconnects (reopens the current device instance + re-inits it).
+                                if (++consecutiveReadTimeouts >= READ_TIMEOUTS_BEFORE_RECONNECT)
+                                {
+                                    Logger.Warn($"LegionButtonMonitor: no HID reports for ~{consecutiveReadTimeouts * READ_TIMEOUT_MS / 1000.0:0.#}s (handle likely staled by a HidHide cycle-port) — forcing reconnect");
+                                    if (hidHandle != null && !hidHandle.IsInvalid)
+                                    {
+                                        hidHandle.Close();
+                                    }
+                                    hidHandle = null;
+                                    _hasWriteAccess = false;
+                                    _highQualityGyroConfigured = false;
+                                    consecutiveReadTimeouts = 0;
+                                }
                                 continue;
                             }
                             else if (waitResult == WAIT_OBJECT_0)
@@ -2658,6 +2687,7 @@ namespace XboxGamingBarHelper.Labs
                         if (readResult && bytesRead >= 1)
                         {
                             consecutiveFailures = 0; // Reset on successful read
+                            consecutiveReadTimeouts = 0; // reports flowing again — clear the starvation counter
 
                             // Diagnostic: measure actual HID report arrival rate.
                             // Counts every successful ReadFile completion and emits

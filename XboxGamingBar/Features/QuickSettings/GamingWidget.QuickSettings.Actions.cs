@@ -154,6 +154,9 @@ namespace XboxGamingBar
                             case "LegionTouchpad":
                                 ToggleLegionTouchpad();
                                 break;
+                            case "Touchscreen":
+                                ToggleTouchscreen();
+                                break;
                             case "LegionLightMode":
                                 CycleLegionLightMode();
                                 break;
@@ -1170,6 +1173,16 @@ namespace XboxGamingBar
                 bool newValue = !legionTouchpadEnabled.Value;
                 legionTouchpadEnabled.SetValue(newValue);
                 Logger.Info($"Legion Touchpad toggled to {newValue}");
+            }
+        }
+
+        private void ToggleTouchscreen()
+        {
+            if (legionGoDetected?.Value == true && touchscreenEnabled != null)
+            {
+                bool newValue = !touchscreenEnabled.Value;
+                touchscreenEnabled.SetValue(newValue);
+                Logger.Info($"Touchscreen toggled to {newValue}");
             }
         }
 

@@ -130,6 +130,12 @@ namespace XboxGamingBarHelper.Performance
         public HardwareSensor GPUWattage { get; private set; }
         public GPUTemperatureSensor GPUTemperature { get; }
 
+        // The sensor object that always queries GPU-hardware power sensors, regardless of
+        // which public property (CPUWattage/GPUWattage) currently exposes it after the
+        // device-specific swap in the constructor. Used by the ADLX GPU fallback — see the
+        // swap comment for why the GPUWattage property alone isn't a safe target.
+        private HardwareSensor gpuHardwareWattageSensor;
+
         public MemoryUsageSensor MemoryUsage { get; }
         public MemoryUsedSensor MemoryUsed { get; }
         public MemoryAvailableSensor MemoryAvailable { get; }
@@ -639,6 +645,14 @@ namespace XboxGamingBarHelper.Performance
             GPUClock = new GPUClockSensor();
             GPUTemperature = new GPUTemperatureSensor();
             GPUWattage = new GPUWattageSensor();
+
+            // Remember the sensor object that actually queries GPU hardware ("GPU Core" /
+            // "GPU Package" / "GPU Power") BEFORE the LeGo2 swap below can reassign the
+            // GPUWattage property to something else. FillGpuSensorsFromAdlxFallback needs this
+            // fixed reference — it fills in ADLX data specifically when the GPU-hardware LHM
+            // sensor is absent (a known LeGo2/Z2 gap), and must keep targeting that same
+            // sensor object regardless of which public property currently exposes it.
+            gpuHardwareWattageSensor = GPUWattage;
 
             // LeGo2 (Ryzen Z2 Extreme): LibreHardwareMonitor's CPU "Package" sensor
             // reports what AMD Adrenalin's overlay labels GPU Power, and the GPU
@@ -1208,7 +1222,7 @@ namespace XboxGamingBarHelper.Performance
             bool needAny =
                 IsMissing(pendingValues, GPUUsage) ||
                 IsMissing(pendingValues, GPUClock) ||
-                IsMissing(pendingValues, GPUWattage) ||
+                IsMissing(pendingValues, gpuHardwareWattageSensor) ||
                 IsMissing(pendingValues, GPUTemperature) ||
                 IsMissing(pendingValues, GPUMemoryClock);
             if (!needAny)
@@ -1233,9 +1247,9 @@ namespace XboxGamingBarHelper.Performance
                 pendingValues[GPUClock] = snap.GpuClockMHz;
                 filled++;
             }
-            if (IsMissing(pendingValues, GPUWattage) && snap.HasPowerW)
+            if (IsMissing(pendingValues, gpuHardwareWattageSensor) && snap.HasPowerW)
             {
-                pendingValues[GPUWattage] = (float)snap.GpuPowerW;
+                pendingValues[gpuHardwareWattageSensor] = (float)snap.GpuPowerW;
                 filled++;
             }
             if (IsMissing(pendingValues, GPUTemperature) && snap.HasTemperatureC)
@@ -1429,7 +1443,7 @@ namespace XboxGamingBarHelper.Performance
                                     // actually enforces — let the verification read fill
                                     // Current* so the OSD/widget report the truth instead
                                     // of echoing the requested values.
-                                    ScheduleVerificationRead();
+                                    ScheduleLegionPawnIOVerificationRead();
                                     return;
                                 }
                                 // No independent read-back path on non-Legion hardware —
@@ -1496,6 +1510,50 @@ namespace XboxGamingBarHelper.Performance
                 catch (Exception ex)
                 {
                     Logger.Debug($"ScheduleVerificationRead: Error during verification read: {ex.Message}");
+                }
+            });
+        }
+
+        /// <summary>
+        /// Delayed Legion-WMI read used specifically after a PawnIO/RyzenSMU write on Legion
+        /// hardware, where the Lenovo EC silently re-asserts its own power table over the SMU
+        /// write within seconds. Deliberately does NOT go through UpdateCurrentTDP — that method
+        /// only reads Legion WMI when TdpMethod==ManufacturerWMI (its "Priority 1" gate), so
+        /// calling it here (TdpMethod==PawnIO) would hit the dead WinRing0-removed fallback and
+        /// silently do nothing, leaving the OSD stuck on the last value instead of showing what
+        /// the EC actually enforces.
+        /// </summary>
+        private void ScheduleLegionPawnIOVerificationRead()
+        {
+            System.Threading.Tasks.Task.Run(async () =>
+            {
+                try
+                {
+                    await System.Threading.Tasks.Task.Delay(VerificationDelayMs);
+                    if (legionManager == null) return;
+
+                    var (slow, fast, peak) = legionManager.GetCurrentTDPValues();
+                    if (!slow.HasValue || !fast.HasValue || !peak.HasValue)
+                    {
+                        Logger.Debug("ScheduleLegionPawnIOVerificationRead: Could not read all TDP values from Legion WMI");
+                        return;
+                    }
+
+                    CurrentSPL = slow.Value;
+                    CurrentSPPT = fast.Value;
+                    CurrentFPPT = peak.Value;
+
+                    var newTdpString = $"SPL:{slow}W SPPT:{fast}W FPPT:{peak}W";
+                    if (newTdpString != lastTdpString)
+                    {
+                        Logger.Info($"ScheduleLegionPawnIOVerificationRead: EC-enforced TDP is '{newTdpString}' (PawnIO write may not have stuck)");
+                        currentTdp.SetValue(newTdpString);
+                        lastTdpString = newTdpString;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Debug($"ScheduleLegionPawnIOVerificationRead: Error during verification read: {ex.Message}");
                 }
             });
         }

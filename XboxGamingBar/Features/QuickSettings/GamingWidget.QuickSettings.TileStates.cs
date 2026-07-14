@@ -51,6 +51,10 @@ namespace XboxGamingBar
         {
             if (QuickSettingsTilesContainer == null) return;
 
+            // Record which structural style this build uses so ApplyTheme knows
+            // when a Win11 <-> classic switch requires a rebuild.
+            quickSettingsBuiltForWin11 = IsWin11Theme;
+
             QuickSettingsTilesContainer.Children.Clear();
 
             // Get tiles to display - in edit mode show all (including hidden), otherwise only visible
@@ -113,8 +117,12 @@ namespace XboxGamingBar
         /// </summary>
         private Button CreateTileButton(TileDefinition tile)
         {
-            // Action tiles get a distinct background color
-            var bgBrush = tile.IsAction
+            bool win11 = IsWin11Theme;
+
+            // Classic: action tiles get a distinct background color.
+            // Win11 (fork 77a24806): every tile shares the same neutral background -
+            // only the subtitle + bottom accent bar color is distinct.
+            var bgBrush = (!win11 && tile.IsAction)
                 ? new SolidColorBrush(Windows.UI.Color.FromArgb(255, 37, 32, 48))  // Dark purple for action tiles
                 : tileOffBrush;
 
@@ -134,24 +142,45 @@ namespace XboxGamingBar
                 HorizontalContentAlignment = HorizontalAlignment.Stretch
             };
 
+            if (win11)
+            {
+                // Compact Win11 tile geometry (fork values; the shared
+                // QuickSettingsTileStyle keeps its classic Padding/MinHeight, so
+                // override per-button here where it's rebuilt on theme change).
+                // Slightly taller at 4 columns - narrower tiles read as too squat.
+                button.Padding = qsColumnCount == 4 ? new Thickness(10, 9, 10, 9) : new Thickness(10, 7, 10, 7);
+                button.MinHeight = 54;
+            }
+
             // Stretch so the state-text Canvas below gets the full tile width to scroll in
             // (otherwise the StackPanel sizes to its widest child — usually the centered label —
             // and marquees scroll in a narrow strip). Icon and label stay Center-aligned per-child
             // so the tile still looks centered.
             var content = new StackPanel { HorizontalAlignment = HorizontalAlignment.Stretch };
 
-            content.Children.Add(new FontIcon
+            // Win11: smaller icon in Segoe Fluent Icons (Windows 11's icon font)
+            // instead of the FontIcon default of Segoe MDL2 Assets. Icon and tile
+            // name stay white always in Win11 - the active-tile accent signal lives
+            // in the state text color and the bottom accent bar (SetTileAccentBar).
+            var icon = new FontIcon
             {
                 Glyph = tile.Glyph,
-                FontSize = 28,
+                FontSize = win11 ? 21 : 28,
                 HorizontalAlignment = HorizontalAlignment.Center
-            });
+            };
+            if (win11)
+            {
+                icon.FontFamily = new FontFamily("Segoe Fluent Icons");
+            }
+            content.Children.Add(icon);
+            tile.IconElement = icon;
 
             content.Children.Add(new TextBlock
             {
                 Text = tile.Name,
-                FontSize = 14,
-                Margin = new Thickness(0, 8, 0, 0),
+                // Win11: slightly smaller at 4 columns, where tiles are narrowest.
+                FontSize = win11 ? (qsColumnCount == 4 ? 13 : 14) : 14,
+                Margin = win11 ? new Thickness(0, 4, 0, 0) : new Thickness(0, 8, 0, 0),
                 HorizontalAlignment = HorizontalAlignment.Center,
                 TextWrapping = TextWrapping.Wrap,
                 TextAlignment = TextAlignment.Center
@@ -161,9 +190,9 @@ namespace XboxGamingBar
             var stateText = new TextBlock
             {
                 Text = tile.IsAction ? "Action" : "Off",
-                FontSize = 13,
+                FontSize = win11 ? 12 : 13,
                 Foreground = tile.IsAction
-                    ? new SolidColorBrush(Windows.UI.Color.FromArgb(255, 180, 150, 200))  // Light purple for action
+                    ? (SolidColorBrush)(win11 ? tileActionBrush : new SolidColorBrush(Windows.UI.Color.FromArgb(255, 180, 150, 200)))  // Light purple for action
                     : new SolidColorBrush(Windows.UI.Color.FromArgb(255, 136, 136, 136)),
                 HorizontalAlignment = HorizontalAlignment.Left,
                 VerticalAlignment = VerticalAlignment.Center,
@@ -178,13 +207,14 @@ namespace XboxGamingBar
             var transform = new TranslateTransform { X = 0 };
             stateText.RenderTransform = transform;
 
+            double canvasHeight = win11 ? 15 : 18;
             var canvas = new Canvas
             {
-                Height = 18,
-                Margin = new Thickness(0, 2, 0, 0),
+                Height = canvasHeight,
+                Margin = win11 ? new Thickness(0, 1, 0, 0) : new Thickness(0, 2, 0, 0),
                 HorizontalAlignment = HorizontalAlignment.Stretch
             };
-            canvas.Clip = new RectangleGeometry { Rect = new Windows.Foundation.Rect(0, 0, 0, 18) };
+            canvas.Clip = new RectangleGeometry { Rect = new Windows.Foundation.Rect(0, 0, 0, canvasHeight) };
             canvas.Children.Add(stateText);
 
             // Keep the clip rect in sync with the actual laid-out width so scroll
@@ -193,7 +223,7 @@ namespace XboxGamingBar
             {
                 if (e.NewSize.Width > 0)
                 {
-                    canvas.Clip = new RectangleGeometry { Rect = new Windows.Foundation.Rect(0, 0, e.NewSize.Width, 18) };
+                    canvas.Clip = new RectangleGeometry { Rect = new Windows.Foundation.Rect(0, 0, e.NewSize.Width, canvasHeight) };
                     // Re-evaluate scroll state now that the available width changed
                     UpdateTileScrollAnimation(tile);
                 }
@@ -204,6 +234,37 @@ namespace XboxGamingBar
             tile.StateTextCanvas = canvas;
             tile.StateTextTransform = transform;
 
+            if (win11)
+            {
+                // Active-tile accent bar (Win11 only): a small rounded bar centered
+                // along the bottom edge, ~1/4 of the tile's own width - width tracks
+                // the button's actual laid-out size via SizeChanged. Muted gray when
+                // the tile is off - see SetTileAccentBar. Action tiles get
+                // tileActionBrush immediately.
+                var accentBar = new Border
+                {
+                    Height = 3,
+                    CornerRadius = new CornerRadius(1.5),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Margin = new Thickness(0, 5, 0, -3),
+                    Background = tile.IsAction ? tileActionBrush : tileBarOffBrush
+                };
+                content.Children.Add(accentBar);
+                tile.AccentBar = accentBar;
+
+                button.SizeChanged += (s, e) =>
+                {
+                    if (e.NewSize.Width > 0)
+                    {
+                        accentBar.Width = e.NewSize.Width * 0.25;
+                    }
+                };
+            }
+            else
+            {
+                tile.AccentBar = null;
+            }
+
             button.Content = content;
             button.Click += QuickSettingsTile_Click;
 
@@ -211,6 +272,18 @@ namespace XboxGamingBar
             tile.StateText = stateText;
 
             return button;
+        }
+
+        /// <summary>
+        /// Win11 theme only: sets a tile's bottom accent bar to the live Windows
+        /// accent color when on, or a muted gray (same tone as the off state text)
+        /// when off. No-op in classic themes (AccentBar is null). Call with the same
+        /// boolean condition used for that tile's StateText.Foreground.
+        /// </summary>
+        private void SetTileAccentBar(TileDefinition tile, bool isOn)
+        {
+            if (tile?.AccentBar == null) return;
+            tile.AccentBar.Background = isOn ? tileAccentBrush : tileBarOffBrush;
         }
 
         /// <summary>
@@ -331,6 +404,11 @@ namespace XboxGamingBar
 
             try
             {
+                // Win11 theme: state is presented on the bottom accent bar (and for
+                // TDP/Power/EPP as a fixed severity color there) while backgrounds
+                // stay neutral. Classic themes: state tints the tile background.
+                bool win11 = IsWin11Theme;
+
                 var accentForeground = new SolidColorBrush((Windows.UI.Color)Application.Current.Resources["SystemAccentColorLight2"]);
                 var offForeground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 136, 136, 136));
 
@@ -341,6 +419,9 @@ namespace XboxGamingBar
                     int selectedIndex = TDPModeComboBox?.SelectedIndex ?? 0;
                     string modeText;
                     SolidColorBrush tdpModeBrush;
+                    // Win11 theme: fixed severity color for the bottom accent bar
+                    // (green=Quiet, blue=Balanced, red=Performance, purple=Custom).
+                    SolidColorBrush tdpModeColor;
 
                     // Use custom presets if enabled
                     if (useCustomTDPPresets && tdpPresets != null && tdpPresets.Count > 0)
@@ -355,15 +436,19 @@ namespace XboxGamingBar
                             {
                                 case 1: // Quiet - Desaturated Blue
                                     tdpModeBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 35, 45, 60));
+                                    tdpModeColor = tileSeverityGreenBrush;
                                     break;
                                 case 2: // Balanced - Grey
                                     tdpModeBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 50, 50, 55));
+                                    tdpModeColor = tileSeverityBlueBrush;
                                     break;
                                 case 3: // Performance - Desaturated Red
                                     tdpModeBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 60, 40, 40));
+                                    tdpModeColor = tileSeverityRedBrush;
                                     break;
                                 default: // Custom preset (no LegionModeValue) - Purple
                                     tdpModeBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 50, 42, 58));
+                                    tdpModeColor = tileSeverityPurpleBrush;
                                     break;
                             }
                         }
@@ -373,6 +458,7 @@ namespace XboxGamingBar
                             int currentTdp = (int)(TDPSlider?.Value ?? 15);
                             modeText = $"Custom ({currentTdp}W)";
                             tdpModeBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 50, 42, 58));
+                            tdpModeColor = tileSeverityPurpleBrush;
                         }
                     }
                     else
@@ -395,30 +481,46 @@ namespace XboxGamingBar
                             case 1: // Quiet - Desaturated Blue
                                 modeText = isLegion ? "Quiet" : $"Quiet ({genericTDPValues[0]}W)";
                                 tdpModeBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 35, 45, 60));
+                                tdpModeColor = tileSeverityGreenBrush;
                                 break;
                             case 2: // Balanced - Grey
                                 modeText = isLegion ? "Balanced" : $"Balanced ({genericTDPValues[1]}W)";
                                 tdpModeBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 50, 50, 55));
+                                tdpModeColor = tileSeverityBlueBrush;
                                 break;
                             case 3: // Performance - Desaturated Red
                                 modeText = isLegion ? "Performance" : $"Perf ({genericTDPValues[2]}W)";
                                 tdpModeBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 60, 40, 40));
+                                tdpModeColor = tileSeverityRedBrush;
                                 break;
                             case 255: // Custom - Desaturated Purple
                                 int currentTdp = (int)(TDPSlider?.Value ?? 15);
                                 modeText = $"Custom ({currentTdp}W)";
                                 tdpModeBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 50, 42, 58));
+                                tdpModeColor = tileSeverityPurpleBrush;
                                 break;
                             default:
                                 modeText = isLegion ? "Balanced" : $"Balanced ({genericTDPValues[1]}W)";
                                 tdpModeBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 50, 50, 55));
+                                tdpModeColor = tileSeverityBlueBrush;
                                 break;
                         }
                     }
 
                     tdpTile.StateText.Text = modeText;
-                    tdpTile.StateText.Foreground = accentForeground;
-                    tdpTile.TileButton.Background = tdpModeBrush;
+                    if (win11)
+                    {
+                        // Background/border stay neutral like every other tile; the
+                        // bottom bar carries the severity color, state text stays gray.
+                        tdpTile.StateText.Foreground = offForeground;
+                        if (tdpTile.AccentBar != null) tdpTile.AccentBar.Background = tdpModeColor;
+                        tdpTile.TileButton.Background = tileOffBrush;
+                    }
+                    else
+                    {
+                        tdpTile.StateText.Foreground = accentForeground;
+                        tdpTile.TileButton.Background = tdpModeBrush;
+                    }
                 }
 
                 // AutoTDP tile
@@ -429,6 +531,7 @@ namespace XboxGamingBar
                     string stateText = enabled ? $"{targetFps} FPS" : "Off";
                     autoTdpTile.StateText.Text = stateText;
                     autoTdpTile.StateText.Foreground = enabled ? accentForeground : offForeground;
+                    SetTileAccentBar(autoTdpTile, enabled);
                     autoTdpTile.TileButton.Background = enabled ? tileOnBrush : tileOffBrush;
                 }
 
@@ -447,13 +550,25 @@ namespace XboxGamingBar
                         profileName = currentDefaultGameProfile?.GameName ?? gameName;
                         profileTile.StateText.Text = profileName;
                         profileTile.StateText.Foreground = accentForeground;
-                        profileTile.TileButton.Background = tileDefaultProfileBrush;
+                        if (win11)
+                        {
+                            // Win11: background stays neutral; the "default game
+                            // profile" special state moves to a purple bottom bar
+                            // (distinct from the accent used for a plain per-game hit).
+                            if (profileTile.AccentBar != null) profileTile.AccentBar.Background = tileSeverityPurpleBrush;
+                            profileTile.TileButton.Background = tileOffBrush;
+                        }
+                        else
+                        {
+                            profileTile.TileButton.Background = tileDefaultProfileBrush;
+                        }
                     }
                     else
                     {
                         profileName = perGame ? gameName : "Global";
                         profileTile.StateText.Text = profileName;
                         profileTile.StateText.Foreground = perGame ? accentForeground : offForeground;
+                        SetTileAccentBar(profileTile, perGame);
                         profileTile.TileButton.Background = perGame ? tileOnBrush : tileOffBrush;
                     }
 
@@ -481,25 +596,37 @@ namespace XboxGamingBar
                         }
                         overlayTile.StateText.Text = levelText;
                         overlayTile.StateText.Foreground = level > 0 ? accentForeground : offForeground;
+                        SetTileAccentBar(overlayTile, level > 0);
                         overlayTile.TileButton.Background = level > 0 ? tileOnBrush : tileOffBrush;
                     }
                 }
 
-                // Power Mode tile
+                // Power Mode tile - Win11: background/border stay neutral; the
+                // bottom bar carries a fixed severity color per mode.
                 if (qsTileMap.TryGetValue("PowerMode", out var powerModeTile) && powerModeTile.TileButton != null)
                 {
                     int mode = osPowerMode?.Value ?? 1;
                     string modeText;
+                    SolidColorBrush powerModeColor;
                     switch (mode)
                     {
-                        case 0: modeText = "Efficiency"; break;
-                        case 1: modeText = "Balanced"; break;
-                        case 2: modeText = "Performance"; break;
-                        default: modeText = "Balanced"; break;
+                        case 0: modeText = "Efficiency"; powerModeColor = tileSeverityGreenBrush; break;
+                        case 1: modeText = "Balanced"; powerModeColor = tileSeverityBlueBrush; break;
+                        case 2: modeText = "Performance"; powerModeColor = tileSeverityRedBrush; break;
+                        default: modeText = "Balanced"; powerModeColor = tileSeverityBlueBrush; break;
                     }
                     powerModeTile.StateText.Text = modeText;
-                    powerModeTile.StateText.Foreground = mode != 1 ? accentForeground : offForeground;
-                    powerModeTile.TileButton.Background = mode == 2 ? tileOnBrush : (mode == 0 ? tileActiveBrush : tileOffBrush);
+                    if (win11)
+                    {
+                        powerModeTile.StateText.Foreground = offForeground;
+                        if (powerModeTile.AccentBar != null) powerModeTile.AccentBar.Background = powerModeColor;
+                        powerModeTile.TileButton.Background = tileOffBrush;
+                    }
+                    else
+                    {
+                        powerModeTile.StateText.Foreground = mode != 1 ? accentForeground : offForeground;
+                        powerModeTile.TileButton.Background = mode == 2 ? tileOnBrush : (mode == 0 ? tileActiveBrush : tileOffBrush);
+                    }
                 }
 
                 // FPS Limit tile
@@ -509,6 +636,7 @@ namespace XboxGamingBar
                     string limitText = limit == 0 ? "Off" : $"{limit}";
                     fpsLimitTile.StateText.Text = limitText;
                     fpsLimitTile.StateText.Foreground = limit > 0 ? accentForeground : offForeground;
+                    SetTileAccentBar(fpsLimitTile, limit > 0);
                     fpsLimitTile.TileButton.Background = limit > 0 ? tileOnBrush : tileOffBrush;
                 }
 
@@ -518,6 +646,7 @@ namespace XboxGamingBar
                     string currentRes = resolution?.Value ?? "1920x1080";
                     resTile.StateText.Text = currentRes;
                     resTile.StateText.Foreground = accentForeground;
+                    SetTileAccentBar(resTile, true);
                     resTile.TileButton.Background = tileOffBrush;
                 }
 
@@ -528,6 +657,7 @@ namespace XboxGamingBar
                     bool isPortrait = (displayOrientation?.Value ?? 0) == 1 || (displayOrientation?.Value ?? 0) == 3;
                     rotationTile.StateText.Text = orientationText;
                     rotationTile.StateText.Foreground = isPortrait ? accentForeground : offForeground;
+                    SetTileAccentBar(rotationTile, isPortrait);
                     rotationTile.TileButton.Background = isPortrait ? tileOnBrush : tileOffBrush;
                 }
 
@@ -538,6 +668,7 @@ namespace XboxGamingBar
                     bool enabled = hdrEnabled?.Value ?? false;
                     hdrTile.StateText.Text = !supported ? "N/A" : (enabled ? "On" : "Off");
                     hdrTile.StateText.Foreground = enabled ? accentForeground : offForeground;
+                    SetTileAccentBar(hdrTile, enabled);
                     hdrTile.TileButton.Background = enabled ? tileOnBrush : tileOffBrush;
                 }
 
@@ -547,6 +678,7 @@ namespace XboxGamingBar
                     bool enabled = losslessScalingEnabled?.Value ?? false;
                     lsTile.StateText.Text = enabled ? "On" : "Off";
                     lsTile.StateText.Foreground = enabled ? accentForeground : offForeground;
+                    SetTileAccentBar(lsTile, enabled);
                     lsTile.TileButton.Background = enabled ? tileOnBrush : tileOffBrush;
                 }
 
@@ -557,6 +689,7 @@ namespace XboxGamingBar
                     bool enabled = amdImageSharpeningEnabled?.Value ?? false;
                     risTile.StateText.Text = !supported ? "N/A" : (enabled ? "On" : "Off");
                     risTile.StateText.Foreground = enabled ? accentForeground : offForeground;
+                    SetTileAccentBar(risTile, enabled);
                     risTile.TileButton.Background = enabled ? tileOnBrush : tileOffBrush;
                 }
 
@@ -567,6 +700,7 @@ namespace XboxGamingBar
                     bool enabled = amdFluidMotionFrameEnabled?.Value ?? false;
                     afmfTile.StateText.Text = !supported ? "N/A" : (enabled ? "On" : "Off");
                     afmfTile.StateText.Foreground = enabled ? accentForeground : offForeground;
+                    SetTileAccentBar(afmfTile, enabled);
                     afmfTile.TileButton.Background = enabled ? tileOnBrush : tileOffBrush;
                 }
 
@@ -577,6 +711,7 @@ namespace XboxGamingBar
                     bool enabled = amdRadeonSuperResolutionEnabled?.Value ?? false;
                     rsrTile.StateText.Text = !supported ? "N/A" : (enabled ? "On" : "Off");
                     rsrTile.StateText.Foreground = enabled ? accentForeground : offForeground;
+                    SetTileAccentBar(rsrTile, enabled);
                     rsrTile.TileButton.Background = enabled ? tileOnBrush : tileOffBrush;
                 }
 
@@ -587,6 +722,7 @@ namespace XboxGamingBar
                     bool enabled = amdRadeonAntiLagEnabled?.Value ?? false;
                     antiLagTile.StateText.Text = !supported ? "N/A" : (enabled ? "On" : "Off");
                     antiLagTile.StateText.Foreground = enabled ? accentForeground : offForeground;
+                    SetTileAccentBar(antiLagTile, enabled);
                     antiLagTile.TileButton.Background = enabled ? tileOnBrush : tileOffBrush;
                 }
 
@@ -597,6 +733,7 @@ namespace XboxGamingBar
                     bool enabled = amdRadeonChillEnabled?.Value ?? false;
                     chillTile.StateText.Text = !supported ? "N/A" : (enabled ? "On" : "Off");
                     chillTile.StateText.Foreground = enabled ? accentForeground : offForeground;
+                    SetTileAccentBar(chillTile, enabled);
                     chillTile.TileButton.Background = enabled ? tileOnBrush : tileOffBrush;
                 }
 
@@ -606,34 +743,72 @@ namespace XboxGamingBar
                     bool enabled = cpuBoost?.Value ?? false;
                     boostTile.StateText.Text = enabled ? "On" : "Off";
                     boostTile.StateText.Foreground = enabled ? accentForeground : offForeground;
+                    SetTileAccentBar(boostTile, enabled);
                     boostTile.TileButton.Background = enabled ? tileOnBrush : tileOffBrush;
                 }
 
-                // EPP tile
+                // EPP tile - Win11: background/border stay neutral; the bottom bar
+                // carries a fixed severity color banded around the 0/30/80/100
+                // anchors: 0 = gray (matches "off"), ~1-55 = green, ~56-90 = blue,
+                // ~91-100 = red.
                 if (qsTileMap.TryGetValue("EPP", out var eppTile) && eppTile.TileButton != null)
                 {
                     int eppValue = (int)(cpuEPP?.Value ?? 0);
                     eppTile.StateText.Text = $"{eppValue}%";
-                    eppTile.StateText.Foreground = accentForeground;
-                    eppTile.TileButton.Background = eppValue > 50 ? tileActiveBrush : tileOffBrush;
+                    if (win11)
+                    {
+                        SolidColorBrush eppColor;
+                        if (eppValue <= 0) eppColor = offForeground;
+                        else if (eppValue <= 55) eppColor = tileSeverityGreenBrush;
+                        else if (eppValue <= 90) eppColor = tileSeverityBlueBrush;
+                        else eppColor = tileSeverityRedBrush;
+                        eppTile.StateText.Foreground = offForeground;
+                        if (eppTile.AccentBar != null) eppTile.AccentBar.Background = eppColor;
+                        eppTile.TileButton.Background = tileOffBrush;
+                    }
+                    else
+                    {
+                        eppTile.StateText.Foreground = accentForeground;
+                        eppTile.TileButton.Background = eppValue > 50 ? tileActiveBrush : tileOffBrush;
+                    }
                 }
 
-                // Keyboard trigger tile
+                // Keyboard trigger tile - Win11: action-colored subtitle + bar (it
+                // always fires an action, it doesn't toggle); background stays
+                // the same neutral as every other tile.
                 if (qsTileMap.TryGetValue("Keyboard", out var keyboardTile) && keyboardTile.TileButton != null)
                 {
                     keyboardTile.StateText.Text = "Open";
-                    keyboardTile.StateText.Foreground = accentForeground;
-                    keyboardTile.TileButton.Background = tileTriggerBrush;
+                    if (win11)
+                    {
+                        keyboardTile.StateText.Foreground = tileActionBrush;
+                        if (keyboardTile.AccentBar != null) keyboardTile.AccentBar.Background = tileActionBrush;
+                        keyboardTile.TileButton.Background = tileOffBrush;
+                    }
+                    else
+                    {
+                        keyboardTile.StateText.Foreground = accentForeground;
+                        keyboardTile.TileButton.Background = tileTriggerBrush;
+                    }
                 }
 
-                // Custom shortcut tiles
+                // Custom shortcut tiles - Win11: same action-colored treatment as Keyboard.
                 foreach (var shortcutTile in qsCustomShortcuts)
                 {
                     if (shortcutTile.TileButton != null && shortcutTile.StateText != null)
                     {
                         shortcutTile.StateText.Text = shortcutTile.CustomShortcut ?? "Run";
-                        shortcutTile.StateText.Foreground = accentForeground;
-                        shortcutTile.TileButton.Background = tileTriggerBrush;
+                        if (win11)
+                        {
+                            shortcutTile.StateText.Foreground = tileActionBrush;
+                            if (shortcutTile.AccentBar != null) shortcutTile.AccentBar.Background = tileActionBrush;
+                            shortcutTile.TileButton.Background = tileOffBrush;
+                        }
+                        else
+                        {
+                            shortcutTile.StateText.Foreground = accentForeground;
+                            shortcutTile.TileButton.Background = tileTriggerBrush;
+                        }
                     }
                 }
 
@@ -645,7 +820,21 @@ namespace XboxGamingBar
                         bool enabled = legionTouchpadEnabled?.Value ?? false;
                         touchpadTile.StateText.Text = enabled ? "On" : "Off";
                         touchpadTile.StateText.Foreground = enabled ? accentForeground : offForeground;
+                        SetTileAccentBar(touchpadTile, enabled);
                         touchpadTile.TileButton.Background = enabled ? tileOnBrush : tileOffBrush;
+                    }
+                }
+
+                // Touchscreen tile
+                if (qsTileMap.TryGetValue("Touchscreen", out var touchscreenTile) && touchscreenTile.TileButton != null)
+                {
+                    if (legionGoDetected?.Value == true)
+                    {
+                        bool enabled = touchscreenEnabled?.Value ?? true;
+                        touchscreenTile.StateText.Text = enabled ? "On" : "Off";
+                        touchscreenTile.StateText.Foreground = enabled ? accentForeground : offForeground;
+                        SetTileAccentBar(touchscreenTile, enabled);
+                        touchscreenTile.TileButton.Background = enabled ? tileOnBrush : tileOffBrush;
                     }
                 }
 
@@ -667,6 +856,7 @@ namespace XboxGamingBar
                         }
                         lightTile.StateText.Text = modeText;
                         lightTile.StateText.Foreground = mode > 0 ? accentForeground : offForeground;
+                        SetTileAccentBar(lightTile, mode > 0);
                         lightTile.TileButton.Background = mode > 0 ? tileOnBrush : tileOffBrush;
                     }
                 }
@@ -679,6 +869,7 @@ namespace XboxGamingBar
                         bool enabled = LegionDesktopControlsToggle?.IsOn ?? false;
                         desktopTile.StateText.Text = enabled ? "On" : "Off";
                         desktopTile.StateText.Foreground = enabled ? accentForeground : offForeground;
+                        SetTileAccentBar(desktopTile, enabled);
                         desktopTile.TileButton.Background = enabled ? tileOnBrush : tileOffBrush;
                     }
                 }
@@ -695,6 +886,7 @@ namespace XboxGamingBar
                             profileName = profileName.Substring(0, 9) + "…";
                         remapTile.StateText.Text = profileName;
                         remapTile.StateText.Foreground = isGameProfile ? accentForeground : offForeground;
+                        SetTileAccentBar(remapTile, isGameProfile);
                         remapTile.TileButton.Background = isGameProfile ? tileOnBrush : tileOffBrush;
                     }
                 }
@@ -707,6 +899,7 @@ namespace XboxGamingBar
                         bool enabled = legionChargeLimit?.Value ?? false;
                         chargeLimitTile.StateText.Text = enabled ? "80%" : "Off";
                         chargeLimitTile.StateText.Foreground = enabled ? accentForeground : offForeground;
+                        SetTileAccentBar(chargeLimitTile, enabled);
                         chargeLimitTile.TileButton.Background = enabled ? tileOnBrush : tileOffBrush;
                     }
                 }
@@ -719,6 +912,7 @@ namespace XboxGamingBar
                         bool enabled = legionPowerLight?.Value ?? false;
                         powerLightTile.StateText.Text = enabled ? "On" : "Off";
                         powerLightTile.StateText.Foreground = enabled ? accentForeground : offForeground;
+                        SetTileAccentBar(powerLightTile, enabled);
                         powerLightTile.TileButton.Background = enabled ? tileOnBrush : tileOffBrush;
                     }
                 }
@@ -789,6 +983,7 @@ namespace XboxGamingBar
                         ceTile.StateText.Text = label;
                         ceTile.StateText.Foreground = enabled ? accentForeground : offForeground;
                     }
+                    SetTileAccentBar(ceTile, enabled);
                     ceTile.TileButton.Background = enabled ? tileOnBrush : tileOffBrush;
                 }
 
@@ -806,6 +1001,7 @@ namespace XboxGamingBar
                     }
                     fanFullSpeedTile.StateText.Text = enabled ? "On" : "Off";
                     fanFullSpeedTile.StateText.Foreground = enabled ? accentForeground : offForeground;
+                    SetTileAccentBar(fanFullSpeedTile, enabled);
                     fanFullSpeedTile.TileButton.Background = enabled ? tileOnBrush : tileOffBrush;
                 }
 
@@ -823,6 +1019,7 @@ namespace XboxGamingBar
                     }
                     vibrationTile.StateText.Text = levelText;
                     vibrationTile.StateText.Foreground = level > 0 ? accentForeground : offForeground;
+                    SetTileAccentBar(vibrationTile, level > 0);
                     vibrationTile.TileButton.Background = level > 0 ? tileOnBrush : tileOffBrush;
                 }
 
@@ -844,6 +1041,7 @@ namespace XboxGamingBar
                     }
                     vibrationModeTile.StateText.Text = vibModeText;
                     vibrationModeTile.StateText.Foreground = accentForeground;
+                    SetTileAccentBar(vibrationModeTile, true);
                     vibrationModeTile.TileButton.Background = tileOnBrush;
                 }
 
@@ -861,6 +1059,7 @@ namespace XboxGamingBar
                         screenSaverTile.StateText.Text = "Off";
                         screenSaverTile.StateText.Foreground = offForeground;
                     }
+                    SetTileAccentBar(screenSaverTile, enabled);
                     screenSaverTile.TileButton.Background = enabled ? tileOnBrush : tileOffBrush;
                 }
 
@@ -956,8 +1155,23 @@ namespace XboxGamingBar
                         bgBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 35, 55, 40)); // Green
 
                     batteryTile.StateText.Text = stateText;
-                    batteryTile.StateText.Foreground = accentForeground;
-                    batteryTile.TileButton.Background = bgBrush;
+                    if (win11)
+                    {
+                        // Win11: background stays neutral - our min-of-all-batteries
+                        // severity keeps its meaning but moves to the bottom bar and
+                        // subtitle color (the fork pinned this tile to green; we keep
+                        // our charge-level semantics and only move the presentation).
+                        SolidColorBrush batSeverity = minBat < 20 ? tileSeverityRedBrush
+                            : (minBat < 50 ? tileSeverityYellowBrush : tileSeverityGreenBrush);
+                        batteryTile.StateText.Foreground = batSeverity;
+                        if (batteryTile.AccentBar != null) batteryTile.AccentBar.Background = batSeverity;
+                        batteryTile.TileButton.Background = tileOffBrush;
+                    }
+                    else
+                    {
+                        batteryTile.StateText.Foreground = accentForeground;
+                        batteryTile.TileButton.Background = bgBrush;
+                    }
                 }
 
                 // Re-evaluate scrolling for every tile whose state text may have

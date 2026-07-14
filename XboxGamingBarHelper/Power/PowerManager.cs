@@ -294,6 +294,18 @@ namespace XboxGamingBarHelper.Power
         /// </summary>
         public static void SetMaxCPUState(bool isAC, uint percentage)
         {
+            // Save original values before first modification (for clean uninstall)
+            try
+            {
+                uint currentAC = GetMaxCPUState(true);
+                uint currentDC = GetMaxCPUState(false);
+                SystemRestoreService.SaveOriginalMaxCpuState(currentAC, currentDC);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"Failed to save original Max CPU State values: {ex.Message}");
+            }
+
             Guid scheme = GetActiveScheme();
             Guid subgroup = PowerGuids.GUID_PROCESSOR_SETTINGS_SUBGROUP;
             Guid setting = PowerGuids.GUID_PROCESSOR_THROTTLE_MAX;
@@ -357,6 +369,18 @@ namespace XboxGamingBarHelper.Power
         /// </summary>
         public static void SetMinCPUState(bool isAC, uint percentage)
         {
+            // Save original values before first modification (for clean uninstall)
+            try
+            {
+                uint currentAC = GetMinCPUState(true);
+                uint currentDC = GetMinCPUState(false);
+                SystemRestoreService.SaveOriginalMinCpuState(currentAC, currentDC);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"Failed to save original Min CPU State values: {ex.Message}");
+            }
+
             Guid scheme = GetActiveScheme();
             Guid subgroup = PowerGuids.GUID_PROCESSOR_SETTINGS_SUBGROUP;
             Guid setting = PowerGuids.GUID_PROCESSOR_THROTTLE_MIN;
@@ -439,6 +463,20 @@ namespace XboxGamingBarHelper.Power
         /// <returns>True if successful</returns>
         public static bool SetOSPowerMode(int mode)
         {
+            // Save original value before first modification (for clean uninstall)
+            try
+            {
+                int currentMode = GetOSPowerMode();
+                if (currentMode >= 0)
+                {
+                    SystemRestoreService.SaveOriginalOsPowerMode(currentMode);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"Failed to save original OS Power Mode value: {ex.Message}");
+            }
+
             try
             {
                 Guid targetGuid;

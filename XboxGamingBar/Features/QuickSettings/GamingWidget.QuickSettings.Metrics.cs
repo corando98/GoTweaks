@@ -382,18 +382,58 @@ namespace XboxGamingBar
                 return;
             }
 
-            // Create columns for each selected metric
-            foreach (var _ in selectedMetrics)
+            // Win11 theme (fork commits 77a24806 + e1cb6ef9): icon centered on top,
+            // value below the icon, gray label below the value, with a thin
+            // translucent divider between metrics. Classic: inline icon+value row
+            // with the label underneath, no dividers.
+            bool win11 = IsWin11Theme;
+
+            // Restyle the containing rows for the active theme (these are static
+            // XAML elements with hardcoded classic colors, untouched by the card
+            // walker because their CornerRadius is 12).
+            var rowBg = new SolidColorBrush(win11
+                ? Windows.UI.Color.FromArgb(255, 0x35, 0x39, 0x3F)   // #35393F flat neutral
+                : Windows.UI.Color.FromArgb(255, 0x1A, 0x1C, 0x1E)); // #1A1C1E classic
+            var rowBorder = new SolidColorBrush(win11
+                ? Windows.UI.Color.FromArgb(0x22, 255, 255, 255)     // #22FFFFFF hairline
+                : Windows.UI.Color.FromArgb(255, 0x50, 0x55, 0x5C)); // #50555C classic
+            QuickMetricsRow.Background = rowBg;
+            QuickMetricsRow.BorderBrush = rowBorder;
+            if (PanelBrightnessRow != null)
             {
+                PanelBrightnessRow.Background = rowBg;
+                PanelBrightnessRow.BorderBrush = rowBorder;
+            }
+
+            // Create columns: one star column per metric; in Win11 also a thin Auto
+            // divider column between each pair of metrics.
+            for (int c = 0; c < selectedMetrics.Count; c++)
+            {
+                if (win11 && c > 0) QuickMetricsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                 QuickMetricsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             }
 
             // Create UI for each selected metric
-            int colIndex = 0;
-            foreach (var metricType in selectedMetrics)
+            int gridCol = 0;
+            for (int i = 0; i < selectedMetrics.Count; i++)
             {
+                var metricType = selectedMetrics[i];
                 if (!metricDefinitions.TryGetValue(metricType, out var info))
                     continue;
+
+                if (win11 && i > 0)
+                {
+                    // Thin translucent divider between metrics.
+                    var divider = new Border
+                    {
+                        Width = 1,
+                        Background = new SolidColorBrush(Windows.UI.Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)),
+                        Margin = new Thickness(0, 2, 0, 2)
+                    };
+                    Grid.SetColumn(divider, gridCol);
+                    QuickMetricsGrid.Children.Add(divider);
+                    gridCol++;
+                }
 
                 // Create metric panel
                 var panel = new StackPanel
@@ -402,54 +442,94 @@ namespace XboxGamingBar
                     VerticalAlignment = VerticalAlignment.Center
                 };
 
-                // Value row (icon + value)
-                var valueRow = new StackPanel
+                if (win11)
                 {
-                    Orientation = Orientation.Horizontal,
-                    HorizontalAlignment = HorizontalAlignment.Center
-                };
+                    // Icon-over-value-over-label layout. Font sizes match the Win11
+                    // Quick Settings tiles (icon 21 / value 12 / label 13-14).
+                    var icon = new FontIcon
+                    {
+                        Glyph = info.Glyph,
+                        FontSize = 21,
+                        Foreground = new SolidColorBrush((Windows.UI.Color)Application.Current.Resources["SystemAccentColorLight2"]),
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        Margin = new Thickness(0, 0, 0, 3)
+                    };
 
-                var icon = new FontIcon
+                    var valueText = new TextBlock
+                    {
+                        Text = "--",
+                        FontSize = 12,
+                        FontWeight = Windows.UI.Text.FontWeights.SemiBold,
+                        Foreground = new SolidColorBrush(Windows.UI.Colors.White),
+                        HorizontalAlignment = HorizontalAlignment.Center
+                    };
+                    info.ValueTextBlock = valueText;
+
+                    var labelText = new TextBlock
+                    {
+                        Text = info.Label,
+                        FontSize = qsColumnCount == 4 ? 13 : 14,
+                        Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 136, 136, 136)), // #888888
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        Margin = new Thickness(0, 2, 0, 0)
+                    };
+                    info.LabelTextBlock = labelText;
+
+                    panel.Children.Add(icon);
+                    panel.Children.Add(valueText);
+                    panel.Children.Add(labelText);
+                }
+                else
                 {
-                    Glyph = info.Glyph,
-                    // Bumped one step for readability (paired inline with the value text below).
-                    FontSize = 16,
-                    Foreground = new SolidColorBrush((Windows.UI.Color)Application.Current.Resources["SystemAccentColorLight2"]),
-                    Margin = new Thickness(0, 0, 4, 0),
-                    VerticalAlignment = VerticalAlignment.Center
-                };
+                    // Value row (icon + value)
+                    var valueRow = new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal,
+                        HorizontalAlignment = HorizontalAlignment.Center
+                    };
 
-                var valueText = new TextBlock
-                {
-                    Text = "--",
-                    FontSize = 16,
-                    FontWeight = Windows.UI.Text.FontWeights.SemiBold,
-                    Foreground = new SolidColorBrush(Windows.UI.Colors.White),
-                    VerticalAlignment = VerticalAlignment.Center
-                };
-                info.ValueTextBlock = valueText;
+                    var icon = new FontIcon
+                    {
+                        Glyph = info.Glyph,
+                        // Bumped one step for readability (paired inline with the value text below).
+                        FontSize = 16,
+                        Foreground = new SolidColorBrush((Windows.UI.Color)Application.Current.Resources["SystemAccentColorLight2"]),
+                        Margin = new Thickness(0, 0, 4, 0),
+                        VerticalAlignment = VerticalAlignment.Center
+                    };
 
-                valueRow.Children.Add(icon);
-                valueRow.Children.Add(valueText);
+                    var valueText = new TextBlock
+                    {
+                        Text = "--",
+                        FontSize = 16,
+                        FontWeight = Windows.UI.Text.FontWeights.SemiBold,
+                        Foreground = new SolidColorBrush(Windows.UI.Colors.White),
+                        VerticalAlignment = VerticalAlignment.Center
+                    };
+                    info.ValueTextBlock = valueText;
 
-                // Label
-                var labelText = new TextBlock
-                {
-                    Text = info.Label,
-                    // Bumped one step for readability.
-                    FontSize = 12,
-                    Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 136, 136, 136)), // #888888
-                    HorizontalAlignment = HorizontalAlignment.Center
-                };
-                info.LabelTextBlock = labelText;
+                    valueRow.Children.Add(icon);
+                    valueRow.Children.Add(valueText);
 
-                panel.Children.Add(valueRow);
-                panel.Children.Add(labelText);
+                    // Label
+                    var labelText = new TextBlock
+                    {
+                        Text = info.Label,
+                        // Bumped one step for readability.
+                        FontSize = 12,
+                        Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 136, 136, 136)), // #888888
+                        HorizontalAlignment = HorizontalAlignment.Center
+                    };
+                    info.LabelTextBlock = labelText;
 
-                Grid.SetColumn(panel, colIndex);
+                    panel.Children.Add(valueRow);
+                    panel.Children.Add(labelText);
+                }
+
+                Grid.SetColumn(panel, gridCol);
                 QuickMetricsGrid.Children.Add(panel);
 
-                colIndex++;
+                gridCol++;
             }
 
             // Show the row if we have metrics

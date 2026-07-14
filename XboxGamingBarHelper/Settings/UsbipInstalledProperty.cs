@@ -14,15 +14,19 @@ namespace XboxGamingBarHelper.Settings
     /// </summary>
     internal class UsbipInstalledProperty : HelperProperty<bool, SettingsManager>
     {
-        // Real service names installed by usbip-win2 (verified on a live install).
+        // Service names installed ONLY by usbip-win2. Every entry must be specific to
+        // usbip-win2 — see the false-positive note below.
         private static readonly string[] ServiceKeyNames = new[]
         {
-            "usbip2_ude",      // primary — USB Device Emulation (driver)
+            "usbip2_ude",      // primary — USB Device Emulation driver (usbip-win2 UDE releases)
             "usbip2_filter",   // upper filter driver
-            "mausbip",         // MsUsbIp service
-            // Historical / alternate names, kept for safety:
-            "usbip2vhci",
-            "VHCI",
+            "usbip2vhci",      // older usbip-win2 vhci-based releases
+            // DO NOT add generic names like "mausbip" or bare "VHCI". They are NOT
+            // usbip-win2 — they exist on stock machines from unrelated components, and
+            // matching them false-positived Detect()=>true on a system with NO usbip-win2.
+            // That let the VIIPER backend run with no real driver: HidHide hid the physical
+            // pad, the virtual pad never mounted (no vhci to surface it), and the controller
+            // went dead. usbip.exe (below) + the usbip2_* drivers are the only valid signals.
         };
 
         private static readonly string[] BinaryPaths = new[]

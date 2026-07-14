@@ -94,7 +94,7 @@ namespace XboxGamingBarHelper.Services
         /// controller can never survive us. HidHide itself stays installed
         /// (shared with DS4Windows etc.) unless --remove-drivers.
         /// </summary>
-        private static void RestoreHidHide()
+        internal static void RestoreHidHide()
         {
             HidHideControlService service;
             try
