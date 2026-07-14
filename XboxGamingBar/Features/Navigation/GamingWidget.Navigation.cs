@@ -125,11 +125,19 @@ namespace XboxGamingBar
                     if (sender is RadioButton focused)
                     {
                         ArmUserNavIntent(focused.Tag as string);
+                        // Switch to the FOCUSED tab synchronously here. Relying on the
+                        // framework's default A->check can land after the deferred focus-into
+                        // below, which dropped the user into the *previous* (still-active) tab
+                        // instead of the one they pressed A on.
+                        if (focused.IsChecked != true) focused.IsChecked = true;
                     }
                     // Committing to a tab with A/Enter drops focus straight into the tab's
                     // content so the user doesn't have to D-pad down from the tab strip.
-                    // Deferred to Low priority so the section is shown before we focus into it.
-                    var ignoreFocusInto = Dispatcher.RunAsync(CoreDispatcherPriority.Low, FocusFirstControlInActiveTab);
+                    // Deferred to the key RELEASE (PreviewKeyUp): moving focus during the
+                    // press meant the key-up half of the same A press landed on the newly
+                    // focused control and activated it (e.g. flipping the first toggle on
+                    // the Profiles tab).
+                    focusIntoTabOnKeyRelease = true;
                     break;
                 case VirtualKey.Left:
                 case VirtualKey.Right:
@@ -155,6 +163,11 @@ namespace XboxGamingBar
 
         private void NavRadioButton_Checked(object sender, RoutedEventArgs e)
         {
+            // A tab switch by any means (touch, click, LT/RT) invalidates a pending
+            // focus-into-tab arm from an A-press whose release we never saw. The
+            // legitimate A-press path is unaffected: the synchronous IsChecked set in
+            // NavRadio_KeyDown_ArmIntent runs this handler BEFORE the flag is armed.
+            focusIntoTabOnKeyRelease = false;
             if (sender is RadioButton selectedItem)
             {
                 string tag = selectedItem.Tag?.ToString() ?? "";
@@ -292,6 +305,11 @@ namespace XboxGamingBar
         // minimum interval as a belt-and-suspenders debounce.
         private bool ltTriggerHeld;
         private bool rtTriggerHeld;
+
+        // Set when A/Enter/Space commits to a tab on key-down; consumed on the matching
+        // key-up to move focus into the tab's content. Focus must not move during the
+        // press itself, or the release lands on (and activates) the newly focused control.
+        private bool focusIntoTabOnKeyRelease;
         private DateTime lastTriggerNavigateUtc = DateTime.MinValue;
         private static readonly TimeSpan TriggerNavigateDebounce = TimeSpan.FromMilliseconds(150);
 
@@ -333,18 +351,18 @@ namespace XboxGamingBar
                 e.Handled = true;
                 return;
             }
-            // Handle D-pad down from nav items to focus content area (for overflow menu items)
-            else if (e.Key == VirtualKey.GamepadDPadDown)
+            // From the nav strip, D-pad/left-stick down enters the tab's content at the
+            // top — the first focusable control — instead of letting spatial navigation
+            // pick whatever control happens to sit geometrically below the tab strip
+            // (which landed mid-page). Also covers overflow menu items.
+            else if (e.Key == VirtualKey.GamepadDPadDown || e.Key == VirtualKey.GamepadLeftThumbstickDown)
             {
                 var focusedElement = FocusManager.GetFocusedElement() as FrameworkElement;
-                // Check if focus is on a nav RadioButton or within the nav area
                 if (focusedElement != null && IsInNavigationArea(focusedElement))
                 {
                     // Mark as handled immediately to prevent default XY navigation
                     e.Handled = true;
-
-                    // Use TryMoveFocus to move to the first focusable element downward
-                    FocusManager.TryMoveFocus(FocusNavigationDirection.Down);
+                    FocusFirstControlInActiveTab();
                 }
             }
         }
@@ -361,6 +379,25 @@ namespace XboxGamingBar
             else if (e.Key == VirtualKey.GamepadRightTrigger)
             {
                 rtTriggerHeld = false;
+            }
+            // Focus-into-tab armed by A/Enter/Space on a nav item: perform it on the
+            // release so this key press can't also activate the control we land on.
+            else if (e.Key == VirtualKey.GamepadA || e.Key == VirtualKey.Enter || e.Key == VirtualKey.Space)
+            {
+                if (focusIntoTabOnKeyRelease)
+                {
+                    // Consume the arm exactly once, and only act while focus is still in
+                    // the nav strip. If the matching release never reached us (B pressed
+                    // mid-press, a flyout stole focus, widget hidden), acting on a later
+                    // unrelated release would yank focus into the tab AND swallow that
+                    // control's activation via e.Handled.
+                    focusIntoTabOnKeyRelease = false;
+                    if (IsInNavigationArea(FocusManager.GetFocusedElement() as FrameworkElement))
+                    {
+                        FocusFirstControlInActiveTab();
+                        e.Handled = true;
+                    }
+                }
             }
         }
 
@@ -449,6 +486,79 @@ namespace XboxGamingBar
                 }
             }
             return visibleItems;
+        }
+
+        /// <summary>
+        /// Boundary shepherd for XY navigation, wired to the page's LosingFocus event.
+        /// Keeps gamepad focus from escaping the active tab's content vertically:
+        /// a Down move past the last control is cancelled (bottom end-stop, instead of
+        /// focus vanishing onto some off-tab candidate), and an Up move out the top is
+        /// redirected to the active tab item in the nav strip. All navigation inside
+        /// the content stays with the system's XY algorithm.
+        /// </summary>
+        private void GamingWidget_LosingFocus(UIElement sender, LosingFocusEventArgs args)
+        {
+            try
+            {
+                if (args.Direction != FocusNavigationDirection.Up && args.Direction != FocusNavigationDirection.Down)
+                {
+                    return;
+                }
+
+                // Shepherd only gamepad/keyboard navigation. Pointer taps and
+                // programmatic focus moves (e.g. a flyout opening below the bottom
+                // row) must never be cancelled or redirected.
+                if (args.InputDevice != FocusInputDeviceKind.GameController
+                    && args.InputDevice != FocusInputDeviceKind.Keyboard)
+                {
+                    return;
+                }
+
+                var sv = GetActiveTabScrollViewer();
+                if (sv == null || sv.Visibility != Visibility.Visible) return;
+
+                if (!(args.OldFocusedElement is UIElement oldElement) || !IsDescendantOf(oldElement, sv))
+                {
+                    return;
+                }
+
+                if (args.NewFocusedElement is UIElement newElement && IsDescendantOf(newElement, sv))
+                {
+                    return; // normal move within the tab content
+                }
+
+                if (args.Direction == FocusNavigationDirection.Down)
+                {
+                    // Bottom of the tab: stay put.
+                    args.TryCancel();
+                }
+                else
+                {
+                    // Top of the tab: land on the active tab item, not whatever nav
+                    // button happens to be geometrically nearest.
+                    var active = MainNavPanel.Children.OfType<RadioButton>()
+                        .FirstOrDefault(rb => rb.IsChecked == true && rb.Visibility == Visibility.Visible);
+                    if (active != null && !ReferenceEquals(args.NewFocusedElement, active))
+                    {
+                        args.TrySetNewFocusedElement(active);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"LosingFocus shepherd failed: {ex.Message}");
+            }
+        }
+
+        private static bool IsDescendantOf(DependencyObject element, DependencyObject ancestor)
+        {
+            var current = element;
+            while (current != null)
+            {
+                if (ReferenceEquals(current, ancestor)) return true;
+                current = VisualTreeHelper.GetParent(current);
+            }
+            return false;
         }
 
         /// <summary>

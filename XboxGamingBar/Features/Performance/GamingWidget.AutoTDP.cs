@@ -1,4 +1,4 @@
-using Microsoft.Gaming.XboxGameBar;
+﻿using Microsoft.Gaming.XboxGameBar;
 using Microsoft.Gaming.XboxGameBar.Input;
 using Microsoft.UI.Xaml.Controls;
 using NLog;
@@ -132,18 +132,6 @@ namespace XboxGamingBar
 
             // When AutoTDP is on, focus down goes to the slider
             // When AutoTDP is off, keep navigation inside Performance tab.
-            if (AutoTDPToggle.IsOn && AutoTDPTargetFPSSlider != null)
-            {
-                AutoTDPToggle.XYFocusDown = AutoTDPTargetFPSSlider;
-            }
-            else if (StickyTDPToggle != null)
-            {
-                AutoTDPToggle.XYFocusDown = StickyTDPToggle;
-            }
-            else if (OSPowerModeComboBox != null)
-            {
-                AutoTDPToggle.XYFocusDown = OSPowerModeComboBox;
-            }
         }
 
         /// <summary>

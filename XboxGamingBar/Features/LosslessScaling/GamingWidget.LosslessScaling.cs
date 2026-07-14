@@ -1,4 +1,4 @@
-using Microsoft.Gaming.XboxGameBar;
+﻿using Microsoft.Gaming.XboxGameBar;
 using Microsoft.Gaming.XboxGameBar.Input;
 using Microsoft.UI.Xaml.Controls;
 using NLog;
@@ -119,8 +119,6 @@ namespace XboxGamingBar
                         {
                             LosslessScalingSaveSettingsButton.IsEnabled = enableSaveButton;
                             // Update XY navigation to skip disabled Save button
-                            LosslessScalingEnabledToggle.XYFocusDown = enableSaveButton ? LosslessScalingSaveSettingsButton : (DependencyObject)LosslessScalingAutoScaleToggle;
-                            LosslessScalingAutoScaleToggle.XYFocusUp = enableSaveButton ? LosslessScalingSaveSettingsButton : (DependencyObject)LosslessScalingEnabledToggle;
                         }
                         if (LosslessScalingCreateProfileButton != null)
                         {
@@ -129,21 +127,6 @@ namespace XboxGamingBar
 
                             // Update XY navigation for Scale toggle based on Create Profile button state
                             // When Create Profile is disabled, Scale should go up to Launch/ShowWindow button
-                            if (isRunning)
-                            {
-                                // Show Window is visible
-                                LosslessScalingEnabledToggle.XYFocusUp = enableCreateProfile ? LosslessScalingCreateProfileButton : (DependencyObject)ShowLosslessScalingWindowButton;
-                            }
-                            else if (isInstalled)
-                            {
-                                // Launch is visible
-                                LosslessScalingEnabledToggle.XYFocusUp = enableCreateProfile ? LosslessScalingCreateProfileButton : (DependencyObject)LaunchLosslessScalingButton;
-                            }
-                            else
-                            {
-                                // Neither button visible, go to nav
-                                LosslessScalingEnabledToggle.XYFocusUp = ScalingNavItem;
-                            }
                         }
 
                         // New Scaling Algorithm controls
@@ -308,21 +291,6 @@ namespace XboxGamingBar
                 }
 
                 // Update XY navigation based on visible controls
-                if (showLSFG3)
-                {
-                    // LSFG3: FrameGen -> LSFG3 Mode
-                    LosslessScalingFrameGenTypeComboBox.XYFocusDown = LosslessScalingLSFG3ModeComboBox;
-                }
-                else if (showLSFG2)
-                {
-                    // LSFG2: FrameGen -> LSFG2 Mode
-                    LosslessScalingFrameGenTypeComboBox.XYFocusDown = LosslessScalingLSFG2ModeComboBox;
-                }
-                else
-                {
-                    // No extra controls - remove XYFocusDown (end of list)
-                    LosslessScalingFrameGenTypeComboBox.XYFocusDown = null;
-                }
 
                 // Handle conflict with AMD Fluid Motion Frames
                 if (isHandlingConflict) return;
@@ -400,29 +368,6 @@ namespace XboxGamingBar
 
                 // Update XY navigation based on visible controls
                 // ScalingTypeComboBox down: Sharpness -> FSROptimize -> Anime4K -> ScaleMode
-                if (showFSROptimize)
-                {
-                    // FSR: Type -> Sharpness -> FSROptimize -> ScaleMode
-                    LosslessScalingScalingTypeComboBox.XYFocusDown = LosslessScalingSharpnessSlider;
-                    LosslessScalingSharpnessSlider.XYFocusDown = LosslessScalingFSROptimizeToggle;
-                    LosslessScalingFSROptimizeToggle.XYFocusDown = LosslessScalingScaleModeComboBox;
-                }
-                else if (showSharpness)
-                {
-                    // NIS, SGSR, BCAS: Type -> Sharpness -> ScaleMode
-                    LosslessScalingScalingTypeComboBox.XYFocusDown = LosslessScalingSharpnessSlider;
-                    LosslessScalingSharpnessSlider.XYFocusDown = LosslessScalingScaleModeComboBox;
-                }
-                else if (showAnime4K)
-                {
-                    // Anime4K: Type -> Size -> VRS -> ScaleMode
-                    LosslessScalingScalingTypeComboBox.XYFocusDown = LosslessScalingAnime4KSizeComboBox;
-                }
-                else
-                {
-                    // No extra controls: Type -> ScaleMode
-                    LosslessScalingScalingTypeComboBox.XYFocusDown = LosslessScalingScaleModeComboBox;
-                }
             }
             catch (Exception ex)
             {
@@ -451,23 +396,6 @@ namespace XboxGamingBar
                 }
 
                 // Update XY navigation based on visible controls
-                if (showAuto)
-                {
-                    // Auto: ScaleMode -> AspectRatio -> FrameGen
-                    LosslessScalingScaleModeComboBox.XYFocusDown = LosslessScalingAspectRatioComboBox;
-                    LosslessScalingAspectRatioComboBox.XYFocusDown = LosslessScalingFrameGenTypeComboBox;
-                }
-                else if (showCustom)
-                {
-                    // Custom: ScaleMode -> ScaleFactor -> FrameGen
-                    LosslessScalingScaleModeComboBox.XYFocusDown = LosslessScalingScaleFactorSlider;
-                    LosslessScalingScaleFactorSlider.XYFocusDown = LosslessScalingFrameGenTypeComboBox;
-                }
-                else
-                {
-                    // No extra controls: ScaleMode -> FrameGen
-                    LosslessScalingScaleModeComboBox.XYFocusDown = LosslessScalingFrameGenTypeComboBox;
-                }
             }
             catch (Exception ex)
             {
@@ -489,18 +417,6 @@ namespace XboxGamingBar
                 }
 
                 // Update XY navigation based on visible controls
-                if (isAdaptive)
-                {
-                    // ADAPTIVE: Mode -> Target -> FlowScale -> SizeToggle (skip Multiplier)
-                    LosslessScalingLSFG3ModeComboBox.XYFocusDown = LosslessScalingLSFG3TargetSlider;
-                    LosslessScalingLSFG3TargetSlider.XYFocusUp = LosslessScalingLSFG3ModeComboBox;
-                }
-                else
-                {
-                    // FIXED: Mode -> Multiplier -> Target -> FlowScale -> SizeToggle
-                    LosslessScalingLSFG3ModeComboBox.XYFocusDown = LosslessScalingLSFG3MultiplierComboBox;
-                    LosslessScalingLSFG3TargetSlider.XYFocusUp = LosslessScalingLSFG3MultiplierComboBox;
-                }
             }
             catch (Exception ex)
             {

@@ -1,4 +1,4 @@
-using Microsoft.Gaming.XboxGameBar;
+﻿using Microsoft.Gaming.XboxGameBar;
 using Microsoft.Gaming.XboxGameBar.Input;
 using Microsoft.UI.Xaml.Controls;
 using NLog;
@@ -427,49 +427,6 @@ namespace XboxGamingBar
                     : Visibility.Collapsed;
             }
 
-            DependencyObject firstModeDetailControl = AutoHibernateToggle;
-            if (isMouseMode && ControllerEmulationMouseSensitivitySlider != null)
-            {
-                firstModeDetailControl = ControllerEmulationMouseSensitivitySlider;
-            }
-            else if (GyroActivationExpandToggle != null)
-            {
-                firstModeDetailControl = GyroActivationExpandToggle;
-            }
-
-            if (ControllerEmulationModeComboBox != null)
-            {
-                ControllerEmulationModeComboBox.XYFocusDown = firstModeDetailControl;
-                if (firstModeDetailControl is Control firstControl &&
-                    !ReferenceEquals(firstModeDetailControl, AutoHibernateToggle))
-                {
-                    firstControl.XYFocusUp = ControllerEmulationModeComboBox;
-                }
-            }
-
-            if (AutoHibernateToggle != null)
-            {
-                if (isMouseMode && ControllerEmulationMouseGainYSlider != null)
-                {
-                    AutoHibernateToggle.XYFocusUp = ControllerEmulationMouseGainYSlider;
-                }
-                else if (JoystickOutputExpandToggle != null)
-                {
-                    AutoHibernateToggle.XYFocusUp = JoystickOutputExpandToggle;
-                }
-                else if (FeaturesExpandToggle != null)
-                {
-                    AutoHibernateToggle.XYFocusUp = FeaturesExpandToggle;
-                }
-                else if (GyroActivationExpandToggle != null)
-                {
-                    AutoHibernateToggle.XYFocusUp = GyroActivationExpandToggle;
-                }
-                else
-                {
-                    AutoHibernateToggle.XYFocusUp = ControllerEmulationModeComboBox;
-                }
-            }
         }
 
         private void ControllerEmulationModeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -492,133 +449,13 @@ namespace XboxGamingBar
         }
 
         /// <summary>
-        /// Keeps System tab D-pad/keyboard navigation valid when Controller Emulation card visibility/enabled state changes.
+        /// Historical: wired explicit XYFocus overrides for the System-tab controller
+        /// emulation card. Navigation now relies on the system XY algorithm
+        /// (NavigationDirectionDistance strategy), so this is intentionally a no-op.
+        /// Kept because state-change paths still call it.
         /// </summary>
         private void UpdateSystemControllerEmulationNavigation()
         {
-            if (HotkeysExpandButton == null || AutoHibernateToggle == null)
-            {
-                return;
-            }
-
-            bool emulationCardVisible =
-                ControllerEmulationCard != null &&
-                ControllerEmulationCard.Visibility == Visibility.Visible &&
-                ControllerEmulationExpandButton != null;
-
-            bool legacyBodyVisible =
-                emulationCardVisible &&
-                isControllerEmulationExpanded &&
-                ControllerEmulationContent != null &&
-                ControllerEmulationContent.Visibility == Visibility.Visible;
-
-            bool viiperBodyVisible =
-                emulationCardVisible &&
-                isControllerEmulationExpanded &&
-                ViiperEmulationContent != null &&
-                ViiperEmulationContent.Visibility == Visibility.Visible;
-
-            // "Expanded" now covers either backend body — VIIPER also needs the
-            // ExpandButton → EnabledToggle → first-body-item chain wired up. The
-            // body-specific (legacy vs VIIPER) branching happens further down.
-            bool emulationCardExpanded = legacyBodyVisible || viiperBodyVisible;
-
-            bool emulationCardActive =
-                emulationCardExpanded &&
-                ControllerEmulationEnabledToggle != null &&
-                ControllerEmulationEnabledToggle.IsEnabled;
-
-            bool emulationModeControlsActive =
-                legacyBodyVisible &&
-                ControllerEmulationGyroSourceComboBox != null &&
-                ControllerEmulationGyroSourceComboBox.IsEnabled &&
-                ControllerEmulationModeComboBox != null &&
-                ControllerEmulationModeComboBox.IsEnabled;
-            bool isMouseMode = ControllerEmulationModeComboBox != null &&
-                               ControllerEmulationModeComboBox.SelectedIndex == 0;
-            bool isStickMode = ControllerEmulationModeComboBox != null &&
-                               (ControllerEmulationModeComboBox.SelectedIndex == 1 || ControllerEmulationModeComboBox.SelectedIndex == 3);
-
-            if (emulationCardVisible)
-            {
-                HotkeysExpandButton.XYFocusDown = ControllerEmulationExpandButton;
-                ControllerEmulationExpandButton.XYFocusUp = HotkeysExpandButton;
-
-                if (!emulationCardExpanded)
-                {
-                    ControllerEmulationExpandButton.XYFocusDown = AutoHibernateToggle;
-                    AutoHibernateToggle.XYFocusUp = ControllerEmulationExpandButton;
-                    return;
-                }
-
-                if (ControllerEmulationEnabledToggle != null)
-                {
-                    ControllerEmulationExpandButton.XYFocusDown = ControllerEmulationEnabledToggle;
-                    ControllerEmulationEnabledToggle.XYFocusUp = ControllerEmulationExpandButton;
-                }
-                else
-                {
-                    ControllerEmulationExpandButton.XYFocusDown = AutoHibernateToggle;
-                    AutoHibernateToggle.XYFocusUp = ControllerEmulationExpandButton;
-                    return;
-                }
-
-                if (viiperBodyVisible)
-                {
-                    // VIIPER backend body. Wire the entry/exit explicitly; auto XY traversal
-                    // handles internal navigation between VIIPER controls (sub-device combo,
-                    // toggles, sliders) since they sit in a straightforward vertical stack.
-                    if (ViiperDeviceTypeComboBox != null)
-                    {
-                        ControllerEmulationEnabledToggle.XYFocusDown = ViiperDeviceTypeComboBox;
-                        ViiperDeviceTypeComboBox.XYFocusUp = ControllerEmulationEnabledToggle;
-                        AutoHibernateToggle.XYFocusUp = ViiperDeviceTypeComboBox;
-                    }
-                    else
-                    {
-                        AutoHibernateToggle.XYFocusUp = ControllerEmulationEnabledToggle;
-                    }
-                    return;
-                }
-
-                if (!emulationCardActive)
-                {
-                    AutoHibernateToggle.XYFocusUp = ControllerEmulationEnabledToggle;
-                    return;
-                }
-
-                if (!emulationModeControlsActive)
-                {
-                    AutoHibernateToggle.XYFocusUp = ControllerEmulationEnabledToggle;
-                    return;
-                }
-
-                if (isMouseMode && ControllerEmulationMouseGainYSlider != null && ControllerEmulationMouseGainYSlider.IsEnabled)
-                {
-                    AutoHibernateToggle.XYFocusUp = ControllerEmulationMouseGainYSlider;
-                }
-                else if (isStickMode && JoystickOutputExpandToggle != null)
-                {
-                    AutoHibernateToggle.XYFocusUp = JoystickOutputExpandToggle;
-                }
-                else if (FeaturesExpandToggle != null)
-                {
-                    AutoHibernateToggle.XYFocusUp = FeaturesExpandToggle;
-                }
-                else if (GyroActivationExpandToggle != null)
-                {
-                    AutoHibernateToggle.XYFocusUp = GyroActivationExpandToggle;
-                }
-                else
-                {
-                    AutoHibernateToggle.XYFocusUp = ControllerEmulationModeComboBox;
-                }
-            }
-            else
-            {
-                HotkeysExpandButton.XYFocusDown = AutoHibernateToggle;
-                AutoHibernateToggle.XYFocusUp = HotkeysExpandButton;
-            }
         }
 
         /// <summary>
