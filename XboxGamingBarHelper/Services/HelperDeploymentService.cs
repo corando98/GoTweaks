@@ -128,9 +128,13 @@ namespace XboxGamingBarHelper.Services
         };
 
         /// <summary>
-        /// Gets the current package version from MSIX
+        /// Gets the package version from MSIX identity, or null when the process has no
+        /// package identity (e.g. running from the deployed LocalCache copy). Use this
+        /// wherever a wrong-but-plausible version is worse than no version at all —
+        /// the assembly-version fallback below is a hardcoded 1.0.0.0 and stamping it
+        /// into .version would wedge IsDeploymentNeeded into a permanent mismatch.
         /// </summary>
-        public static string GetCurrentPackageVersion()
+        public static string GetPackageVersionFromIdentity()
         {
             try
             {
@@ -141,17 +145,31 @@ namespace XboxGamingBarHelper.Services
             catch (Exception ex)
             {
                 Logger.Debug($"Could not get package version (not running in MSIX?): {ex.Message}");
-                // Fall back to assembly version
-                try
-                {
-                    var assembly = Assembly.GetExecutingAssembly();
-                    var version = assembly.GetName().Version;
-                    return version?.ToString() ?? "0.0.0.0";
-                }
-                catch
-                {
-                    return "0.0.0.0";
-                }
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Gets the current package version from MSIX
+        /// </summary>
+        public static string GetCurrentPackageVersion()
+        {
+            var identityVersion = GetPackageVersionFromIdentity();
+            if (identityVersion != null)
+            {
+                return identityVersion;
+            }
+
+            // Fall back to assembly version
+            try
+            {
+                var assembly = Assembly.GetExecutingAssembly();
+                var version = assembly.GetName().Version;
+                return version?.ToString() ?? "0.0.0.0";
+            }
+            catch
+            {
+                return "0.0.0.0";
             }
         }
 
@@ -284,7 +302,29 @@ namespace XboxGamingBarHelper.Services
                 if (PathsAreSame(sourceDir, HelperFolder))
                 {
                     Logger.Warn($"Deploy source equals deployed folder ({HelperFolder}); skipping self-copy (files already in place).");
-                    return File.Exists(DeployedExePath);
+
+                    // #97: if the files are in place but .version is missing/stale, this
+                    // no-op path used to leave the mismatch in place forever. Re-stamp —
+                    // but only with a real package-identity version; the assembly-version
+                    // fallback (1.0.0.0) would poison the stamp and recreate the loop.
+                    if (File.Exists(DeployedExePath))
+                    {
+                        var identityVersion = GetPackageVersionFromIdentity();
+                        if (identityVersion != null && GetDeployedVersion() != identityVersion)
+                        {
+                            try
+                            {
+                                File.WriteAllText(VersionFilePath, identityVersion);
+                                Logger.Info($"Version file re-stamped on self-copy no-op: {identityVersion}");
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.Warn($"Could not re-stamp version file: {ex.Message}");
+                            }
+                        }
+                        return true;
+                    }
+                    return false;
                 }
 
                 // Create target directory
@@ -372,7 +412,11 @@ namespace XboxGamingBarHelper.Services
                 }
 
                 Logger.Info($"Deployment complete: {successCount} files copied, {failCount} failures");
-                return successCount > 0 && File.Exists(DeployedExePath);
+                // #97: success must match the .version stamp condition. Returning true on a
+                // partial deploy (failCount>0) let PerformSetup report "Setup Complete" while
+                // .version was never written — every launch then re-detected a mismatch and
+                // re-fired UAC, forever. Fail loudly instead so setup surfaces the error.
+                return deployOk;
             }
             catch (Exception ex)
             {
