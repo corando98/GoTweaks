@@ -355,6 +355,7 @@ namespace XboxGamingBar
 
         private void OnButtonTypeChanged(string buttonName)
         {
+            PreserveLegionScroll();
             var typeCombo = FindName($"LegionButton{buttonName}TypeComboBox") as ComboBox;
             var gamepadCombo = FindName($"LegionButton{buttonName}ComboBox") as ComboBox;
             var mouseCombo = FindName($"LegionButton{buttonName}MouseComboBox") as ComboBox;
@@ -461,7 +462,10 @@ namespace XboxGamingBar
             }
 
             var keyboardPanel = FindName($"LegionButton{buttonName}KeyboardPanel") as StackPanel;
-            if (!(keyboardPanel?.Parent is StackPanel container))
+            // The keyboard panel moved into the editor grid's Mapping column, so anchor the
+            // injected combo-editor UI on the row's outer StackPanel instead of its parent.
+            var container = FindName($"LegionButton{buttonName}Row") as StackPanel;
+            if (keyboardPanel == null || container == null)
             {
                 return;
             }
@@ -1014,12 +1018,13 @@ namespace XboxGamingBar
 
         private void UpdateKeyboardKeyTags(string buttonName, List<int> keys)
         {
-            var keyTags = FindName($"LegionButton{buttonName}KeyTags") as StackPanel;
+            var keyTags = FindName($"LegionButton{buttonName}KeyTags") as Panel;
             if (keyTags == null) return;
 
             keyTags.Children.Clear();
             if (keys == null) return;
 
+            var tagElements = new List<FrameworkElement>();
             foreach (var key in keys)
             {
                 // Create a tag with the key name and X button to remove
@@ -1062,8 +1067,10 @@ namespace XboxGamingBar
                 tagPanel.Children.Add(keyText);
                 tagPanel.Children.Add(removeButton);
                 tagBorder.Child = tagPanel;
-                keyTags.Children.Add(tagBorder);
+                tagElements.Add(tagBorder);
             }
+
+            FillWrapRows(keyTags, tagElements, GetKeyTagsWrapWidth(keyTags));
         }
 
         private string GetKeyDisplayName(int keyCode)

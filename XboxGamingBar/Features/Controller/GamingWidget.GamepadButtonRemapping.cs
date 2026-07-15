@@ -373,6 +373,13 @@ namespace XboxGamingBar
             if (LegionGamepadKeyTags != null)
                 LegionGamepadKeyTags.Children.Clear();
 
+            // Unified editor: "Reset All Mappings" covers the back/front buttons too.
+            foreach (var legionName in ConsolidatedLegionButtons)
+            {
+                try { ResetLegionButtonMapping(legionName); }
+                catch (Exception ex) { Logger.Warn($"Reset {legionName} failed: {ex.Message}"); }
+            }
+
             // Update summary display (now empty)
             UpdateGamepadMappingSummary();
 

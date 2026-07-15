@@ -1394,6 +1394,10 @@ namespace XboxGamingBar
 
             var xamlTimer = Stopwatch.StartNew();
             InitializeComponent();
+            PopulateRemapTargetComboBoxes();
+            // Constructor-time conversion can miss if parents/items aren't realized yet;
+            // Loaded re-runs it against the live tree (idempotent — converted combos skip).
+            this.Loaded += (s, e) => PopulateRemapTargetComboBoxes();
             xamlTimer.Stop();
             Logger.Info($"[TIMING] InitializeComponent: {xamlTimer.ElapsedMilliseconds}ms");
 
@@ -2606,6 +2610,7 @@ namespace XboxGamingBar
                     LegionControllerPidVidText.Text = "VID:PID --";
                 }
                 UpdateLegionControllerInfoSectionVisibility();
+                UpdateDeviceArtForVariant();
 
                 // VID:PID can arrive before battery/connected data does — re-evaluate the
                 // top status line so it doesn't sit on "Not detected" longer than necessary.
@@ -2673,6 +2678,23 @@ namespace XboxGamingBar
 
         private async Task RenderLegionDeviceGlyphOnceAsync()
         {
+            // Go S is a one-piece device: no detachable halves and no template yet, so it
+            // gets its static outline (viewBox 115.93 x 50.65 => 2.289 aspect).
+            if (deviceArtVariant == 1)
+            {
+                if (lastDeviceGlyphKey != "gos")
+                {
+                    LegionDeviceGlyphImage.Source = new Windows.UI.Xaml.Media.Imaging.SvgImageSource(
+                        new Uri("ms-appx:///Assets/LegionGoSController.svg"))
+                    {
+                        RasterizePixelWidth = 512,
+                        RasterizePixelHeight = 224,
+                    };
+                    lastDeviceGlyphKey = "gos";
+                }
+                return;
+            }
+
             string key = $"{glyphLeftConnected}|{glyphRightConnected}|{glyphLeftPresent}|{glyphRightPresent}|{glyphLightEnabled}|{glyphLightMode}|{glyphLightR},{glyphLightG},{glyphLightB}|{glyphLightBrightness}";
             if (key == lastDeviceGlyphKey) return;
 
@@ -2735,6 +2757,748 @@ namespace XboxGamingBar
             int br = Math.Max(0, Math.Min(100, glyphLightBrightness));
             double o = 0.45 + 0.55 * (br / 100.0);
             return o.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        // Device art variant from the controller VID:PID: 0 = Legion Go (1), 1 = Go S, 2 = Go 2.
+        // Go 1 intentionally keeps the dynamic Go 2 glyph template (same visuals) until a
+        // Go 1 template exists; Go S is a one-piece device and uses its static outline.
+        // Starts at -1 (nothing applied) so the first VID:PID always populates the art,
+        // including the Device Layout images which have no XAML default source.
+        private int deviceArtVariant = -1;
+
+        // Label -> MIT glyph asset (Assets/ButtonGlyphs/*.svg) for the remap dropdowns.
+        // Mouse targets and "Disabled" stay text-only (no shippable glyph).
+        private static readonly System.Collections.Generic.Dictionary<string, string> RemapGlyphMap =
+            new System.Collections.Generic.Dictionary<string, string>
+        {
+            { "LS Click", "lstick-click" }, { "LS Up", "lstick-up" }, { "LS Down", "lstick-down" }, { "LS Left", "lstick-left" }, { "LS Right", "lstick-right" },
+            { "RS Click", "rstick-click" }, { "RS Up", "rstick-up" }, { "RS Down", "rstick-down" }, { "RS Left", "rstick-left" }, { "RS Right", "rstick-right" },
+            { "D-Pad Up", "dpad-up" }, { "D-Pad Down", "dpad-down" }, { "D-Pad Left", "dpad-left" }, { "D-Pad Right", "dpad-right" },
+            { "A", "a" }, { "B", "b" }, { "X", "x" }, { "Y", "y" },
+            { "LB", "lb" }, { "LT", "lt" }, { "RB", "rb" }, { "RT", "rt" },
+            { "View", "view" }, { "Menu", "menu" },
+            { "Y1", "y1-left" }, { "Y2", "y2-left" }, { "Y3", "y3-right" },
+            { "M1", "m1" }, { "M2", "m2" }, { "M3", "m3" },
+            { "Start", "menu" }, { "Select", "view" },
+            { "Desktop", "png:Desktop" }, { "Page", "png:Page" },
+            // Quick-tab combo picker label aliases
+            { "LS", "lstick" }, { "RS", "rstick" },
+            { "D-Up", "dpad-up" }, { "D-Down", "dpad-down" }, { "D-Left", "dpad-left" }, { "D-Right", "dpad-right" },
+        };
+
+        // "png:" prefixed assets are the two licensed Lenovo icons; the rest are MIT SVGs.
+        // Sources are cached and shared: the chips/faces rebuild frequently, and creating +
+        // discarding SvgImageSource instances mid-rasterize crashes natively in
+        // Windows.UI.Xaml.dll (0xc0000005 @ +0x18403d, observed 2026-07-15).
+        private static readonly System.Collections.Generic.Dictionary<string, Windows.UI.Xaml.Media.ImageSource> glyphSourceCache =
+            new System.Collections.Generic.Dictionary<string, Windows.UI.Xaml.Media.ImageSource>();
+
+        private static Windows.UI.Xaml.Media.ImageSource CreateGlyphSource(string asset, int rasterPx)
+        {
+            string key = $"{asset}|{rasterPx}";
+            if (glyphSourceCache.TryGetValue(key, out var cached)) return cached;
+            Windows.UI.Xaml.Media.ImageSource src;
+            if (asset.StartsWith("png:"))
+                src = new Windows.UI.Xaml.Media.Imaging.BitmapImage(
+                    new Uri($"ms-appx:///Assets/ButtonGlyphs/{asset.Substring(4)}.png"));
+            else
+                src = new Windows.UI.Xaml.Media.Imaging.SvgImageSource(
+                    new Uri($"ms-appx:///Assets/ButtonGlyphs/{asset}.svg"))
+                { RasterizePixelWidth = rasterPx, RasterizePixelHeight = rasterPx };
+            glyphSourceCache[key] = src;
+            return src;
+        }
+
+
+        /// <summary>
+        /// Fronts the remap target ComboBoxes with grid-flyout pickers (same pattern as the
+        /// Quick tab's tile combo flyout — a Flyout hosting a plain multi-column Grid, which
+        /// is the only reliable multi-column menu in UWP; custom ComboBox popups crash).
+        /// The ComboBox stays in the tree, hidden, as the state holder: the tile click just
+        /// sets SelectedIndex, so every existing save/load/SelectionChanged path is untouched.
+        /// Runs right after InitializeComponent, before any mapping restore.
+        /// </summary>
+        private void PopulateRemapTargetComboBoxes()
+        {
+            var gamepad = new ComboBox[]
+            {
+                LegionButtonY1ComboBox, LegionButtonY2ComboBox, LegionButtonY3ComboBox,
+                LegionButtonM1ComboBox, LegionButtonM2ComboBox, LegionButtonM3ComboBox,
+                LegionButtonDesktopComboBox, LegionButtonPageComboBox,
+                LegionGamepadButtonSelectorComboBox, LegionGamepadActionComboBox,
+                LegionRemapButtonSelectorComboBox,
+            };
+            var mouse = new ComboBox[]
+            {
+                LegionButtonY1MouseComboBox, LegionButtonY2MouseComboBox, LegionButtonY3MouseComboBox,
+                LegionButtonM1MouseComboBox, LegionButtonM2MouseComboBox, LegionButtonM3MouseComboBox,
+                LegionButtonDesktopMouseComboBox, LegionButtonPageMouseComboBox,
+                LegionGamepadMouseComboBox,
+            };
+            var keys = new ComboBox[]
+            {
+                LegionButtonY1KeyComboBox, LegionButtonY2KeyComboBox, LegionButtonY3KeyComboBox,
+                LegionButtonM1KeyComboBox, LegionButtonM2KeyComboBox, LegionButtonM3KeyComboBox,
+                LegionButtonDesktopKeyComboBox, LegionButtonPageKeyComboBox,
+                LegionGamepadKeyComboBox,
+                LegionLKeyComboBox, LegionRKeyComboBox,
+                ScrollKeyComboBox, ScrollClickKeyComboBox,
+                CustomShortcutKeyComboBox,
+                HotkeyMenuAKeyComboBox, HotkeyMenuBKeyComboBox,
+            };
+            foreach (var c in gamepad) TryConvertToPickerFlyout(c, 4);
+            foreach (var c in mouse) TryConvertToPickerFlyout(c, 3);
+            foreach (var c in keys) TryConvertToPickerFlyout(c, 5, useGlyphs: false);
+            WireConsolidatedRemapEditor();
+        }
+
+        private static readonly string[] ConsolidatedLegionButtons =
+            { "Y1", "Y2", "Y3", "M1", "M2", "M3", "Desktop", "Page" };
+        private bool consolidatedEditorWired;
+
+        private void WireConsolidatedRemapEditor()
+        {
+            if (consolidatedEditorWired || LegionRemapButtonSelectorComboBox == null) return;
+            consolidatedEditorWired = true;
+
+            LegionRemapButtonSelectorComboBox.SelectionChanged += (s, e) => UpdateConsolidatedRemapEditor();
+
+            // The gamepad sub-editor keeps its own (hidden) selector, driven by the
+            // consolidated one; its picker face stays hidden permanently.
+            if (LegionGamepadButtonSelectorPicker != null)
+                LegionGamepadButtonSelectorPicker.Visibility = Visibility.Collapsed;
+
+            // Any mapping change refreshes the summary tags.
+            foreach (var gpCombo in new[] { LegionGamepadTypeComboBox, LegionGamepadActionComboBox, LegionGamepadMouseComboBox })
+            {
+                if (gpCombo != null) gpCombo.SelectionChanged += (s, e) => RefreshLegionRemapSummary();
+            }
+            foreach (var name in ConsolidatedLegionButtons)
+            {
+                foreach (var suffix in new[] { "TypeComboBox", "ComboBox", "MouseComboBox" })
+                {
+                    if (FindName($"LegionButton{name}{suffix}") is ComboBox c)
+                        c.SelectionChanged += (s, e) => RefreshLegionRemapSummary();
+                }
+            }
+
+            UpdateConsolidatedRemapEditor();
+        }
+
+        /// <summary>
+        /// Editor visibility toggles / summary refreshes can yank the Legion tab scroll
+        /// back to the top (focus falls out of a collapsed subtree). Capture the offset
+        /// and restore it after the layout pass.
+        /// </summary>
+        private void PreserveLegionScroll()
+        {
+            try
+            {
+                var sv = LegionScrollViewer;
+                if (sv == null) return;
+                double off = sv.VerticalOffset;
+                // Restore twice: right after the pending layout pass, and again after
+                // focus-driven BringIntoView (flyout close / collapsed-subtree focus
+                // fallback) has had its say.
+                _ = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal,
+                    () => sv.ChangeView(null, off, null, true));
+                _ = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Low,
+                    () => sv.ChangeView(null, off, null, true));
+            }
+            catch { }
+        }
+
+        private void UpdateConsolidatedRemapEditor()
+        {
+            try
+            {
+                PreserveLegionScroll();
+                int idx = LegionRemapButtonSelectorComboBox?.SelectedIndex ?? -1;
+                for (int i = 0; i < ConsolidatedLegionButtons.Length; i++)
+                {
+                    if (FindName($"LegionButton{ConsolidatedLegionButtons[i]}Row") is UIElement row)
+                        row.Visibility = idx == i ? Visibility.Visible : Visibility.Collapsed;
+                }
+
+                bool gamepadSelected = idx >= ConsolidatedLegionButtons.Length;
+                if (LegionGamepadEditorBlock != null)
+                    LegionGamepadEditorBlock.Visibility = gamepadSelected ? Visibility.Visible : Visibility.Collapsed;
+
+                if (gamepadSelected && LegionGamepadButtonSelectorComboBox != null)
+                {
+                    int gpIdx = idx - ConsolidatedLegionButtons.Length;
+                    if (LegionGamepadButtonSelectorComboBox.SelectedIndex != gpIdx)
+                    {
+                        LegionGamepadButtonSelectorComboBox.SelectedIndex = gpIdx;   // fires existing load logic
+                    }
+                    else
+                    {
+                        // Same button re-selected after a Legion row was shown: reload so the
+                        // type-driven visibility (keyboard panel etc.) is restored.
+                        LoadGamepadMappingToUI(GetGamepadButtonNameFromIndex(gpIdx));
+                    }
+                }
+
+                RefreshLegionRemapSummary();
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"UpdateConsolidatedRemapEditor failed: {ex.Message}");
+            }
+        }
+
+        private static readonly string[] ConsolidatedGamepadLabels =
+        {
+            "LS Click", "LS Up", "LS Down", "LS Left", "LS Right",
+            "RS Click", "RS Up", "RS Down", "RS Left", "RS Right",
+            "D-Pad Up", "D-Pad Down", "D-Pad Left", "D-Pad Right",
+            "A", "B", "X", "Y", "LB", "LT", "RB", "RT", "Start", "Select",
+        };
+        private static readonly string[] RemapActionLabels =
+        {
+            "Disabled",
+            "LS Click", "LS Up", "LS Down", "LS Left", "LS Right",
+            "RS Click", "RS Up", "RS Down", "RS Left", "RS Right",
+            "D-Pad Up", "D-Pad Down", "D-Pad Left", "D-Pad Right",
+            "A", "B", "X", "Y", "LB", "LT", "RB", "RT", "View", "Menu",
+        };
+
+        /// <summary>
+        /// Lays out items into left-to-right rows that wrap at maxWidth, using only
+        /// StackPanels. (VariableSizedWrapGrid AV-crashes natively in Windows.UI.Xaml
+        /// when its children/spans change dynamically — observed 2026-07-15.)
+        /// </summary>
+        private static void FillWrapRows(Panel host, System.Collections.Generic.List<FrameworkElement> items, double maxWidth)
+        {
+            host.Children.Clear();
+            if (maxWidth < 60) maxWidth = 340;
+            StackPanel line = null; double used = 0;
+            foreach (var el in items)
+            {
+                el.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+                double w = el.DesiredSize.Width;
+                if (line == null || (used > 0 && used + w > maxWidth))
+                {
+                    line = new StackPanel { Orientation = Orientation.Horizontal };
+                    host.Children.Add(line);
+                    used = 0;
+                }
+                line.Children.Add(el);
+                used += w;
+            }
+        }
+
+        /// <summary>
+        /// Wrap width for key-tag panels: the panel's own laid-out width, else its
+        /// parent's, else a conservative fit for the Mapping column — the generic
+        /// 340px fallback exceeded the column and let tags overflow before wrapping.
+        /// </summary>
+        private static double GetKeyTagsWrapWidth(Panel keyTags)
+        {
+            double w = (keyTags as FrameworkElement)?.ActualWidth ?? 0;
+            if (w < 60) w = (keyTags?.Parent as FrameworkElement)?.ActualWidth ?? 0;
+            return w >= 60 ? w : 190;
+        }
+
+        private readonly System.Collections.Generic.List<FrameworkElement> pendingRemapChips =
+            new System.Collections.Generic.List<FrameworkElement>();
+
+        private void AddRemapChip(string buttonLabel, string desc, int selectIdx, Action onDelete)
+        {
+            var content = new StackPanel { Orientation = Orientation.Horizontal };
+            UIElement Part(string label)
+            {
+                if (RemapGlyphMap.TryGetValue(label, out var asset))
+                {
+                    return new Windows.UI.Xaml.Controls.Image
+                    {
+                        Width = 20, Height = 20,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Source = CreateGlyphSource(asset, 40),
+                    };
+                }
+                return new TextBlock
+                {
+                    Text = label, FontSize = 11,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0xCC, 0xCC, 0xCC)),
+                };
+            }
+            content.Children.Add(Part(buttonLabel));
+            content.Children.Add(new TextBlock
+            {
+                Text = "\u2192", FontSize = 10,
+                Margin = new Thickness(4, 0, 4, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x88, 0x88, 0x88)),
+            });
+            content.Children.Add(Part(desc));
+            var tag = new Border
+            {
+                Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x2A, 0x2D, 0x32)),
+                CornerRadius = new CornerRadius(4),
+                Padding = new Thickness(7, 4, 7, 4),
+                Margin = new Thickness(0, 2, 4, 2),
+                MinHeight = 28,
+                Child = content,
+            };
+            var del = new Button
+            {
+                Content = new FontIcon { Glyph = "\uE711", FontSize = 8 },
+                Padding = new Thickness(3),
+                Margin = new Thickness(6, 0, 0, 0),
+                MinWidth = 0, MinHeight = 0,
+                Background = new SolidColorBrush(Windows.UI.Colors.Transparent),
+                BorderThickness = new Thickness(0),
+                Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x99, 0x99, 0x99)),
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            del.Click += (s, e) =>
+            {
+                try { onDelete?.Invoke(); }
+                catch (Exception ex) { Logger.Warn($"Remap chip delete failed: {ex.Message}"); }
+            };
+            content.Children.Add(del);
+
+            tag.Tapped += (s, e) =>
+            {
+                if (LegionRemapButtonSelectorComboBox != null)
+                    LegionRemapButtonSelectorComboBox.SelectedIndex = selectIdx;
+            };
+            pendingRemapChips.Add(tag);
+        }
+
+        /// <summary>Joins stored HID key codes into a readable "LCtrl+C" string.</summary>
+        private string DescribeKeyboardKeys(System.Collections.Generic.List<int> keys)
+        {
+            if (keys == null || keys.Count == 0) return null;
+            var reference = LegionButtonY1KeyComboBox;
+            var parts = new System.Collections.Generic.List<string>();
+            foreach (var code in keys)
+            {
+                string label = null;
+                if (reference != null)
+                {
+                    for (int i = 1; i < reference.Items.Count; i++)
+                    {
+                        if (GetKeyCodeFromDropdownIndex(i) == code)
+                        {
+                            label = reference.Items[i] as string;
+                            break;
+                        }
+                    }
+                }
+                parts.Add(label ?? $"0x{code:X2}");
+            }
+            return string.Join("+", parts);
+        }
+
+        /// <summary>
+        /// Clears a back/front button mapping: type back to Gamepad, target Disabled,
+        /// mouse default, stored keyboard keys dropped. Every write goes through the
+        /// hidden state combos so the existing persistence/send handlers fire.
+        /// </summary>
+        private void ResetLegionButtonMapping(string name)
+        {
+            SetStoredKeyboardKeys(name, new System.Collections.Generic.List<int>());
+            (FindName($"LegionButton{name}KeyTags") as Panel)?.Children.Clear();
+            if (FindName($"LegionButton{name}ComboBox") is ComboBox g) g.SelectedIndex = 0;
+            if (FindName($"LegionButton{name}MouseComboBox") is ComboBox m) m.SelectedIndex = 0;
+            if (FindName($"LegionButton{name}TypeComboBox") is ComboBox t)
+            {
+                if (t.SelectedIndex != 0) t.SelectedIndex = 0;
+                else OnButtonTypeChanged(name);   // re-persist the cleared state
+            }
+            RefreshLegionRemapSummary();
+        }
+
+        /// <summary>Clears one gamepad-button mapping (mirrors the Reset All per-button logic).</summary>
+        private void ResetGamepadButtonMapping(int gpIndex)
+        {
+            var storeName = GetGamepadButtonNameFromIndex(gpIndex);
+            gamepadButtonMappings[storeName] = new ButtonMapping { Type = 0, GamepadAction = 0 };
+            SaveAndSendGamepadMappings();
+            gamepadButtonMappings.Remove(storeName);
+            if (LegionGamepadButtonSelectorComboBox?.SelectedIndex == gpIndex)
+                LoadGamepadMappingToUI(storeName);
+            RefreshLegionRemapSummary();
+        }
+
+        // Rebuilding the chips mutates a large subtree; doing that synchronously inside
+        // ComboBox.SelectionChanged (which fires mid-layout during button switches) is
+        // part of the native-crash cocktail. Coalesce bursts into one deferred rebuild.
+        private bool remapSummaryQueued;
+
+        private void RefreshLegionRemapSummary()
+        {
+            if (remapSummaryQueued) return;
+            remapSummaryQueued = true;
+            _ = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Low, () =>
+            {
+                remapSummaryQueued = false;
+                RefreshLegionRemapSummaryCore();
+            });
+        }
+
+        private void RefreshLegionRemapSummaryCore()
+        {
+            try
+            {
+                if (LegionAllRemappedTags == null) return;
+                PreserveLegionScroll();
+                pendingRemapChips.Clear();
+                for (int i = 0; i < ConsolidatedLegionButtons.Length; i++)
+                {
+                    var name = ConsolidatedLegionButtons[i];
+                    var typeCombo = FindName($"LegionButton{name}TypeComboBox") as ComboBox;
+                    int type = typeCombo?.SelectedIndex ?? 0;
+                    string desc = null;
+                    if (type == 0)
+                    {
+                        var c = FindName($"LegionButton{name}ComboBox") as ComboBox;
+                        var s = c?.SelectedItem as string;
+                        if (!string.IsNullOrEmpty(s) && s != "Disabled") desc = s;
+                    }
+                    else if (type == 1)
+                    {
+                        desc = DescribeKeyboardKeys(GetStoredKeyboardKeys(name)) ?? "Keys";
+                    }
+                    else
+                    {
+                        var c = FindName($"LegionButton{name}MouseComboBox") as ComboBox;
+                        desc = c?.SelectedItem as string;
+                    }
+                    if (desc == null) continue;
+                    var delName = name;
+                    AddRemapChip(name, desc, i, () => ResetLegionButtonMapping(delName));
+                }
+
+                // Gamepad-button remaps (from the gamepad editor's own store) share the chips.
+                for (int i = 0; i < ConsolidatedGamepadLabels.Length; i++)
+                {
+                    var storeName = GetGamepadButtonNameFromIndex(i);
+                    if (!gamepadButtonMappings.TryGetValue(storeName, out var mapping) || mapping == null) continue;
+                    string desc = null;
+                    if (mapping.Type == 0)
+                    {
+                        bool mapped = mapping.GamepadAction > 0 ||
+                                      (mapping.GamepadActions != null && mapping.GamepadActions.Count > 0);
+                        if (mapped && mapping.GamepadAction >= 0 && mapping.GamepadAction < RemapActionLabels.Length)
+                            desc = mapping.GamepadActions != null && mapping.GamepadActions.Count > 1
+                                ? "Combo" : RemapActionLabels[mapping.GamepadAction];
+                    }
+                    else if (mapping.Type == 1)
+                    {
+                        desc = DescribeKeyboardKeys(mapping.KeyboardKeys) ?? "Keys";
+                    }
+                    else
+                    {
+                        int mb = mapping.MouseButton;
+                        string[] mouseLabels = { "Mouse", "Left Click", "Right Click", "Middle Click",
+                                                 "Scroll Up", "Scroll Down", "Scroll Left", "Scroll Right" };
+                        desc = mb > 0 && mb < mouseLabels.Length ? mouseLabels[mb] : "Mouse";
+                    }
+                    if (desc == null) continue;
+                    int delIdx = i;
+                    AddRemapChip(ConsolidatedGamepadLabels[i], desc, ConsolidatedLegionButtons.Length + i,
+                        () => ResetGamepadButtonMapping(delIdx));
+                }
+
+                if (pendingRemapChips.Count == 0)
+                {
+                    pendingRemapChips.Add(new TextBlock
+                    {
+                        Text = "None", FontSize = 11,
+                        Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x55, 0x55, 0x55)),
+                        VerticalAlignment = VerticalAlignment.Center,
+                    });
+                }
+                double chipWidth = LegionAllRemappedTags.ActualWidth;
+                FillWrapRows(LegionAllRemappedTags, pendingRemapChips, chipWidth);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"RefreshLegionRemapSummary failed: {ex.Message}");
+            }
+        }
+
+        private void TryConvertToPickerFlyout(ComboBox combo, int columns, bool useGlyphs = true)
+        {
+            try { ConvertToPickerFlyout(combo, columns, useGlyphs); }
+            catch (Exception ex) { Logger.Warn($"ConvertToPickerFlyout failed: {ex.Message}"); }
+        }
+
+        // Combos we've already wired (the conversion has no reliable visual marker).
+        private readonly System.Collections.Generic.HashSet<ComboBox> pickerConverted =
+            new System.Collections.Generic.HashSet<ComboBox>();
+
+        private void ConvertToPickerFlyout(ComboBox combo, int columns, bool useGlyphs = true)
+        {
+            if (combo == null) return;
+            if (pickerConverted.Contains(combo)) return;
+            if (combo.Items.Count == 0) { Logger.Info($"PickerFlyout: {combo.Name} has 0 items"); return; }
+            var labels = new System.Collections.Generic.List<string>();
+            foreach (var item in combo.Items)
+            {
+                if (!(item is string s))
+                {
+                    Logger.Info($"PickerFlyout: {combo.Name} item is {item?.GetType().Name ?? "null"}, skipping");
+                    return;
+                }
+                labels.Add(s);
+            }
+            string pickerName = combo.Name.EndsWith("ComboBox")
+                ? combo.Name.Substring(0, combo.Name.Length - "ComboBox".Length) + "Picker"
+                : combo.Name + "Picker";
+            var face = FindName(pickerName) as Button;
+            if (face == null) { Logger.Info($"PickerFlyout: no XAML picker '{pickerName}', skipping"); return; }
+            pickerConverted.Add(combo);
+            Logger.Info($"PickerFlyout: wiring {combo.Name} -> {pickerName} ({labels.Count} items)");
+
+            // The combo stays as the invisible state holder: zero width so it takes no
+            // space, but its Visibility keeps its existing meaning — every piece of
+            // show/hide logic (type switches, improved-input UI) still writes it, and
+            // the picker button simply mirrors it.
+            combo.MinWidth = 0;
+            combo.Width = 0;
+            combo.MaxWidth = 0;
+            // Height too: in vertical hosts (keyboard panels) an invisible 32px-tall
+            // combo otherwise stacks above the picker and pushes it out of the row.
+            combo.MinHeight = 0;
+            combo.Height = 0;
+            combo.MaxHeight = 0;
+            combo.Opacity = 0;
+            combo.IsTabStop = false;
+            combo.IsHitTestVisible = false;
+
+            face.Visibility = combo.Visibility;
+            combo.RegisterPropertyChangedCallback(VisibilityProperty,
+                (dp, o) => face.Visibility = combo.Visibility);
+
+            void RefreshFace()
+            {
+                int i = combo.SelectedIndex;
+                var row = new StackPanel { Orientation = Orientation.Horizontal };
+                if (i >= 0 && i < labels.Count)
+                {
+                    if (useGlyphs && RemapGlyphMap.TryGetValue(labels[i], out var asset))
+                    {
+                        row.Children.Add(new Windows.UI.Xaml.Controls.Image
+                        {
+                            Width = 18, Height = 18,
+                            Margin = new Thickness(0, 0, 6, 0),
+                            VerticalAlignment = VerticalAlignment.Center,
+                            Source = CreateGlyphSource(asset, 36),
+                        });
+                    }
+                    row.Children.Add(new TextBlock
+                    {
+                        Text = labels[i], FontSize = 12,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        TextTrimming = TextTrimming.CharacterEllipsis,
+                    });
+                }
+                else
+                {
+                    row.Children.Add(new TextBlock { Text = "\u2014", FontSize = 12 });
+                }
+                row.Children.Add(new FontIcon
+                {
+                    Glyph = "\uE70D", FontSize = 9,
+                    Margin = new Thickness(8, 2, 0, 0),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x88, 0x88, 0x88)),
+                });
+                face.Content = row;
+            }
+            int lastFaceIndex = int.MinValue;
+            void RefreshFaceIfChanged()
+            {
+                if (combo.SelectedIndex == lastFaceIndex) return;
+                lastFaceIndex = combo.SelectedIndex;
+                RefreshFace();
+            }
+            combo.SelectionChanged += (s, e) => RefreshFaceIfChanged();
+            RefreshFaceIfChanged();
+
+            face.Click += (s, e) =>
+            {
+                try { ShowPickerFlyout(combo, labels, columns, face, useGlyphs); }
+                catch (Exception ex) { Logger.Warn($"PickerFlyout open failed: {ex.Message}"); }
+            };
+        }
+
+        private static readonly string[][] KeyboardLayoutRows =
+        {
+            new[] { "Esc", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12" },
+            new[] { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "Backspace" },
+            new[] { "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P" },
+            new[] { "A", "S", "D", "F", "G", "H", "J", "K", "L", "Enter" },
+            new[] { "Z", "X", "C", "V", "B", "N", "M", "Up" },
+            new[] { "LCtrl", "LWin", "LAlt", "Space", "RAlt", "RWin", "RCtrl", "Left", "Down", "Right" },
+            new[] { "Tab", "LShift", "RShift" },
+        };
+
+        private void ShowKeyboardPickerFlyout(ComboBox combo, System.Collections.Generic.List<string> labels, FrameworkElement anchor)
+        {
+            var flyout = new Flyout();
+            var root = new StackPanel();
+            var placed = new System.Collections.Generic.HashSet<string>();
+
+            Button MakeKey(string label, int idx)
+            {
+                var b = new Button
+                {
+                    Content = new TextBlock { Text = label, FontSize = 10, TextAlignment = TextAlignment.Center },
+                    MinWidth = label.Length > 3 ? 44 : 30,
+                    Padding = new Thickness(2, 5, 2, 5),
+                    Margin = new Thickness(1),
+                    HorizontalContentAlignment = HorizontalAlignment.Center,
+                    Background = new SolidColorBrush(idx == combo.SelectedIndex
+                        ? Windows.UI.Color.FromArgb(255, 0x2A, 0x4A, 0x66)
+                        : Windows.UI.Color.FromArgb(255, 0x2A, 0x2D, 0x32)),
+                };
+                b.Click += (s, e) => { PreserveLegionScroll(); combo.SelectedIndex = idx; flyout.Hide(); };
+                return b;
+            }
+
+            foreach (var rowKeys in KeyboardLayoutRows)
+            {
+                var row = new StackPanel { Orientation = Orientation.Horizontal };
+                foreach (var key in rowKeys)
+                {
+                    int idx = labels.IndexOf(key);
+                    if (idx < 0) continue;
+                    placed.Add(key);
+                    row.Children.Add(MakeKey(key, idx));
+                }
+                if (row.Children.Count > 0) root.Children.Add(row);
+            }
+
+            // anything not on the QWERTY map (e.g. the "+ Key" placeholder) goes on top
+            var extras = new StackPanel { Orientation = Orientation.Horizontal };
+            for (int i = 0; i < labels.Count; i++)
+            {
+                if (placed.Contains(labels[i])) continue;
+                extras.Children.Add(MakeKey(labels[i], i));
+            }
+            if (extras.Children.Count > 0) root.Children.Insert(0, extras);
+
+            flyout.Content = new ScrollViewer { Content = root, MaxHeight = 420,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto };
+            flyout.ShowAt(anchor);
+        }
+
+        private void ShowPickerFlyout(ComboBox combo, System.Collections.Generic.List<string> labels, int columns, FrameworkElement anchor, bool useGlyphs = true)
+        {
+            if (!useGlyphs && labels.Contains("Q") && labels.Contains("Space"))
+            {
+                ShowKeyboardPickerFlyout(combo, labels, anchor);
+                return;
+            }
+            var grid = new Grid();
+            for (int c = 0; c < columns; c++) grid.ColumnDefinitions.Add(new ColumnDefinition());
+            int rows = (labels.Count + columns - 1) / columns;
+            for (int r = 0; r < rows; r++) grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            var flyout = new Flyout();
+            for (int i = 0; i < labels.Count; i++)
+            {
+                var label = labels[i];
+                var tileContent = new Grid { Width = 62 };
+                tileContent.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                tileContent.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                if (useGlyphs && RemapGlyphMap.TryGetValue(label, out var asset))
+                {
+                    var img = new Windows.UI.Xaml.Controls.Image
+                    {
+                        Width = 24, Height = 24,
+                        Margin = new Thickness(0, 0, 0, 2),
+                        Stretch = Windows.UI.Xaml.Media.Stretch.Uniform,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        Source = CreateGlyphSource(asset, 48),
+                    };
+                    Grid.SetRow(img, 0);
+                    tileContent.Children.Add(img);
+                }
+                var txt = new TextBlock
+                {
+                    Text = label, FontSize = 10,
+                    TextAlignment = TextAlignment.Center,
+                    TextWrapping = TextWrapping.Wrap,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                };
+                Grid.SetRow(txt, 1);
+                tileContent.Children.Add(txt);
+                int idx = i;
+                var tile = new Button
+                {
+                    Content = tileContent,
+                    Padding = new Thickness(2, 6, 2, 6),
+                    Margin = new Thickness(2),
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    HorizontalContentAlignment = HorizontalAlignment.Center,
+                    Background = new SolidColorBrush(idx == combo.SelectedIndex
+                        ? Windows.UI.Color.FromArgb(255, 0x2A, 0x4A, 0x66)
+                        : Windows.UI.Color.FromArgb(255, 0x2A, 0x2D, 0x32)),
+                };
+                tile.Click += (ts, te) =>
+                {
+                    PreserveLegionScroll();
+                    combo.SelectedIndex = idx;   // drives all existing handlers + the combo face
+                    flyout.Hide();
+                };
+                Grid.SetColumn(tile, i % columns);
+                Grid.SetRow(tile, i / columns);
+                grid.Children.Add(tile);
+            }
+            flyout.Content = new ScrollViewer { Content = grid, MaxHeight = 420 };
+            flyout.ShowAt(anchor);
+        }
+
+        private void UpdateDeviceArtForVariant()
+        {
+            try
+            {
+                string vidPid = controllerVidPid?.Value ?? "";
+                if (string.IsNullOrEmpty(vidPid)) return;
+
+                var parts = vidPid.Split(':');
+                if (parts.Length != 2) return;
+                int vid = Convert.ToInt32(parts[0], 16);
+                int pid = Convert.ToInt32(parts[1], 16);
+
+                int variant;
+                if (vid == 0x1A86 && (pid == 0xE310 || pid == 0xE311)) variant = 1;          // Go S
+                else if (vid == 0x17EF && pid >= 0x61EB && pid <= 0x61EE) variant = 2;       // Go 2
+                else if (vid == 0x17EF && pid >= 0x6182 && pid <= 0x6185) variant = 0;       // Go 1
+                else return;   // unknown: keep current art
+
+                if (variant == deviceArtVariant) return;
+                deviceArtVariant = variant;
+                lastDeviceGlyphKey = null;   // force the middle glyph to re-render
+
+                string prefix = variant == 1 ? "LegionGoS" : variant == 0 ? "LegionGo1" : "LegionGo2";
+                if (LeftControllerWatermarkImage != null)
+                    LeftControllerWatermarkImage.Source = new Windows.UI.Xaml.Media.Imaging.BitmapImage(
+                        new Uri($"ms-appx:///Assets/{prefix}ControllerLeft.png"));
+                if (RightControllerWatermarkImage != null)
+                    RightControllerWatermarkImage.Source = new Windows.UI.Xaml.Media.Imaging.BitmapImage(
+                        new Uri($"ms-appx:///Assets/{prefix}ControllerRight.png"));
+
+                if (DeviceLayoutFrontImage != null)
+                    DeviceLayoutFrontImage.Source = new Windows.UI.Xaml.Media.Imaging.BitmapImage(
+                        new Uri($"ms-appx:///Assets/DeviceViews/{prefix}_Front.png"));
+                if (DeviceLayoutBackImage != null)
+                    DeviceLayoutBackImage.Source = new Windows.UI.Xaml.Media.Imaging.BitmapImage(
+                        new Uri($"ms-appx:///Assets/DeviceViews/{prefix}_Back.png"));
+                RefreshLegionDeviceGlyph();
+                Logger.Info($"Device art variant set to {prefix} from VID:PID {vidPid}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"UpdateDeviceArtForVariant failed: {ex.Message}");
+            }
         }
 
         private void UpdateLegionControllerInfoSectionVisibility()
@@ -4137,5 +4901,16 @@ namespace XboxGamingBar
 
             Logger.Info("=== OnPipeConnectedAsync END ===");
         }
+    }
+
+    /// <summary>
+    /// Item model for the remap dropdown glyph tiles. Public so the runtime-loaded
+    /// DataTemplate's {Binding} reflection can reach the properties.
+    /// </summary>
+    public sealed class RemapOption
+    {
+        public string Label { get; set; }
+        public Windows.UI.Xaml.Media.ImageSource Icon { get; set; }
+        public override string ToString() => Label;   // keyboard/a11y fallback text
     }
 }

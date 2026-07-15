@@ -848,11 +848,55 @@ namespace XboxGamingBar
             uint mask = 0;
             if (!string.IsNullOrEmpty(tile.ControllerHotkey)) uint.TryParse(tile.ControllerHotkey, out mask);
             bool bound = mask != 0;
-            string label = bound ? Shared.Input.ControllerComboButtons.MaskToString(mask) : "+ Combo";
+
+            // Bound combos render as glyph sequences (View + Y1 -> [view][+][y1]);
+            // unbound tiles keep the "+ Combo" text.
+            object btnContent;
+            if (bound)
+            {
+                var row = new StackPanel { Orientation = Orientation.Horizontal };
+                bool first = true;
+                foreach (var b in Shared.Input.ControllerComboButtons.All)
+                {
+                    if ((mask & b.Bit) != b.Bit) continue;
+                    if (!first)
+                    {
+                        row.Children.Add(new TextBlock
+                        {
+                            Text = "+", FontSize = 10,
+                            Margin = new Thickness(2, 0, 2, 0),
+                            VerticalAlignment = VerticalAlignment.Center,
+                        });
+                    }
+                    first = false;
+                    if (RemapGlyphMap.TryGetValue(b.Label, out var comboGlyph))
+                    {
+                        row.Children.Add(new Windows.UI.Xaml.Controls.Image
+                        {
+                            Width = 16, Height = 16,
+                            VerticalAlignment = VerticalAlignment.Center,
+                            Source = CreateGlyphSource(comboGlyph, 32),
+                        });
+                    }
+                    else
+                    {
+                        row.Children.Add(new TextBlock
+                        {
+                            Text = b.Label, FontSize = 11,
+                            VerticalAlignment = VerticalAlignment.Center,
+                        });
+                    }
+                }
+                btnContent = row;
+            }
+            else
+            {
+                btnContent = new TextBlock { Text = "+ Combo", FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis };
+            }
 
             var btn = new Button
             {
-                Content = new TextBlock { Text = label, FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis },
+                Content = btnContent,
                 Tag = tile.Id,
                 Margin = new Thickness(0, 2, 0, 0),
                 Padding = new Thickness(4, 2, 4, 2),
@@ -905,11 +949,25 @@ namespace XboxGamingBar
                 for (int i = 0; i < buttons.Length; i++)
                 {
                     var b = buttons[i];
+                    var cbContent = new StackPanel { Orientation = Orientation.Horizontal };
+                    if (RemapGlyphMap.TryGetValue(b.Label, out var comboGlyph))
+                    {
+                        cbContent.Children.Add(new Windows.UI.Xaml.Controls.Image
+                        {
+                            Width = 18, Height = 18,
+                            Margin = new Thickness(0, 0, 6, 0),
+                            VerticalAlignment = VerticalAlignment.Center,
+                            Source = CreateGlyphSource(comboGlyph, 36),
+                        });
+                    }
+                    cbContent.Children.Add(new TextBlock
+                    {
+                        Text = b.Label, FontSize = 12, VerticalAlignment = VerticalAlignment.Center,
+                    });
                     var cb = new CheckBox
                     {
-                        Content = b.Label,
+                        Content = cbContent,
                         IsChecked = (currentMask & b.Bit) == b.Bit,
-                        FontSize = 12,
                         MinWidth = 0,
                         Margin = new Thickness(0, -2, 0, -2)
                     };

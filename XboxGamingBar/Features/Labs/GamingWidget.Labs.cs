@@ -608,6 +608,9 @@ namespace XboxGamingBar
 
         private async void ApplyLegionButtonConfig(bool isLegionL)
         {
+            // Validation/status feedback lands under the row it concerns, not the card bottom.
+            var rowStatusText = FindName(isLegionL ? "LegionLRemapStatusText" : "LegionRRemapStatusText") as TextBlock;
+
             if (!App.IsConnected) return;
 
             try
