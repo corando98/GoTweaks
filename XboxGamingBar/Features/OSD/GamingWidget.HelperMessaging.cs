@@ -1,4 +1,4 @@
-using Microsoft.Gaming.XboxGameBar;
+﻿using Microsoft.Gaming.XboxGameBar;
 using Microsoft.Gaming.XboxGameBar.Input;
 using Microsoft.UI.Xaml.Controls;
 using NLog;
@@ -43,25 +43,6 @@ namespace XboxGamingBar
 {
     public sealed partial class GamingWidget
     {
-
-        private void ApplyPowerPlan(Guid planGuid)
-        {
-            if (planGuid == Guid.Empty) return;
-
-            // Send message to helper to apply the power plan
-            // Format: "PowerPlan:GUID"
-            try
-            {
-                var message = new Windows.Foundation.Collections.ValueSet();
-                message.Add("PowerPlan", planGuid.ToString());
-                _ = SendHelperMessageAsync(message);
-                Logger.Info($"Sent power plan change request: {planGuid}");
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Error applying power plan: {ex.Message}");
-            }
-        }
 
         private async Task SendHelperMessageAsync(Windows.Foundation.Collections.ValueSet message)
         {
@@ -150,91 +131,6 @@ namespace XboxGamingBar
             catch (Exception ex)
             {
                 Logger.Error($"Error sending custom shortcut '{shortcut}': {ex.Message}");
-            }
-        }
-
-        private void SavePowerPlanSettings()
-        {
-            try
-            {
-                var settings = ApplicationData.Current.LocalSettings;
-                settings.Values["PowerPlan_AC"] = acPowerPlanGuid.ToString();
-                settings.Values["PowerPlan_DC"] = dcPowerPlanGuid.ToString();
-                settings.Values["PowerPlan_AutoSwitch"] = powerPlanAutoSwitch;
-                Logger.Info("Power plan settings saved");
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Error saving power plan settings: {ex.Message}");
-            }
-        }
-
-        private void LoadPowerPlanSettings()
-        {
-            try
-            {
-                var settings = ApplicationData.Current.LocalSettings;
-
-                if (settings.Values.TryGetValue("PowerPlan_AC", out object acVal) && acVal is string acStr)
-                {
-                    if (Guid.TryParse(acStr, out Guid acGuid))
-                    {
-                        acPowerPlanGuid = acGuid;
-                    }
-                }
-
-                if (settings.Values.TryGetValue("PowerPlan_DC", out object dcVal) && dcVal is string dcStr)
-                {
-                    if (Guid.TryParse(dcStr, out Guid dcGuid))
-                    {
-                        dcPowerPlanGuid = dcGuid;
-                    }
-                }
-
-                if (settings.Values.TryGetValue("PowerPlan_AutoSwitch", out object autoVal))
-                {
-                    // Handle different possible types stored in settings
-                    if (autoVal is bool autoSwitch)
-                    {
-                        powerPlanAutoSwitch = autoSwitch;
-                    }
-                    else if (autoVal is string autoStr)
-                    {
-                        powerPlanAutoSwitch = autoStr.Equals("True", StringComparison.OrdinalIgnoreCase);
-                    }
-                    else
-                    {
-                        Logger.Warn($"PowerPlan_AutoSwitch has unexpected type: {autoVal?.GetType().Name ?? "null"}");
-                    }
-                }
-                else
-                {
-                    Logger.Info("PowerPlan_AutoSwitch not found in settings, using default (OFF)");
-                }
-
-                // Note: If GUIDs are empty, LoadPowerPlans() will use the current active plan as default
-
-                Logger.Info($"Power plan settings loaded: AC={acPowerPlanGuid}, DC={dcPowerPlanGuid}, AutoSwitch={powerPlanAutoSwitch}");
-
-                // Immediately sync the toggle UI to the loaded value
-                // Use isLoadingPowerPlans flag to prevent Toggled event from triggering a save
-                isLoadingPowerPlans = true;
-                try
-                {
-                    if (PowerPlanAutoSwitchToggle != null)
-                    {
-                        PowerPlanAutoSwitchToggle.IsOn = powerPlanAutoSwitch;
-                        Logger.Info($"PowerPlanAutoSwitchToggle UI synced to {powerPlanAutoSwitch}");
-                    }
-                }
-                finally
-                {
-                    isLoadingPowerPlans = false;
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Error loading power plan settings: {ex.Message}");
             }
         }
 

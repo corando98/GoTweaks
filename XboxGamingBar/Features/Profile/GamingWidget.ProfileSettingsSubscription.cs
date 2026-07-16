@@ -1,4 +1,4 @@
-using Microsoft.Gaming.XboxGameBar;
+﻿using Microsoft.Gaming.XboxGameBar;
 using Microsoft.Gaming.XboxGameBar.Input;
 using Microsoft.UI.Xaml.Controls;
 using NLog;
@@ -52,8 +52,6 @@ namespace XboxGamingBar
             TDPSlider.ValueChanged += SettingChangedDebounced;
             CPUBoostToggle.Toggled += SettingChanged;
             CPUEPPSlider.ValueChanged += SettingChangedDebounced;
-            MinCPUStateComboBox.SelectionChanged += SettingChanged;
-            MaxCPUStateComboBox.SelectionChanged += SettingChanged;
             FPSLimitToggle.Toggled += FPSLimitToggle_Toggled;
             FPSLimitSlider.ValueChanged += FPSLimitSlider_ValueChanged;
 
@@ -163,8 +161,6 @@ namespace XboxGamingBar
             if (LegionGamepadResetAllButton != null)
                 LegionGamepadResetAllButton.Click += LegionGamepadResetAll_Click;
 
-            if (ControllerEmulationImprovedInputToggle != null)
-                ControllerEmulationImprovedInputToggle.Toggled += ControllerEmulationImprovedInputToggle_Toggled;
 
             foreach (string buttonName in LegionRemapButtonNames)
             {

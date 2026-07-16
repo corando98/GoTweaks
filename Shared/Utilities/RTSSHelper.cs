@@ -6,23 +6,6 @@ namespace Shared.Utilities
 {
     public static partial class RTSSHelper
     {
-        public static Process GetProcess()
-        {
-            var rtssProcessses = Process.GetProcessesByName("RTSS");
-            if (rtssProcessses.Length == 0)
-            {
-                return null;
-            }
-
-            // Dispose all processes except the first one we return
-            for (int i = 1; i < rtssProcessses.Length; i++)
-            {
-                rtssProcessses[i].Dispose();
-            }
-
-            return rtssProcessses[0];
-        }
-
         public static bool IsRunning()
         {
             var rtssProcessses = Process.GetProcessesByName("RTSS");

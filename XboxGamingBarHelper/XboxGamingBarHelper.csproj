@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -496,8 +496,6 @@
     <Compile Include="Performance\CurrentTDPProperty.cs" />
     <Compile Include="Performance\UpdateVisitor.cs" />
     <Compile Include="Power\CPUBoostProperty.cs" />
-    <Compile Include="Power\MaxCPUStateProperty.cs" />
-    <Compile Include="Power\MinCPUStateProperty.cs" />
     <!-- GPU Clock - DISABLED: Not supported by RyzenAdj on this hardware (returns error -1) -->
     <!--<Compile Include="Power\LimitGPUClockProperty.cs" />
     <Compile Include="Power\GPUClockMinProperty.cs" />
@@ -505,6 +503,9 @@
     <Compile Include="Power\CPUEPPProperty.cs" />
     <Compile Include="Power\OSPowerModeProperty.cs" />
     <Compile Include="Power\PowerManager.cs" />
+    <Compile Include="Power\PowerButtonActionProperty.cs" />
+    <Compile Include="Power\DisplayTimeoutProperty.cs" />
+    <Compile Include="Power\HibernateTimeoutProperty.cs" />
     <Compile Include="Profile\DeleteGameProfileProperty.cs" />
     <Compile Include="Profile\GameProfileProperty.cs" />
     <Compile Include="Profile\PerGameProfileProperty.cs" />
@@ -524,13 +525,13 @@
     <Compile Include="Startup\Program.TrayAndSidebar.cs" />
     <Compile Include="Startup\Program.ProfileHandlers.cs" />
     <Compile Include="Startup\Program.PipeHandlers.cs" />
+    <Compile Include="Startup\Program.HibernateTimeout.cs" />
     <Compile Include="Startup\Program.PropertyHandlers.cs" />
     <Compile Include="Startup\Program.LegionControllerHandlers.cs" />
     <Compile Include="Startup\Program.PowerSourceHandler.cs" />
     <Compile Include="Startup\Program.HotkeyHandlers.cs" />
     <Compile Include="Startup\Program.Labs.cs" />
     <Compile Include="Startup\Program.ScreenSaver.cs" />
-    <Compile Include="Startup\Program.AutoHibernate.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Properties\Settings.Designer.cs">
       <AutoGen>True</AutoGen>
@@ -560,8 +561,6 @@
     <Compile Include="RTSS\RTSSFPSLimiter.cs" />
     <Compile Include="RTSS\RTSSManager.cs" />
     <Compile Include="Settings\AutoStartRTSSProperty.cs" />
-    <Compile Include="Settings\AutoHibernateEnabledProperty.cs" />
-    <Compile Include="Settings\AutoHibernateIdleMinutesProperty.cs" />
     <Compile Include="Settings\UseManufacturerWMIProperty.cs" />
     <Compile Include="Settings\TdpMethodProperty.cs" />
     <Compile Include="Settings\EmulationBackendProperty.cs" />
@@ -628,10 +627,6 @@
     <Compile Include="Systems\TouchscreenEnabledProperty.cs" />
     <Compile Include="Systems\AdaptiveBrightnessManager.cs" />
     <Compile Include="Systems\BrightnessManager.cs" />
-    <Compile Include="Systems\CPUCoreConfigProperty.cs" />
-    <Compile Include="Systems\CPUCoreActiveConfigProperty.cs" />
-    <Compile Include="Systems\CoreParkingPercentProperty.cs" />
-    <Compile Include="Systems\ForceParkModeProperty.cs" />
     <Compile Include="Systems\RefreshRateProperty.cs" />
     <Compile Include="Systems\RefreshRatesProperty.cs" />
     <Compile Include="Systems\ResolutionProperty.cs" />
@@ -643,6 +638,7 @@
     <Compile Include="Windows\ProcessWindow.cs" />
     <Compile Include="Windows\SetupApi.cs" />
     <Compile Include="Windows\User32.cs" />
+    <Compile Include="Systems\InternalPanelActiveProperty.cs" />
     <Compile Include="Systems\SystemManager.cs" />
     <Compile Include="Devices\DeviceConfig.cs" />
     <Compile Include="Devices\DeviceDetector.cs" />
@@ -677,9 +673,6 @@
     <Compile Include="ControllerEmulation\ControllerEmulationManager.Setters.cs" />
     <Compile Include="ControllerEmulation\ControllerEmulationStartupLock.cs" />
     <Compile Include="ControllerEmulation\ControllerEmulationManager.Normalize.cs" />
-    <Compile Include="ControllerEmulation\ControllerEmulationManager.GyroMouse.cs" />
-    <Compile Include="ControllerEmulation\ControllerEmulationManager.GyroStick.cs" />
-    <Compile Include="ControllerEmulation\ControllerEmulationManager.GyroActivation.cs" />
     <Compile Include="ControllerEmulation\ControllerEmulationManager.GyroSource.cs" />
     <Compile Include="ControllerEmulation\ControllerEmulationProperties.cs" />
     <Compile Include="ControllerEmulation\ControllerSuppressionManager.cs" />

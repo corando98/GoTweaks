@@ -1,4 +1,4 @@
-using Shared.Enums;
+﻿using Shared.Enums;
 
 namespace XboxGamingBar.Data
 {
@@ -40,34 +40,6 @@ namespace XboxGamingBar.Data
     internal class TDPLimitsProperty : WidgetProperty<string>
     {
         public TDPLimitsProperty(string inValue) : base(inValue, null, Function.TDPLimits)
-        {
-        }
-    }
-
-    internal class CPUCoreConfigProperty : WidgetProperty<string>
-    {
-        public CPUCoreConfigProperty(string inValue) : base(inValue, null, Function.CPUCoreConfig)
-        {
-        }
-    }
-
-    internal class CPUCoreActiveConfigProperty : WidgetProperty<string>
-    {
-        public CPUCoreActiveConfigProperty(string inValue) : base(inValue, null, Function.CPUCoreActiveConfig)
-        {
-        }
-    }
-
-    internal class CoreParkingPercentProperty : WidgetProperty<int>
-    {
-        public CoreParkingPercentProperty(int inValue) : base(inValue, null, Function.CoreParkingPercent)
-        {
-        }
-    }
-
-    internal class ForceParkModeProperty : WidgetProperty<bool>
-    {
-        public ForceParkModeProperty(bool inValue) : base(inValue, null, Function.ForceParkMode)
         {
         }
     }

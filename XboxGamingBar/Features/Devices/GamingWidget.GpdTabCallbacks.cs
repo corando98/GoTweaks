@@ -157,13 +157,11 @@ namespace XboxGamingBar
             UpdateControllerEmulationControlState();
             UpdateControllerEmulationStatusText();
             Logger.Info($"Controller emulation availability set to: {available}");
-            UpdateControllerEmulationMouseSettingsVisibility();
             RefreshLegionEnhancedRemapUi();
             UpdateSystemControllerEmulationNavigation();
 
             if (available)
             {
-                RequestControllerEmulationDriverStatus();
             }
 
             // Quick tab tile visibility is gated on availability — refresh the grid so
@@ -188,55 +186,16 @@ namespace XboxGamingBar
 
         private void UpdateControllerEmulationControlState()
         {
+            // The legacy ControllerEmulationContent body (mode combo, mouse/DS4/rumble
+            // settings, hide-stock-controller toggle, etc.) is permanently collapsed now
+            // that VIIPER is the only emulation backend - those controls were removed.
+            // What's left here is the "Gyro -> Stick" mirror bank (GyroActivationContent /
+            // JoystickOutputContent), which stays invisible and is driven programmatically
+            // by WireViiperStickGyroMirror(); it just needs to track the card's enabled
+            // state so mirrored values stay consistent.
             bool enabled = controllerEmulationSupported &&
                            ControllerEmulationEnabledToggle != null &&
                            ControllerEmulationEnabledToggle.IsOn;
-
-            if (ControllerEmulationHideStockControllerToggle != null)
-            {
-                ControllerEmulationHideStockControllerToggle.IsEnabled = enabled;
-            }
-
-            if (ControllerEmulationImprovedInputToggle != null)
-            {
-                ControllerEmulationImprovedInputToggle.IsEnabled = enabled;
-            }
-
-            if (ControllerEmulationHideTargetComboBox != null)
-            {
-                ControllerEmulationHideTargetComboBox.IsEnabled = enabled;
-            }
-
-            if (ControllerEmulationGyroSourceComboBox != null)
-            {
-                ControllerEmulationGyroSourceComboBox.IsEnabled = enabled;
-            }
-
-            if (CalibrateGyroGrid != null)
-            {
-                // Always visible when CE is available — JSL calibration applies
-                // regardless of gyro source (handheld or controller). Previously
-                // gated on isControllerSource because the original button only
-                // ran the Legion firmware reset; now it also runs JSL software
-                // calibration which works on any gyro feed.
-                CalibrateGyroGrid.Visibility = Windows.UI.Xaml.Visibility.Visible;
-                if (CalibrateGyroButton != null)
-                {
-                    CalibrateGyroButton.IsEnabled = enabled && App.IsConnected;
-                }
-            }
-
-            if (ControllerEmulationModeComboBox != null)
-            {
-                ControllerEmulationModeComboBox.IsEnabled = enabled;
-            }
-
-            bool isVirtualGamepadMode = ControllerEmulationModeComboBox != null &&
-                                        ControllerEmulationModeComboBox.SelectedIndex > 0;
-            if (ControllerEmulationRumbleProfileComboBox != null)
-            {
-                ControllerEmulationRumbleProfileComboBox.IsEnabled = enabled && isVirtualGamepadMode;
-            }
 
             bool isAlwaysOnActivation = ControllerEmulationGyroActivationModeComboBox == null ||
                                         ControllerEmulationGyroActivationModeComboBox.SelectedIndex <= 0;
@@ -250,77 +209,18 @@ namespace XboxGamingBar
                 ControllerEmulationGyroActivationButtonComboBox.IsEnabled = enabled && !isAlwaysOnActivation;
             }
 
-            bool isMouseMode = ControllerEmulationModeComboBox != null &&
-                               ControllerEmulationModeComboBox.SelectedIndex == 0;
-            bool isDs4MotionMode = ControllerEmulationModeComboBox != null &&
-                                   ControllerEmulationModeComboBox.SelectedIndex == 2;
-            bool isDs4Mode = ControllerEmulationModeComboBox != null &&
-                             (ControllerEmulationModeComboBox.SelectedIndex == 2 || ControllerEmulationModeComboBox.SelectedIndex == 3);
-            bool isStickMode = ControllerEmulationModeComboBox != null &&
-                               (ControllerEmulationModeComboBox.SelectedIndex == 1 || ControllerEmulationModeComboBox.SelectedIndex == 3);
-
-            bool mouseControlsEnabled = enabled && isMouseMode;
-            if (ControllerEmulationMouseSensitivitySlider != null)
-                ControllerEmulationMouseSensitivitySlider.IsEnabled = mouseControlsEnabled;
-            if (ControllerEmulationMouseThresholdSlider != null)
-                ControllerEmulationMouseThresholdSlider.IsEnabled = mouseControlsEnabled;
-            if (ControllerEmulationMouseAxisComboBox != null)
-                ControllerEmulationMouseAxisComboBox.IsEnabled = mouseControlsEnabled;
-            if (ControllerEmulationMouseInvertXToggle != null)
-                ControllerEmulationMouseInvertXToggle.IsEnabled = mouseControlsEnabled;
-            if (ControllerEmulationMouseInvertYToggle != null)
-                ControllerEmulationMouseInvertYToggle.IsEnabled = mouseControlsEnabled;
-            if (ControllerEmulationMouseGainXSlider != null)
-                ControllerEmulationMouseGainXSlider.IsEnabled = mouseControlsEnabled;
-            if (ControllerEmulationMouseGainYSlider != null)
-                ControllerEmulationMouseGainYSlider.IsEnabled = mouseControlsEnabled;
-
-            // Features group - enable/disable controls based on mode
-            if (ControllerEmulationPs4TouchpadToggle != null)
-                ControllerEmulationPs4TouchpadToggle.IsEnabled = enabled && isDs4Mode;
-            if (ControllerEmulationLedForwardingToggle != null)
-                ControllerEmulationLedForwardingToggle.IsEnabled = enabled && isDs4Mode;
-            if (ControllerEmulationRumbleProfileComboBox != null)
-                ControllerEmulationRumbleProfileComboBox.IsEnabled = enabled && isVirtualGamepadMode;
-            if (ControllerEmulationVirtualAbxyLayoutComboBox != null)
-                ControllerEmulationVirtualAbxyLayoutComboBox.IsEnabled = enabled && isVirtualGamepadMode;
-            if (ControllerEmulationStickOnlyJoystickToggle != null)
-                ControllerEmulationStickOnlyJoystickToggle.IsEnabled = enabled && isStickMode;
-
-            // DS4 Orientation - in Gyro Activation group, only for DS4 modes
-            if (ControllerEmulationDs4OrientationComboBox != null)
-                ControllerEmulationDs4OrientationComboBox.IsEnabled = enabled && isDs4Mode;
-            if (ControllerEmulationDs4OrientationRow != null)
-                ControllerEmulationDs4OrientationRow.Visibility = isDs4Mode ? Visibility.Visible : Visibility.Collapsed;
-
-            // Touchpad/LED rows - show only for DS4 modes
-            if (ControllerEmulationPs4TouchpadRow != null)
-                ControllerEmulationPs4TouchpadRow.Visibility = isDs4Mode ? Visibility.Visible : Visibility.Collapsed;
-            if (ControllerEmulationLedForwardingRow != null)
-                ControllerEmulationLedForwardingRow.Visibility = isDs4Mode ? Visibility.Visible : Visibility.Collapsed;
-
-            // Joystick Output group - visible only for stick modes
-            if (JoystickOutputGroupHeader != null)
-                JoystickOutputGroupHeader.Visibility = isStickMode ? Visibility.Visible : Visibility.Collapsed;
-            if (!isStickMode && JoystickOutputContent != null)
-                JoystickOutputContent.Visibility = Visibility.Collapsed;
-
-            // Enable/disable all stick v2 controls
-            bool stickControlsEnabled = enabled && isStickMode;
             if (ControllerEmulationStickSelectComboBox != null)
-                ControllerEmulationStickSelectComboBox.IsEnabled = stickControlsEnabled;
+                ControllerEmulationStickSelectComboBox.IsEnabled = enabled;
             if (StickConversionComboBox != null)
-                StickConversionComboBox.IsEnabled = stickControlsEnabled;
+                StickConversionComboBox.IsEnabled = enabled;
             if (StickOrientationV2ComboBox != null)
-                StickOrientationV2ComboBox.IsEnabled = stickControlsEnabled;
+                StickOrientationV2ComboBox.IsEnabled = enabled;
             if (ControllerEmulationStickInvertXToggle != null)
-                ControllerEmulationStickInvertXToggle.IsEnabled = stickControlsEnabled;
+                ControllerEmulationStickInvertXToggle.IsEnabled = enabled;
             if (ControllerEmulationStickInvertYToggle != null)
-                ControllerEmulationStickInvertYToggle.IsEnabled = stickControlsEnabled;
+                ControllerEmulationStickInvertYToggle.IsEnabled = enabled;
             if (StickSensitivityV2Slider != null)
-                StickSensitivityV2Slider.IsEnabled = stickControlsEnabled;
-            // Min/Max gyro speed, Min/Max output, Power curve, Deadzone, Precision speed,
-            // Output mix sliders all removed in #79 round 5.
+                StickSensitivityV2Slider.IsEnabled = enabled;
 
             // Keep Legion remap advanced controls aligned with current emulation toggles
             // even when startup/property sync order suppresses Toggle events.
@@ -365,7 +265,6 @@ namespace XboxGamingBar
         {
             UpdateControllerEmulationControlState();
             UpdateControllerEmulationStatusText();
-            UpdateControllerEmulationMouseSettingsVisibility();
             UpdateSystemControllerEmulationNavigation();
             // Keep the Quick tab Controller tile in sync with the System-tab toggle
             // and any helper-driven changes (e.g. ControllerEmulationAvailable arrives
@@ -373,78 +272,9 @@ namespace XboxGamingBar
             UpdateQuickSettingsTileStates();
         }
 
-        private void ControllerEmulationImprovedInputToggle_Toggled(object sender, RoutedEventArgs e)
-        {
-            RefreshLegionEnhancedRemapUi();
-        }
-
-        private async void ControllerEmulationImprovedInput_PropertyChanged(object sender, PropertyChangedEventArgs e)
-        {
-            // async void: any exception here escapes to the UWP runtime as 0xc000027b
-            // and terminates the process. Wrap both the await and the lambda body.
-            try
-            {
-                if (Dispatcher != null)
-                {
-                    await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
-                    {
-                        try { RefreshLegionEnhancedRemapUi(); }
-                        catch (Exception ex) { Logger.Warn($"RefreshLegionEnhancedRemapUi threw: {ex.GetType().Name}: {ex.Message}"); }
-                    });
-                }
-                else
-                {
-                    RefreshLegionEnhancedRemapUi();
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"ControllerEmulationImprovedInput_PropertyChanged outer: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
-            }
-        }
-
-        private void UpdateControllerEmulationMouseSettingsVisibility()
-        {
-            if (ControllerEmulationMouseSettingsPanel == null)
-            {
-                return;
-            }
-
-            bool available = ControllerEmulationCard != null &&
-                             ControllerEmulationCard.Visibility == Visibility.Visible &&
-                             ControllerEmulationEnabledToggle != null &&
-                             ControllerEmulationEnabledToggle.IsOn &&
-                             ControllerEmulationModeComboBox != null &&
-                             ControllerEmulationModeComboBox.IsEnabled;
-
-            bool isMouseMode = ControllerEmulationModeComboBox != null &&
-                               ControllerEmulationModeComboBox.SelectedIndex == 0;
-
-            if (ControllerEmulationMouseSettingsPanel != null)
-            {
-                ControllerEmulationMouseSettingsPanel.Visibility = (available && isMouseMode)
-                    ? Visibility.Visible
-                    : Visibility.Collapsed;
-            }
-
-        }
-
-        private void ControllerEmulationModeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            UpdateControllerEmulationControlState();
-            UpdateControllerEmulationMouseSettingsVisibility();
-            UpdateSystemControllerEmulationNavigation();
-        }
-
-        private void ControllerEmulationGyroSourceComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            UpdateControllerEmulationControlState();
-        }
-
         private void ControllerEmulationGyroActivationModeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             UpdateControllerEmulationControlState();
-            UpdateControllerEmulationMouseSettingsVisibility();
             UpdateSystemControllerEmulationNavigation();
         }
 

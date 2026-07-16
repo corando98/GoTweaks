@@ -52,11 +52,26 @@ namespace XboxGamingBarHelper.Services
         /// when everything is healthy. Never throws.
         /// </summary>
         public static string EvaluateJson(bool isLegionDevice, bool supportsControllerFeatures, bool pawnIOInstalled,
-                                          bool usbipNeeded, bool usbipInstalled)
+                                          bool usbipNeeded, bool usbipInstalled, string allowlistedLauncher = null)
         {
             try
             {
                 var warnings = new List<Warning>();
+
+                // A game launcher on the HidHide allowlist sees every "hidden" device, so
+                // the stock controller stays visible (and double-inputs) inside it no
+                // matter what GoTweaks hides. Common leftover from DS4Windows-style
+                // setups that add Steam to the allowlist. Field report: Steam listing
+                // "LeGo2 Default" alongside the emulated pad while a browser gamepad
+                // tester (not allowlisted) correctly saw only the emulated one.
+                if (!string.IsNullOrEmpty(allowlistedLauncher))
+                {
+                    warnings.Add(new Warning
+                    {
+                        Id = "hidhide-allowlist",
+                        Message = $"{allowlistedLauncher} is on the HidHide allowlist, so it can still see the stock controller while emulation hides it. Remove it from the allowlist in the HidHide Configuration Client to avoid double input in that app.",
+                    });
+                }
 
                 if (isLegionDevice && supportsControllerFeatures)
                 {

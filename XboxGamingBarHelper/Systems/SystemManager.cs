@@ -187,6 +187,12 @@ namespace XboxGamingBarHelper.Systems
             get { return panelBrightnessSupported; }
         }
 
+        private readonly InternalPanelActiveProperty internalPanelActive;
+        public InternalPanelActiveProperty InternalPanelActive
+        {
+            get { return internalPanelActive; }
+        }
+
         private const string TouchscreenEnabledKey = "TouchscreenEnabled";
         private readonly TouchscreenEnabledProperty touchscreenEnabled;
         public TouchscreenEnabledProperty TouchscreenEnabled
@@ -203,43 +209,6 @@ namespace XboxGamingBarHelper.Systems
         private readonly AdaptiveBrightnessManager adaptiveBrightnessManager = new AdaptiveBrightnessManager();
         private const string AdaptiveBrightnessRequestedKey = "AdaptiveBrightnessRequested";
         private bool adaptiveBrightnessRequested;
-
-        // CPU Core Configuration
-        public int TotalPCores { get; private set; }
-        public int TotalECores { get; private set; }
-        public bool IsHybridCPU { get; private set; }
-
-        private readonly CPUCoreConfigProperty cpuCoreConfig;
-        public CPUCoreConfigProperty CPUCoreConfig
-        {
-            get { return cpuCoreConfig; }
-        }
-
-        private readonly CPUCoreActiveConfigProperty cpuCoreActiveConfig;
-        public CPUCoreActiveConfigProperty CPUCoreActiveConfig
-        {
-            get { return cpuCoreActiveConfig; }
-        }
-
-        private readonly CoreParkingPercentProperty coreParkingPercent;
-        public CoreParkingPercentProperty CoreParkingPercent
-        {
-            get { return coreParkingPercent; }
-        }
-
-        private readonly ForceParkModeProperty forceParkMode;
-        public ForceParkModeProperty ForceParkMode
-        {
-            get { return forceParkMode; }
-        }
-
-        private bool isForceParkModeEnabled = false;
-
-        private int lastCoreParkingPercent = 100;
-
-        // Store CPU set IDs for core parking
-        private List<uint> pCoreCpuSetIds = new List<uint>();
-        private List<uint> eCoreCpuSetIds = new List<uint>();
 
         private readonly TrackedGameProperty trackedGame;
         public TrackedGameProperty TrackedGame
@@ -293,6 +262,7 @@ namespace XboxGamingBarHelper.Systems
             adaptiveBrightnessMode = new AdaptiveBrightnessModeProperty(this);
             panelBrightness = new PanelBrightnessProperty(this);
             panelBrightnessSupported = new PanelBrightnessSupportedProperty(this);
+            internalPanelActive = new InternalPanelActiveProperty(this);
 
             // Touch screen: persist the user's last choice across helper restarts. Default true
             // (touch active) if never set. No need to re-apply on startup - Device Manager's
@@ -318,15 +288,6 @@ namespace XboxGamingBarHelper.Systems
                     ApplyAdaptiveBrightnessBackend(true, adaptiveBrightnessMode.Mode);
                 }
             }
-
-            Logger.Info("Detecting CPU core configuration.");
-            DetectCPUCoreConfiguration();
-            // Initialize cpuCoreConfig after detection
-            string configString = $"{TotalPCores},{TotalECores},{IsHybridCPU.ToString().ToLower()}";
-            cpuCoreConfig = new CPUCoreConfigProperty(configString, this);
-            cpuCoreActiveConfig = new CPUCoreActiveConfigProperty(this);
-            coreParkingPercent = new CoreParkingPercentProperty(this);
-            forceParkMode = new ForceParkModeProperty(this);
 
             // Seed the AC/DC dedupe baseline from the live PowerManager status now,
             // before subscribing. Otherwise the lazy-on-first-event capture below loses
@@ -531,6 +492,17 @@ namespace XboxGamingBarHelper.Systems
                     {
                         panelBrightness.ForceSetValue(BrightnessManager.GetBrightness());
                     }
+                }
+
+                // Refresh internal-panel-active status - gates Resolution / Refresh Rate /
+                // Rotation, which only make sense against the built-in panel. Same dock/undock
+                // trigger as the panel brightness check above; ForceSetValue re-asserts even if
+                // unchanged so the widget re-evaluates its enabled/grayed state without a reopen.
+                if (internalPanelActive != null)
+                {
+                    bool panelActive = User32.IsInternalPanelActive() ?? true;
+                    Logger.Info($"Internal panel active after display change: {panelActive}");
+                    internalPanelActive.ForceSetValue(panelActive);
                 }
 
                 // Refresh supported refresh rates
@@ -1187,427 +1159,27 @@ namespace XboxGamingBarHelper.Systems
             }
         }
 
-        #region CPU Core Detection and Configuration
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern bool GetSystemCpuSetInformation(
-            IntPtr Information,
-            uint BufferLength,
-            out uint ReturnedLength,
-            IntPtr Process,
-            uint Flags);
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct SYSTEM_CPU_SET_INFORMATION
-        {
-            public uint Size;
-            public uint Type;  // CpuSetInformation = 0
-            public uint Id;
-            public ushort Group;
-            public byte LogicalProcessorIndex;
-            public byte CoreIndex;
-            public byte LastLevelCacheIndex;
-            public byte NumaNodeIndex;
-            public byte EfficiencyClass;  // 0 = E-Core, 1 = P-Core (on Intel/AMD hybrid)
-            public byte AllFlags;
-            public uint Reserved;
-            public ulong AllocationTag;
-        }
-
-        // Store logical processor indices for each core type
-        private List<int> pCoreLogicalProcessors = new List<int>();
-        private List<int> eCoreLogicalProcessors = new List<int>();
-
-        private void DetectCPUCoreConfiguration()
-        {
-            try
-            {
-                // Clear previous data
-                pCoreCpuSetIds.Clear();
-                eCoreCpuSetIds.Clear();
-                pCoreLogicalProcessors.Clear();
-                eCoreLogicalProcessors.Clear();
-
-                // First call to get required buffer size
-                uint bufferSize = 0;
-                GetSystemCpuSetInformation(IntPtr.Zero, 0, out bufferSize, IntPtr.Zero, 0);
-
-                if (bufferSize == 0)
-                {
-                    Logger.Warn("GetSystemCpuSetInformation returned 0 buffer size");
-                    TotalPCores = Environment.ProcessorCount;
-                    TotalECores = 0;
-                    IsHybridCPU = false;
-                    return;
-                }
-
-                IntPtr buffer = Marshal.AllocHGlobal((int)bufferSize);
-                try
-                {
-                    if (!GetSystemCpuSetInformation(buffer, bufferSize, out uint returnedLength, IntPtr.Zero, 0))
-                    {
-                        int error = Marshal.GetLastWin32Error();
-                        Logger.Error($"GetSystemCpuSetInformation failed with error: {error}");
-                        TotalPCores = Environment.ProcessorCount;
-                        TotalECores = 0;
-                        IsHybridCPU = false;
-                        return;
-                    }
-
-                    // Parse the results
-                    int structSize = Marshal.SizeOf<SYSTEM_CPU_SET_INFORMATION>();
-                    int numEntries = (int)(returnedLength / structSize);
-
-                    int pCoreCount = 0;
-                    int eCoreCount = 0;
-                    var coreEfficiencies = new HashSet<byte>();
-                    var processedCores = new HashSet<int>(); // Track unique cores by CoreIndex
-
-                    // Temporary storage for CPU set IDs per core type
-                    var pCoreIds = new List<uint>();
-                    var eCoreIds = new List<uint>();
-                    var pCoreProcs = new List<int>();
-                    var eCoreProcs = new List<int>();
-
-                    IntPtr current = buffer;
-                    for (int i = 0; i < numEntries; i++)
-                    {
-                        var info = Marshal.PtrToStructure<SYSTEM_CPU_SET_INFORMATION>(current);
-
-                        // Track CPU set IDs and logical processor indices by core type
-                        if (info.EfficiencyClass == 0)
-                        {
-                            eCoreIds.Add(info.Id);
-                            eCoreProcs.Add(info.LogicalProcessorIndex);
-                        }
-                        else
-                        {
-                            pCoreIds.Add(info.Id);
-                            pCoreProcs.Add(info.LogicalProcessorIndex);
-                        }
-
-                        // Count unique physical cores
-                        int coreKey = (info.Group << 8) | info.CoreIndex;
-                        if (!processedCores.Contains(coreKey))
-                        {
-                            processedCores.Add(coreKey);
-                            coreEfficiencies.Add(info.EfficiencyClass);
-
-                            if (info.EfficiencyClass == 0)
-                            {
-                                eCoreCount++;
-                            }
-                            else
-                            {
-                                pCoreCount++;
-                            }
-                        }
-
-                        current = IntPtr.Add(current, (int)info.Size > 0 ? (int)info.Size : structSize);
-                    }
-
-                    // Store the CPU set IDs and logical processor indices
-                    pCoreCpuSetIds = pCoreIds;
-                    eCoreCpuSetIds = eCoreIds;
-                    pCoreLogicalProcessors = pCoreProcs;
-                    eCoreLogicalProcessors = eCoreProcs;
-
-                    // Determine if this is a hybrid CPU (has both efficiency classes)
-                    IsHybridCPU = coreEfficiencies.Count > 1;
-
-                    if (IsHybridCPU)
-                    {
-                        TotalPCores = pCoreCount;
-                        TotalECores = eCoreCount;
-                        Logger.Info($"Hybrid CPU detected: {TotalPCores} P-Cores ({pCoreCpuSetIds.Count} threads), {TotalECores} E-Cores ({eCoreCpuSetIds.Count} threads)");
-                        Logger.Info($"P-Core logical processors: {string.Join(",", pCoreLogicalProcessors)}");
-                        Logger.Info($"E-Core logical processors: {string.Join(",", eCoreLogicalProcessors)}");
-                    }
-                    else
-                    {
-                        // Non-hybrid CPU - all cores are the same type
-                        TotalPCores = processedCores.Count;
-                        TotalECores = 0;
-                        Logger.Info($"Non-hybrid CPU detected: {TotalPCores} cores total");
-                    }
-                }
-                finally
-                {
-                    Marshal.FreeHGlobal(buffer);
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Failed to detect CPU core configuration: {ex.Message}");
-                TotalPCores = Environment.ProcessorCount;
-                TotalECores = 0;
-                IsHybridCPU = false;
-            }
-        }
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern IntPtr OpenProcess(uint dwDesiredAccess, bool bInheritHandle, int dwProcessId);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern bool SetProcessAffinityMask(IntPtr hProcess, UIntPtr dwProcessAffinityMask);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern bool CloseHandle(IntPtr hObject);
-
-        private const uint PROCESS_SET_INFORMATION = 0x0200;
-        private const uint PROCESS_QUERY_INFORMATION = 0x0400;
-
-        // Store the current active core configuration
-        private int currentActivePCores = 0;
-        private int currentActiveECores = 0;
+        #region powercfg
 
         /// <summary>
-        /// Applies core configuration by setting process affinity on the running game.
-        /// This restricts which cores the game can use.
+        /// Resets the core-parking powercfg values (CPMAXCORES et al.) that the retired
+        /// Core Parking slider wrote into the user's active scheme. Called once at startup
+        /// when a pre-#103 build left a sub-100% value behind; the feature itself is gone.
         /// </summary>
-        /// <param name="activePCores">Number of P-Cores to enable (0 = disable P-Cores)</param>
-        /// <param name="activeECores">Number of E-Cores to enable (0 = disable E-Cores)</param>
-        public void ApplyCoreConfiguration(int activePCores, int activeECores)
+        public void ResetCoreParkingToDefaults()
         {
-            if (!IsHybridCPU)
-            {
-                Logger.Warn("Cannot apply core configuration on non-hybrid CPU");
-                return;
-            }
-
-            // Validate: can't have both be 0 (need at least one core type)
-            if (activePCores <= 0 && activeECores <= 0)
-            {
-                Logger.Error("Invalid configuration: cannot disable both P-Cores and E-Cores");
-                return;
-            }
-
-            // Store the configuration for applying to games
-            currentActivePCores = activePCores;
-            currentActiveECores = activeECores;
-
-            // 0 = disable those cores, max value or above = use all
-            int pCoresToUse = activePCores <= 0 ? 0 : Math.Min(activePCores, TotalPCores);
-            int eCoresToUse = activeECores <= 0 ? 0 : Math.Min(activeECores, TotalECores);
-
-            Logger.Info($"Core configuration set: {pCoresToUse}/{TotalPCores} P-Cores, {eCoresToUse}/{TotalECores} E-Cores");
-
-            // Check if all cores are enabled - skip process manipulation to avoid anticheat triggers
-            bool allCoresEnabled = (pCoresToUse >= TotalPCores && eCoresToUse >= TotalECores);
-
-            // If Force Park Mode is enabled, re-apply affinity to ALL processes with new settings
-            if (isForceParkModeEnabled)
-            {
-                if (allCoresEnabled)
-                {
-                    Logger.Info("All cores enabled with Force Park Mode - resetting all process affinities");
-                    ResetAffinityForAllProcesses();
-                }
-                else
-                {
-                    Logger.Info("Force Park Mode is enabled, re-applying affinity to all processes with new config");
-                    ApplyAffinityToAllProcesses();
-                }
-            }
-            // Apply to currently running game if any (only if cores are restricted)
-            else if (!allCoresEnabled && RunningGame.Value.IsValid())
-            {
-                ApplyAffinityToProcess(RunningGame.Value.ProcessId, pCoresToUse, eCoresToUse);
-            }
-            else if (allCoresEnabled)
-            {
-                Logger.Info("All cores enabled, no affinity change needed (anticheat safe)");
-            }
-            else
-            {
-                Logger.Info("No game running, configuration will be applied when a game starts");
-            }
-        }
-
-        /// <summary>
-        /// Applies the stored core configuration to a specific process.
-        /// Called when a new game is detected.
-        /// </summary>
-        public void ApplyAffinityToRunningGame()
-        {
-            // Only apply if we have a valid config (at least one core type must be active)
-            if (!IsHybridCPU || (currentActivePCores <= 0 && currentActiveECores <= 0))
-            {
-                return;
-            }
-
-            // Skip if all cores are enabled - no need to touch the game process
-            // This avoids potential anticheat triggers when no restriction is needed
-            if (currentActivePCores >= TotalPCores && currentActiveECores >= TotalECores)
-            {
-                Logger.Info("All cores enabled, skipping affinity change (anticheat safe)");
-                return;
-            }
-
-            if (RunningGame.Value.IsValid())
-            {
-                // 0 = disable those cores, max value or above = use all
-                int pCoresToUse = currentActivePCores <= 0 ? 0 : Math.Min(currentActivePCores, TotalPCores);
-                int eCoresToUse = currentActiveECores <= 0 ? 0 : Math.Min(currentActiveECores, TotalECores);
-
-                ApplyAffinityToProcess(RunningGame.Value.ProcessId, pCoresToUse, eCoresToUse);
-            }
-        }
-
-        private void ApplyAffinityToProcess(int processId, int pCoresToUse, int eCoresToUse)
-        {
-            try
-            {
-                // Calculate how many threads per P-Core (typically 2 for SMT)
-                int threadsPerPCore = pCoreLogicalProcessors.Count > 0 && TotalPCores > 0
-                    ? pCoreLogicalProcessors.Count / TotalPCores
-                    : 1;
-
-                // Calculate how many threads per E-Core
-                int threadsPerECore = eCoreLogicalProcessors.Count > 0 && TotalECores > 0
-                    ? eCoreLogicalProcessors.Count / TotalECores
-                    : 1;
-
-                // Build affinity mask from logical processor indices
-                ulong affinityMask = 0;
-
-                // Add P-Core threads
-                int pThreadsToAdd = pCoresToUse * threadsPerPCore;
-                for (int i = 0; i < pThreadsToAdd && i < pCoreLogicalProcessors.Count; i++)
-                {
-                    affinityMask |= (1UL << pCoreLogicalProcessors[i]);
-                }
-
-                // Add E-Core threads
-                int eThreadsToAdd = eCoresToUse * threadsPerECore;
-                for (int i = 0; i < eThreadsToAdd && i < eCoreLogicalProcessors.Count; i++)
-                {
-                    affinityMask |= (1UL << eCoreLogicalProcessors[i]);
-                }
-
-                Logger.Info($"Applying affinity to process {processId}: {pCoresToUse}P ({pThreadsToAdd} threads) + {eCoresToUse}E ({eThreadsToAdd} threads), mask=0x{affinityMask:X}");
-
-                if (affinityMask == 0)
-                {
-                    Logger.Error("Affinity mask is 0, aborting");
-                    return;
-                }
-
-                // Open the process with required permissions
-                IntPtr hProcess = OpenProcess(PROCESS_SET_INFORMATION | PROCESS_QUERY_INFORMATION, false, processId);
-                if (hProcess == IntPtr.Zero)
-                {
-                    int error = Marshal.GetLastWin32Error();
-                    Logger.Error($"Failed to open process {processId}, error: {error}");
-                    return;
-                }
-
-                try
-                {
-                    // Set the process affinity mask
-                    bool result = SetProcessAffinityMask(hProcess, new UIntPtr(affinityMask));
-                    if (result)
-                    {
-                        Logger.Info($"Successfully set affinity for process {processId}: {pCoresToUse}P + {eCoresToUse}E cores");
-                    }
-                    else
-                    {
-                        int error = Marshal.GetLastWin32Error();
-                        Logger.Error($"Failed to set affinity for process {processId}, error: {error}");
-                    }
-                }
-                finally
-                {
-                    CloseHandle(hProcess);
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Error applying affinity to process {processId}: {ex.Message}");
-            }
-        }
-
-        #endregion
-
-        #region Core Parking
-
-        /// <summary>
-        /// Applies core parking using powercfg CPMAXCORES and related aggressive settings.
-        /// This tells Windows the maximum percentage of cores that can be unparked
-        /// and uses additional settings to encourage actual parking.
-        /// When percent is 100, resets to default Windows behavior.
-        /// </summary>
-        /// <param name="percent">Percentage of cores to keep active (1-100)</param>
-        public void ApplyCoreParkingPercent(int percent)
-        {
-            // Clamp to valid range
-            percent = Math.Max(1, Math.Min(100, percent));
-
-            // Skip if unchanged
-            if (percent == lastCoreParkingPercent)
-            {
-                return;
-            }
-
-            lastCoreParkingPercent = percent;
-
-            try
-            {
-                if (percent >= 100)
-                {
-                    // Reset to Windows defaults - all cores active, normal parking behavior
-                    RunPowerCfgCommand("/setacvalueindex scheme_current sub_processor CPMAXCORES 100");
-                    RunPowerCfgCommand("/setdcvalueindex scheme_current sub_processor CPMAXCORES 100");
-                    RunPowerCfgCommand("/setacvalueindex scheme_current sub_processor CPMINCORES 100");
-                    RunPowerCfgCommand("/setdcvalueindex scheme_current sub_processor CPMINCORES 100");
-                    RunPowerCfgCommand("/setacvalueindex scheme_current sub_processor CPHEADROOM 10");
-                    RunPowerCfgCommand("/setdcvalueindex scheme_current sub_processor CPHEADROOM 10");
-                    RunPowerCfgCommand("/setacvalueindex scheme_current sub_processor CPCONCURRENCY 50");
-                    RunPowerCfgCommand("/setdcvalueindex scheme_current sub_processor CPCONCURRENCY 50");
-                    RunPowerCfgCommand("/setacvalueindex scheme_current sub_processor CPDISTRIBUTION 1");
-                    RunPowerCfgCommand("/setdcvalueindex scheme_current sub_processor CPDISTRIBUTION 1");
-                    RunPowerCfgCommand("/setactive scheme_current");
-                    Logger.Info("Core parking reset to Windows defaults (all cores active)");
-                }
-                else
-                {
-                    // Apply aggressive parking settings
-                    // CPMAXCORES: Maximum percentage of cores that can be unparked (our target)
-                    RunPowerCfgCommand($"/setacvalueindex scheme_current sub_processor CPMAXCORES {percent}");
-                    RunPowerCfgCommand($"/setdcvalueindex scheme_current sub_processor CPMAXCORES {percent}");
-
-                    // CPMINCORES: Minimum percentage of cores that must stay unparked
-                    // Set to same as max to force the exact number of cores we want
-                    RunPowerCfgCommand($"/setacvalueindex scheme_current sub_processor CPMINCORES {percent}");
-                    RunPowerCfgCommand($"/setdcvalueindex scheme_current sub_processor CPMINCORES {percent}");
-
-                    // CPHEADROOM: Performance headroom threshold before unparking additional cores (0-100)
-                    // Higher value = more reluctant to unpark cores (default is usually 10)
-                    // Set to 100 to make Windows very reluctant to unpark beyond our limit
-                    RunPowerCfgCommand("/setacvalueindex scheme_current sub_processor CPHEADROOM 100");
-                    RunPowerCfgCommand("/setdcvalueindex scheme_current sub_processor CPHEADROOM 100");
-
-                    // CPCONCURRENCY: Concurrency threshold before unparking (0-100)
-                    // Higher value = requires more concurrent threads before unparking
-                    // Set to 100 to discourage unparking
-                    RunPowerCfgCommand("/setacvalueindex scheme_current sub_processor CPCONCURRENCY 100");
-                    RunPowerCfgCommand("/setdcvalueindex scheme_current sub_processor CPCONCURRENCY 100");
-
-                    // CPDISTRIBUTION: Whether to distribute utility across parked cores (0=disabled, 1=enabled)
-                    // Disable to keep parked cores truly parked
-                    RunPowerCfgCommand("/setacvalueindex scheme_current sub_processor CPDISTRIBUTION 0");
-                    RunPowerCfgCommand("/setdcvalueindex scheme_current sub_processor CPDISTRIBUTION 0");
-
-                    // Apply the changes
-                    RunPowerCfgCommand("/setactive scheme_current");
-
-                    Logger.Info($"Core parking set to {percent}% with aggressive settings (CPMAXCORES={percent}, CPMINCORES={percent}, CPHEADROOM=100, CPCONCURRENCY=100, CPDISTRIBUTION=0)");
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Failed to apply core parking: {ex.Message}");
-            }
+            RunPowerCfgCommand("/setacvalueindex scheme_current sub_processor CPMAXCORES 100");
+            RunPowerCfgCommand("/setdcvalueindex scheme_current sub_processor CPMAXCORES 100");
+            RunPowerCfgCommand("/setacvalueindex scheme_current sub_processor CPMINCORES 100");
+            RunPowerCfgCommand("/setdcvalueindex scheme_current sub_processor CPMINCORES 100");
+            RunPowerCfgCommand("/setacvalueindex scheme_current sub_processor CPHEADROOM 10");
+            RunPowerCfgCommand("/setdcvalueindex scheme_current sub_processor CPHEADROOM 10");
+            RunPowerCfgCommand("/setacvalueindex scheme_current sub_processor CPCONCURRENCY 50");
+            RunPowerCfgCommand("/setdcvalueindex scheme_current sub_processor CPCONCURRENCY 50");
+            RunPowerCfgCommand("/setacvalueindex scheme_current sub_processor CPDISTRIBUTION 1");
+            RunPowerCfgCommand("/setdcvalueindex scheme_current sub_processor CPDISTRIBUTION 1");
+            RunPowerCfgCommand("/setactive scheme_current");
+            Logger.Info("Core parking reset to Windows defaults (all cores active)");
         }
 
         private void RunPowerCfgCommand(string arguments)
@@ -1707,177 +1279,6 @@ namespace XboxGamingBarHelper.Systems
             }
         }
 
-        /// <summary>
-        /// Enables or disables Force Park Mode, which applies affinity to ALL running processes.
-        /// This is aggressive and may cause system instability.
-        /// </summary>
-        public void SetForceParkMode(bool enabled)
-        {
-            if (isForceParkModeEnabled == enabled)
-            {
-                return;
-            }
-
-            isForceParkModeEnabled = enabled;
-            Logger.Info($"Force Park Mode {(enabled ? "ENABLED" : "DISABLED")}");
-
-            if (enabled)
-            {
-                // Apply affinity to all running processes
-                ApplyAffinityToAllProcesses();
-            }
-            else
-            {
-                // Reset affinity for all processes to default (all cores)
-                ResetAffinityForAllProcesses();
-            }
-        }
-
-        /// <summary>
-        /// Calculates the affinity mask based on current P-Core and E-Core settings.
-        /// Returns IntPtr.Zero if invalid.
-        /// </summary>
-        private IntPtr CalculateAffinityMask()
-        {
-            // Calculate how many threads per P-Core (typically 2 for SMT)
-            int threadsPerPCore = pCoreLogicalProcessors.Count > 0 && TotalPCores > 0
-                ? pCoreLogicalProcessors.Count / TotalPCores
-                : 1;
-
-            // Calculate how many threads per E-Core
-            int threadsPerECore = eCoreLogicalProcessors.Count > 0 && TotalECores > 0
-                ? eCoreLogicalProcessors.Count / TotalECores
-                : 1;
-
-            // Use current active core settings
-            int pCoresToUse = currentActivePCores <= 0 ? 0 : Math.Min(currentActivePCores, TotalPCores);
-            int eCoresToUse = currentActiveECores <= 0 ? 0 : Math.Min(currentActiveECores, TotalECores);
-
-            // Build affinity mask from logical processor indices
-            ulong affinityMask = 0;
-
-            // Add P-Core threads
-            int pThreadsToAdd = pCoresToUse * threadsPerPCore;
-            for (int i = 0; i < pThreadsToAdd && i < pCoreLogicalProcessors.Count; i++)
-            {
-                affinityMask |= (1UL << pCoreLogicalProcessors[i]);
-            }
-
-            // Add E-Core threads
-            int eThreadsToAdd = eCoresToUse * threadsPerECore;
-            for (int i = 0; i < eThreadsToAdd && i < eCoreLogicalProcessors.Count; i++)
-            {
-                affinityMask |= (1UL << eCoreLogicalProcessors[i]);
-            }
-
-            Logger.Info($"Calculated affinity mask: {pCoresToUse}P + {eCoresToUse}E = 0x{affinityMask:X}");
-
-            return (IntPtr)affinityMask;
-        }
-
-        /// <summary>
-        /// Applies the current core affinity mask to ALL running processes.
-        /// WARNING: This is aggressive and may cause system instability.
-        /// </summary>
-        private void ApplyAffinityToAllProcesses()
-        {
-            if (!IsHybridCPU)
-            {
-                Logger.Warn("Force Park Mode only supported on hybrid CPUs");
-                return;
-            }
-
-            IntPtr affinityMask = CalculateAffinityMask();
-            if (affinityMask == IntPtr.Zero)
-            {
-                Logger.Error("Cannot apply affinity: invalid mask");
-                return;
-            }
-
-            int successCount = 0;
-            int failCount = 0;
-            var processes = System.Diagnostics.Process.GetProcesses();
-
-            foreach (var process in processes)
-            {
-                try
-                {
-                    // Skip system-critical processes
-                    string name = process.ProcessName.ToLower();
-                    if (name == "system" || name == "idle" || name == "registry" ||
-                        name == "smss" || name == "csrss" || name == "wininit" ||
-                        name == "services" || name == "lsass" || name == "svchost" ||
-                        name == "dwm" || name == "explorer" || name == "audiodg" ||
-                        name.Contains("antimalware") || name.Contains("defender"))
-                    {
-                        continue;
-                    }
-
-                    // Skip our own processes
-                    if (name.Contains("xboxgamingbar"))
-                    {
-                        continue;
-                    }
-
-                    process.ProcessorAffinity = affinityMask;
-                    successCount++;
-                }
-                catch
-                {
-                    // Access denied or process exited - ignore
-                    failCount++;
-                }
-                finally
-                {
-                    process.Dispose();
-                }
-            }
-
-            Logger.Info($"Force Park Mode: Applied affinity to {successCount} processes ({failCount} skipped/failed)");
-        }
-
-        /// <summary>
-        /// Resets affinity for all processes back to default (all cores).
-        /// </summary>
-        private void ResetAffinityForAllProcesses()
-        {
-            // Calculate full affinity mask (all cores)
-            int totalLogicalProcessors = Environment.ProcessorCount;
-            IntPtr fullMask = (IntPtr)((1L << totalLogicalProcessors) - 1);
-
-            int successCount = 0;
-            int failCount = 0;
-            var processes = System.Diagnostics.Process.GetProcesses();
-
-            foreach (var process in processes)
-            {
-                try
-                {
-                    // Skip system processes we didn't modify anyway
-                    string name = process.ProcessName.ToLower();
-                    if (name == "system" || name == "idle" || name == "registry" ||
-                        name == "smss" || name == "csrss" || name == "wininit" ||
-                        name == "services" || name == "lsass")
-                    {
-                        continue;
-                    }
-
-                    process.ProcessorAffinity = fullMask;
-                    successCount++;
-                }
-                catch
-                {
-                    // Access denied or process exited - ignore
-                    failCount++;
-                }
-                finally
-                {
-                    process.Dispose();
-                }
-            }
-
-            Logger.Info($"Force Park Mode disabled: Reset affinity for {successCount} processes ({failCount} skipped/failed)");
-        }
 
         #endregion
     }

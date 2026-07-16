@@ -717,15 +717,6 @@ namespace XboxGamingBar
         }
 
         /// <summary>
-        /// Twin handler used by the legacy CE panel's reset button (issue #79
-        /// round 4: vvalente asked for a reset on the legacy side too after he
-        /// got stuck with btn=Back persisted from earlier testing). Same
-        /// underlying writes — the legacy and VIIPER UIs share LocalSettings
-        /// keys, so a single defaults pass takes care of both.
-        /// </summary>
-        private void StickGyroLegacyResetButton_Click(object sender, RoutedEventArgs e) => ApplyStickGyroRecommendedDefaults();
-
-        /// <summary>
         /// "Calibrate gyro bias" button — Steam-style one-shot software calibration. We show
         /// a brief countdown so the user has time to set the device down on a flat surface,
         /// then ask the helper to sample the resting gyro for ~500 ms and store the average

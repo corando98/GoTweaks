@@ -1,4 +1,4 @@
-using Microsoft.Gaming.XboxGameBar;
+﻿using Microsoft.Gaming.XboxGameBar;
 using Microsoft.Gaming.XboxGameBar.Input;
 using Microsoft.UI.Xaml.Controls;
 using NLog;
@@ -97,37 +97,6 @@ namespace XboxGamingBar
         // (RequestViGEmBusStatus removed — ViGEm backend retired. The Labs
         // Guide-remap prerequisite line reflects usbip-win2 via UpdateLabsUsbipUI,
         // driven by the UsbipInstalled property push.)
-
-        private async void RequestHidHideStatus()
-        {
-            if (!App.IsConnected)
-                return;
-
-            // Request HidHide installed status from helper
-            try
-            {
-                var request = new Windows.Foundation.Collections.ValueSet();
-                request.Add("Command", (int)Command.Get);
-                request.Add("Function", (int)Function.HidHideInstalled);
-                var response = await App.SendMessageAsync(request);
-
-                if (response != null && response.TryGetValue("Content", out object installedObj))
-                {
-                    bool installed = Convert.ToBoolean(installedObj);
-                    UpdateHidHideInstalledUI(installed);
-                    Logger.Debug($"HidHide status received: {installed}");
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Failed to request HidHide status: {ex.Message}");
-            }
-        }
-
-        private void RequestControllerEmulationDriverStatus()
-        {
-            RequestHidHideStatus();
-        }
 
         private async void UpdateDAServiceStatus()
         {
@@ -288,13 +257,6 @@ namespace XboxGamingBar
             ViiperLegionLDisabledHint.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        private void LegionLShortcutApplyButton_Click(object sender, RoutedEventArgs e)
-        {
-            SaveLegionRemapSettings();
-            ApplyLegionButtonConfig(true);
-            UpdateLegionRemapDescription();
-        }
-
         private void LegionLCommandApplyButton_Click(object sender, RoutedEventArgs e)
         {
             SaveLegionRemapSettings();
@@ -323,13 +285,6 @@ namespace XboxGamingBar
             if (selection != 2 && selection != 3)
                 ApplyLegionButtonConfig(false);
 
-            UpdateLegionRemapDescription();
-        }
-
-        private void LegionRShortcutApplyButton_Click(object sender, RoutedEventArgs e)
-        {
-            SaveLegionRemapSettings();
-            ApplyLegionButtonConfig(false);
             UpdateLegionRemapDescription();
         }
 

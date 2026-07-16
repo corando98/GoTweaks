@@ -1,4 +1,4 @@
-using Microsoft.Gaming.XboxGameBar;
+﻿using Microsoft.Gaming.XboxGameBar;
 using Microsoft.Gaming.XboxGameBar.Input;
 using Microsoft.UI.Xaml.Controls;
 using NLog;
@@ -763,15 +763,6 @@ namespace XboxGamingBar
                         rowIndex++;
                     }
 
-                    // CPU State
-                    if (SaveCPUState)
-                    {
-                        AddTextBlock(acDcGrid, rowIndex, 0, "CPU St", 10, "#AAAAAA", margin: new Thickness(0, 3, 8, 0));
-                        AddTextBlock(acDcGrid, rowIndex, 1, $"{gameAC.MinCPUState}-{gameAC.MaxCPUState}%", 10, "#FFFFFF", margin: new Thickness(0, 3, 0, 0), horizontalAlignment: HorizontalAlignment.Center);
-                        AddTextBlock(acDcGrid, rowIndex, 2, $"{gameDC.MinCPUState}-{gameDC.MaxCPUState}%", 10, "#FFFFFF", margin: new Thickness(0, 3, 0, 0), horizontalAlignment: HorizontalAlignment.Center);
-                        rowIndex++;
-                    }
-
                     // FPS Limit (if enabled)
                     if (SaveFPSLimit)
                     {
@@ -910,14 +901,6 @@ namespace XboxGamingBar
                     {
                         AddTextBlock(singleGrid, rowIndex, 0, "CPU EPP", 10, "#AAAAAA", margin: new Thickness(0, 3, 0, 0));
                         AddTextBlock(singleGrid, rowIndex, 1, $"{game.CPUEPP}", 10, "#FFFFFF", margin: new Thickness(0, 3, 0, 0));
-                        rowIndex++;
-                    }
-
-                    // CPU State
-                    if (SaveCPUState)
-                    {
-                        AddTextBlock(singleGrid, rowIndex, 0, "CPU State", 10, "#AAAAAA", margin: new Thickness(0, 3, 0, 0));
-                        AddTextBlock(singleGrid, rowIndex, 1, $"{game.MinCPUState}-{game.MaxCPUState}%", 10, "#FFFFFF", margin: new Thickness(0, 3, 0, 0));
                         rowIndex++;
                     }
 

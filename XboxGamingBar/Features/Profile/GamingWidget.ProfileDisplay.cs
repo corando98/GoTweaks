@@ -1,4 +1,4 @@
-using Microsoft.Gaming.XboxGameBar;
+﻿using Microsoft.Gaming.XboxGameBar;
 using Microsoft.Gaming.XboxGameBar.Input;
 using Microsoft.UI.Xaml.Controls;
 using NLog;
@@ -46,146 +46,130 @@ namespace XboxGamingBar
         private void UpdateProfileDisplay()
         {
             // Guard against calls during XAML initialization when controls aren't ready
-            if (GlobalProfileTDPModeLabel == null) return;
+            if (GlobalProfileTDPModeRow == null) return;
 
             // Determine visibility based on save settings
             var tdpModeVisibility = (legionGoDetected?.Value == true && SaveTDP) ? Visibility.Visible : Visibility.Collapsed;
             var tdpVisibility = SaveTDP ? Visibility.Visible : Visibility.Collapsed;
             var cpuBoostVisibility = SaveCPUBoost ? Visibility.Visible : Visibility.Collapsed;
             var cpuEPPVisibility = SaveCPUEPP ? Visibility.Visible : Visibility.Collapsed;
-            var cpuStateVisibility = SaveCPUState ? Visibility.Visible : Visibility.Collapsed;
             var fpsLimitVisibility = SaveFPSLimit ? Visibility.Visible : Visibility.Collapsed;
-            var autoTDPVisibility = SaveAutoTDP ? Visibility.Visible : Visibility.Collapsed;
             var powerModeVisibility = SaveOSPowerMode ? Visibility.Visible : Visibility.Collapsed;
             var amdVisibility = SaveAMDFeatures ? Visibility.Visible : Visibility.Collapsed;
             var hdrVisibility = SaveHDR ? Visibility.Visible : Visibility.Collapsed;
             var resolutionVisibility = SaveResolution ? Visibility.Visible : Visibility.Collapsed;
-            var stickyTDPVisibility = SaveStickyTDP ? Visibility.Visible : Visibility.Collapsed;
+            var refreshRateVisibility = SaveRefreshRate ? Visibility.Visible : Visibility.Collapsed;
+            var overlayLevelVisibility = SaveOverlayLevel ? Visibility.Visible : Visibility.Collapsed;
 
             // Update Global profile display (simple mode)
-            GlobalProfileTDPModeLabel.Visibility = tdpModeVisibility;
-            GlobalProfileTDPModeText.Visibility = tdpModeVisibility;
+            GlobalProfileTDPModeRow.Visibility = tdpModeVisibility;
             GlobalProfileTDPModeText.Text = GetProfileTDPModeName(globalProfile);
 
-            GlobalProfileTDPLabel.Visibility = tdpVisibility;
-            GlobalProfileTDPText.Visibility = tdpVisibility;
+            GlobalProfileTDPRow.Visibility = tdpVisibility;
             GlobalProfileTDPText.Text = $"{globalProfile.TDP}W";
 
-            GlobalProfileCPUBoostLabel.Visibility = cpuBoostVisibility;
-            GlobalProfileCPUBoostText.Visibility = cpuBoostVisibility;
+            GlobalProfileCPUBoostRow.Visibility = cpuBoostVisibility;
             GlobalProfileCPUBoostText.Text = globalProfile.CPUBoost ? "On" : "Off";
 
-            GlobalProfileCPUEPPLabel.Visibility = cpuEPPVisibility;
-            GlobalProfileCPUEPPText.Visibility = cpuEPPVisibility;
+            GlobalProfileCPUEPPRow.Visibility = cpuEPPVisibility;
             GlobalProfileCPUEPPText.Text = $"{globalProfile.CPUEPP}";
 
-            GlobalProfileCPUStateLabel.Visibility = cpuStateVisibility;
-            GlobalProfileCPUStateText.Visibility = cpuStateVisibility;
-            GlobalProfileCPUStateText.Text = $"{globalProfile.MinCPUState}-{globalProfile.MaxCPUState}%";
 
-            GlobalProfileFPSLimitLabel.Visibility = fpsLimitVisibility;
-            GlobalProfileFPSLimitText.Visibility = fpsLimitVisibility;
+            GlobalProfileFPSLimitRow.Visibility = fpsLimitVisibility;
             GlobalProfileFPSLimitText.Text = globalProfile.FPSLimitEnabled ? $"{globalProfile.FPSLimitValue}" : "Off";
 
-            GlobalProfileAutoTDPLabel.Visibility = autoTDPVisibility;
-            GlobalProfileAutoTDPText.Visibility = autoTDPVisibility;
-            GlobalProfileAutoTDPText.Text = globalProfile.AutoTDPEnabled ? $"{globalProfile.AutoTDPTargetFPS}fps" : "Off";
-
-            GlobalProfilePowerModeLabel.Visibility = powerModeVisibility;
-            GlobalProfilePowerModeText.Visibility = powerModeVisibility;
+            GlobalProfilePowerModeRow.Visibility = powerModeVisibility;
             GlobalProfilePowerModeText.Text = GetPowerModeShortName(globalProfile.OSPowerMode);
 
-            GlobalProfileAMDLabel.Visibility = amdVisibility;
-            GlobalProfileAMDText.Visibility = amdVisibility;
+            GlobalProfileAMDRow.Visibility = amdVisibility;
             var globalAmdFeatures = GetAMDFeaturesShortString(globalProfile);
             GlobalProfileAMDText.Text = string.IsNullOrEmpty(globalAmdFeatures) ? "Off" : globalAmdFeatures;
 
-            GlobalProfileHDRLabel.Visibility = hdrVisibility;
-            GlobalProfileHDRText.Visibility = hdrVisibility;
+            GlobalProfileHDRRow.Visibility = hdrVisibility;
             GlobalProfileHDRText.Text = globalProfile.HDREnabled ? "On" : "Off";
 
-            GlobalProfileResolutionLabel.Visibility = resolutionVisibility;
-            GlobalProfileResolutionText.Visibility = resolutionVisibility;
+            GlobalProfileResolutionRow.Visibility = resolutionVisibility;
             GlobalProfileResolutionText.Text = string.IsNullOrEmpty(globalProfile.Resolution) ? "Native" : globalProfile.Resolution;
 
-            GlobalProfileStickyTDPLabel.Visibility = stickyTDPVisibility;
-            GlobalProfileStickyTDPText.Visibility = stickyTDPVisibility;
-            GlobalProfileStickyTDPText.Text = globalProfile.StickyTDPEnabled ? "On" : "Off";
+            GlobalProfileRefreshRateRow.Visibility = refreshRateVisibility;
+            GlobalProfileRefreshRateText.Text = GetRefreshRateShortString(globalProfile);
+
+            GlobalProfileOverlayLevelRow.Visibility = overlayLevelVisibility;
+            GlobalProfileOverlayLevelText.Text = GetOverlayLevelShortName(globalProfile.OverlayLevel);
+
+            UpdateLastVisibleSeparator(
+                (GlobalProfileTDPModeRow, GlobalProfileTDPModeSeparator),
+                (GlobalProfileTDPRow, GlobalProfileTDPSeparator),
+                (GlobalProfileCPUBoostRow, GlobalProfileCPUBoostSeparator),
+                (GlobalProfileCPUEPPRow, GlobalProfileCPUEPPSeparator),
+                (GlobalProfileFPSLimitRow, GlobalProfileFPSLimitSeparator),
+                (GlobalProfilePowerModeRow, GlobalProfilePowerModeSeparator),
+                (GlobalProfileAMDRow, GlobalProfileAMDSeparator),
+                (GlobalProfileHDRRow, GlobalProfileHDRSeparator),
+                (GlobalProfileResolutionRow, GlobalProfileResolutionSeparator),
+                (GlobalProfileRefreshRateRow, GlobalProfileRefreshRateSeparator),
+                (GlobalProfileOverlayLevelRow, GlobalProfileOverlayLevelSeparator));
 
             // Update AC/DC profile display
-            ACDCProfileTDPModeLabel.Visibility = tdpModeVisibility;
-            ACProfileTDPModeText.Visibility = tdpModeVisibility;
-            DCProfileTDPModeText.Visibility = tdpModeVisibility;
+            ACDCProfileTDPModeRow.Visibility = tdpModeVisibility;
             ACProfileTDPModeText.Text = GetProfileTDPModeName(acProfile);
             DCProfileTDPModeText.Text = GetProfileTDPModeName(dcProfile);
 
-            ACDCProfileTDPLabel.Visibility = tdpVisibility;
-            ACProfileTDPText.Visibility = tdpVisibility;
-            DCProfileTDPText.Visibility = tdpVisibility;
+            ACDCProfileTDPRow.Visibility = tdpVisibility;
             ACProfileTDPText.Text = $"{acProfile.TDP}W";
             DCProfileTDPText.Text = $"{dcProfile.TDP}W";
 
-            ACDCProfileCPUBoostLabel.Visibility = cpuBoostVisibility;
-            ACProfileCPUBoostText.Visibility = cpuBoostVisibility;
-            DCProfileCPUBoostText.Visibility = cpuBoostVisibility;
+            ACDCProfileCPUBoostRow.Visibility = cpuBoostVisibility;
             ACProfileCPUBoostText.Text = acProfile.CPUBoost ? "On" : "Off";
             DCProfileCPUBoostText.Text = dcProfile.CPUBoost ? "On" : "Off";
 
-            ACDCProfileCPUEPPLabel.Visibility = cpuEPPVisibility;
-            ACProfileCPUEPPText.Visibility = cpuEPPVisibility;
-            DCProfileCPUEPPText.Visibility = cpuEPPVisibility;
+            ACDCProfileCPUEPPRow.Visibility = cpuEPPVisibility;
             ACProfileCPUEPPText.Text = $"{acProfile.CPUEPP}";
             DCProfileCPUEPPText.Text = $"{dcProfile.CPUEPP}";
 
-            ACDCProfileCPUStateLabel.Visibility = cpuStateVisibility;
-            ACProfileCPUStateText.Visibility = cpuStateVisibility;
-            DCProfileCPUStateText.Visibility = cpuStateVisibility;
-            ACProfileCPUStateText.Text = $"{acProfile.MinCPUState}-{acProfile.MaxCPUState}%";
-            DCProfileCPUStateText.Text = $"{dcProfile.MinCPUState}-{dcProfile.MaxCPUState}%";
 
-            ACDCProfileFPSLimitLabel.Visibility = fpsLimitVisibility;
-            ACProfileFPSLimitText.Visibility = fpsLimitVisibility;
-            DCProfileFPSLimitText.Visibility = fpsLimitVisibility;
+            ACDCProfileFPSLimitRow.Visibility = fpsLimitVisibility;
             ACProfileFPSLimitText.Text = acProfile.FPSLimitEnabled ? $"{acProfile.FPSLimitValue}" : "Off";
             DCProfileFPSLimitText.Text = dcProfile.FPSLimitEnabled ? $"{dcProfile.FPSLimitValue}" : "Off";
 
-            ACDCProfileAutoTDPLabel.Visibility = autoTDPVisibility;
-            ACProfileAutoTDPText.Visibility = autoTDPVisibility;
-            DCProfileAutoTDPText.Visibility = autoTDPVisibility;
-            ACProfileAutoTDPText.Text = acProfile.AutoTDPEnabled ? $"{acProfile.AutoTDPTargetFPS}fps" : "Off";
-            DCProfileAutoTDPText.Text = dcProfile.AutoTDPEnabled ? $"{dcProfile.AutoTDPTargetFPS}fps" : "Off";
-
-            ACDCProfilePowerModeLabel.Visibility = powerModeVisibility;
-            ACProfilePowerModeText.Visibility = powerModeVisibility;
-            DCProfilePowerModeText.Visibility = powerModeVisibility;
+            ACDCProfilePowerModeRow.Visibility = powerModeVisibility;
             ACProfilePowerModeText.Text = GetPowerModeShortName(acProfile.OSPowerMode);
             DCProfilePowerModeText.Text = GetPowerModeShortName(dcProfile.OSPowerMode);
 
-            ACDCProfileAMDLabel.Visibility = amdVisibility;
-            ACProfileAMDText.Visibility = amdVisibility;
-            DCProfileAMDText.Visibility = amdVisibility;
+            ACDCProfileAMDRow.Visibility = amdVisibility;
             var acAmdFeatures = GetAMDFeaturesShortString(acProfile);
             var dcAmdFeatures = GetAMDFeaturesShortString(dcProfile);
             ACProfileAMDText.Text = string.IsNullOrEmpty(acAmdFeatures) ? "Off" : acAmdFeatures;
             DCProfileAMDText.Text = string.IsNullOrEmpty(dcAmdFeatures) ? "Off" : dcAmdFeatures;
 
-            ACDCProfileHDRLabel.Visibility = hdrVisibility;
-            ACProfileHDRText.Visibility = hdrVisibility;
-            DCProfileHDRText.Visibility = hdrVisibility;
+            ACDCProfileHDRRow.Visibility = hdrVisibility;
             ACProfileHDRText.Text = acProfile.HDREnabled ? "On" : "Off";
             DCProfileHDRText.Text = dcProfile.HDREnabled ? "On" : "Off";
 
-            ACDCProfileResolutionLabel.Visibility = resolutionVisibility;
-            ACProfileResolutionText.Visibility = resolutionVisibility;
-            DCProfileResolutionText.Visibility = resolutionVisibility;
+            ACDCProfileResolutionRow.Visibility = resolutionVisibility;
             ACProfileResolutionText.Text = string.IsNullOrEmpty(acProfile.Resolution) ? "Native" : acProfile.Resolution;
             DCProfileResolutionText.Text = string.IsNullOrEmpty(dcProfile.Resolution) ? "Native" : dcProfile.Resolution;
 
-            ACDCProfileStickyTDPLabel.Visibility = stickyTDPVisibility;
-            ACProfileStickyTDPText.Visibility = stickyTDPVisibility;
-            DCProfileStickyTDPText.Visibility = stickyTDPVisibility;
-            ACProfileStickyTDPText.Text = acProfile.StickyTDPEnabled ? "On" : "Off";
-            DCProfileStickyTDPText.Text = dcProfile.StickyTDPEnabled ? "On" : "Off";
+            ACDCProfileRefreshRateRow.Visibility = refreshRateVisibility;
+            ACProfileRefreshRateText.Text = GetRefreshRateShortString(acProfile);
+            DCProfileRefreshRateText.Text = GetRefreshRateShortString(dcProfile);
+
+            ACDCProfileOverlayLevelRow.Visibility = overlayLevelVisibility;
+            ACProfileOverlayLevelText.Text = GetOverlayLevelShortName(acProfile.OverlayLevel);
+            DCProfileOverlayLevelText.Text = GetOverlayLevelShortName(dcProfile.OverlayLevel);
+
+            UpdateLastVisibleSeparator(
+                (ACDCProfileTDPModeRow, ACDCProfileTDPModeSeparator),
+                (ACDCProfileTDPRow, ACDCProfileTDPSeparator),
+                (ACDCProfileCPUBoostRow, ACDCProfileCPUBoostSeparator),
+                (ACDCProfileCPUEPPRow, ACDCProfileCPUEPPSeparator),
+                (ACDCProfileFPSLimitRow, ACDCProfileFPSLimitSeparator),
+                (ACDCProfilePowerModeRow, ACDCProfilePowerModeSeparator),
+                (ACDCProfileAMDRow, ACDCProfileAMDSeparator),
+                (ACDCProfileHDRRow, ACDCProfileHDRSeparator),
+                (ACDCProfileResolutionRow, ACDCProfileResolutionSeparator),
+                (ACDCProfileRefreshRateRow, ACDCProfileRefreshRateSeparator),
+                (ACDCProfileOverlayLevelRow, ACDCProfileOverlayLevelSeparator));
 
             // Update game profile display (if game is running)
             if (HasValidGame(currentGameName))
@@ -193,163 +177,166 @@ namespace XboxGamingBar
                 if (GetPerGamePowerSourceProfileEnabled(currentGameName))
                 {
                     // Show AC/DC game profiles - TDP Mode (Legion only)
-                    GameACDCProfileTDPModeLabel.Visibility = tdpModeVisibility;
-                    GameACProfileTDPModeText.Visibility = tdpModeVisibility;
-                    GameDCProfileTDPModeText.Visibility = tdpModeVisibility;
+                    GameACDCProfileTDPModeRow.Visibility = tdpModeVisibility;
                     GameACProfileTDPModeText.Text = GetProfileTDPModeName(gameACProfile);
                     GameDCProfileTDPModeText.Text = GetProfileTDPModeName(gameDCProfile);
 
                     // TDP
-                    GameACDCProfileTDPLabel.Visibility = tdpVisibility;
-                    GameACProfileTDPText.Visibility = tdpVisibility;
-                    GameDCProfileTDPText.Visibility = tdpVisibility;
+                    GameACDCProfileTDPRow.Visibility = tdpVisibility;
                     GameACProfileTDPText.Text = $"{gameACProfile.TDP}W";
                     GameDCProfileTDPText.Text = $"{gameDCProfile.TDP}W";
 
                     // CPU Boost
-                    GameACDCProfileCPUBoostLabel.Visibility = cpuBoostVisibility;
-                    GameACProfileCPUBoostText.Visibility = cpuBoostVisibility;
-                    GameDCProfileCPUBoostText.Visibility = cpuBoostVisibility;
+                    GameACDCProfileCPUBoostRow.Visibility = cpuBoostVisibility;
                     GameACProfileCPUBoostText.Text = gameACProfile.CPUBoost ? "On" : "Off";
                     GameDCProfileCPUBoostText.Text = gameDCProfile.CPUBoost ? "On" : "Off";
 
                     // CPU EPP
-                    GameACDCProfileCPUEPPLabel.Visibility = cpuEPPVisibility;
-                    GameACProfileCPUEPPText.Visibility = cpuEPPVisibility;
-                    GameDCProfileCPUEPPText.Visibility = cpuEPPVisibility;
+                    GameACDCProfileCPUEPPRow.Visibility = cpuEPPVisibility;
                     GameACProfileCPUEPPText.Text = $"{gameACProfile.CPUEPP}";
                     GameDCProfileCPUEPPText.Text = $"{gameDCProfile.CPUEPP}";
 
                     // CPU State
-                    GameACDCProfileCPUStateLabel.Visibility = cpuStateVisibility;
-                    GameACProfileCPUStateText.Visibility = cpuStateVisibility;
-                    GameDCProfileCPUStateText.Visibility = cpuStateVisibility;
-                    GameACProfileCPUStateText.Text = $"{gameACProfile.MinCPUState}-{gameACProfile.MaxCPUState}%";
-                    GameDCProfileCPUStateText.Text = $"{gameDCProfile.MinCPUState}-{gameDCProfile.MaxCPUState}%";
 
                     // FPS Limit
-                    GameACDCProfileFPSLimitLabel.Visibility = fpsLimitVisibility;
-                    GameACProfileFPSLimitText.Visibility = fpsLimitVisibility;
-                    GameDCProfileFPSLimitText.Visibility = fpsLimitVisibility;
+                    GameACDCProfileFPSLimitRow.Visibility = fpsLimitVisibility;
                     GameACProfileFPSLimitText.Text = gameACProfile.FPSLimitEnabled ? $"{gameACProfile.FPSLimitValue}" : "Off";
                     GameDCProfileFPSLimitText.Text = gameDCProfile.FPSLimitEnabled ? $"{gameDCProfile.FPSLimitValue}" : "Off";
 
-                    // AutoTDP
-                    GameACDCProfileAutoTDPLabel.Visibility = autoTDPVisibility;
-                    GameACProfileAutoTDPText.Visibility = autoTDPVisibility;
-                    GameDCProfileAutoTDPText.Visibility = autoTDPVisibility;
-                    GameACProfileAutoTDPText.Text = gameACProfile.AutoTDPEnabled ? $"{gameACProfile.AutoTDPTargetFPS}fps" : "Off";
-                    GameDCProfileAutoTDPText.Text = gameDCProfile.AutoTDPEnabled ? $"{gameDCProfile.AutoTDPTargetFPS}fps" : "Off";
-
                     // Power Mode
-                    GameACDCProfilePowerModeLabel.Visibility = powerModeVisibility;
-                    GameACProfilePowerModeText.Visibility = powerModeVisibility;
-                    GameDCProfilePowerModeText.Visibility = powerModeVisibility;
+                    GameACDCProfilePowerModeRow.Visibility = powerModeVisibility;
                     GameACProfilePowerModeText.Text = GetPowerModeShortName(gameACProfile.OSPowerMode);
                     GameDCProfilePowerModeText.Text = GetPowerModeShortName(gameDCProfile.OSPowerMode);
 
                     // AMD Features
-                    GameACDCProfileAMDLabel.Visibility = amdVisibility;
-                    GameACProfileAMDText.Visibility = amdVisibility;
-                    GameDCProfileAMDText.Visibility = amdVisibility;
+                    GameACDCProfileAMDRow.Visibility = amdVisibility;
                     var gameACAmdFeatures = GetAMDFeaturesShortString(gameACProfile);
                     var gameDCAmdFeatures = GetAMDFeaturesShortString(gameDCProfile);
                     GameACProfileAMDText.Text = string.IsNullOrEmpty(gameACAmdFeatures) ? "Off" : gameACAmdFeatures;
                     GameDCProfileAMDText.Text = string.IsNullOrEmpty(gameDCAmdFeatures) ? "Off" : gameDCAmdFeatures;
 
                     // HDR
-                    GameACDCProfileHDRLabel.Visibility = hdrVisibility;
-                    GameACProfileHDRText.Visibility = hdrVisibility;
-                    GameDCProfileHDRText.Visibility = hdrVisibility;
+                    GameACDCProfileHDRRow.Visibility = hdrVisibility;
                     GameACProfileHDRText.Text = gameACProfile.HDREnabled ? "On" : "Off";
                     GameDCProfileHDRText.Text = gameDCProfile.HDREnabled ? "On" : "Off";
 
                     // Resolution
-                    GameACDCProfileResolutionLabel.Visibility = resolutionVisibility;
-                    GameACProfileResolutionText.Visibility = resolutionVisibility;
-                    GameDCProfileResolutionText.Visibility = resolutionVisibility;
+                    GameACDCProfileResolutionRow.Visibility = resolutionVisibility;
                     GameACProfileResolutionText.Text = string.IsNullOrEmpty(gameACProfile.Resolution) ? "Native" : gameACProfile.Resolution;
                     GameDCProfileResolutionText.Text = string.IsNullOrEmpty(gameDCProfile.Resolution) ? "Native" : gameDCProfile.Resolution;
 
-                    // Sticky TDP
-                    GameACDCProfileStickyTDPLabel.Visibility = stickyTDPVisibility;
-                    GameACProfileStickyTDPText.Visibility = stickyTDPVisibility;
-                    GameDCProfileStickyTDPText.Visibility = stickyTDPVisibility;
-                    GameACProfileStickyTDPText.Text = gameACProfile.StickyTDPEnabled ? "On" : "Off";
-                    GameDCProfileStickyTDPText.Text = gameDCProfile.StickyTDPEnabled ? "On" : "Off";
+                    // Refresh Rate
+                    GameACDCProfileRefreshRateRow.Visibility = refreshRateVisibility;
+                    GameACProfileRefreshRateText.Text = GetRefreshRateShortString(gameACProfile);
+                    GameDCProfileRefreshRateText.Text = GetRefreshRateShortString(gameDCProfile);
+
+                    // Overlay Level
+                    GameACDCProfileOverlayLevelRow.Visibility = overlayLevelVisibility;
+                    GameACProfileOverlayLevelText.Text = GetOverlayLevelShortName(gameACProfile.OverlayLevel);
+                    GameDCProfileOverlayLevelText.Text = GetOverlayLevelShortName(gameDCProfile.OverlayLevel);
+
+                    UpdateLastVisibleSeparator(
+                        (GameACDCProfileTDPModeRow, GameACDCProfileTDPModeSeparator),
+                        (GameACDCProfileTDPRow, GameACDCProfileTDPSeparator),
+                        (GameACDCProfileCPUBoostRow, GameACDCProfileCPUBoostSeparator),
+                        (GameACDCProfileCPUEPPRow, GameACDCProfileCPUEPPSeparator),
+                        (GameACDCProfileFPSLimitRow, GameACDCProfileFPSLimitSeparator),
+                        (GameACDCProfilePowerModeRow, GameACDCProfilePowerModeSeparator),
+                        (GameACDCProfileAMDRow, GameACDCProfileAMDSeparator),
+                        (GameACDCProfileHDRRow, GameACDCProfileHDRSeparator),
+                        (GameACDCProfileResolutionRow, GameACDCProfileResolutionSeparator),
+                        (GameACDCProfileRefreshRateRow, GameACDCProfileRefreshRateSeparator),
+                        (GameACDCProfileOverlayLevelRow, GameACDCProfileOverlayLevelSeparator));
                 }
                 else
                 {
                     // Show single game profile - TDP Mode (Legion only)
-                    GameProfileTDPModeLabel.Visibility = tdpModeVisibility;
-                    GameProfileTDPModeText.Visibility = tdpModeVisibility;
+                    GameProfileTDPModeRow.Visibility = tdpModeVisibility;
                     GameProfileTDPModeText.Text = GetProfileTDPModeName(gameProfile);
 
                     // TDP
-                    GameProfileTDPLabel.Visibility = tdpVisibility;
-                    GameProfileTDPText.Visibility = tdpVisibility;
+                    GameProfileTDPRow.Visibility = tdpVisibility;
                     GameProfileTDPText.Text = $"{gameProfile.TDP}W";
 
-                    // TDP Boost (saved with TDP)
-                    GameProfileTDPBoostLabel.Visibility = tdpVisibility;
-                    GameProfileTDPBoostText.Visibility = tdpVisibility;
-                    GameProfileTDPBoostText.Text = gameProfile.TDPBoostEnabled ? "On" : "Off";
-
                     // CPU Boost
-                    GameProfileCPUBoostLabel.Visibility = cpuBoostVisibility;
-                    GameProfileCPUBoostText.Visibility = cpuBoostVisibility;
+                    GameProfileCPUBoostRow.Visibility = cpuBoostVisibility;
                     GameProfileCPUBoostText.Text = gameProfile.CPUBoost ? "On" : "Off";
 
                     // CPU EPP
-                    GameProfileCPUEPPLabel.Visibility = cpuEPPVisibility;
-                    GameProfileCPUEPPText.Visibility = cpuEPPVisibility;
+                    GameProfileCPUEPPRow.Visibility = cpuEPPVisibility;
                     GameProfileCPUEPPText.Text = $"{gameProfile.CPUEPP}";
 
                     // CPU State
-                    GameProfileCPUStateLabel.Visibility = cpuStateVisibility;
-                    GameProfileCPUStateText.Visibility = cpuStateVisibility;
-                    GameProfileCPUStateText.Text = $"{gameProfile.MinCPUState}-{gameProfile.MaxCPUState}%";
 
                     // FPS Limit
-                    GameProfileFPSLimitLabel.Visibility = fpsLimitVisibility;
-                    GameProfileFPSLimitText.Visibility = fpsLimitVisibility;
+                    GameProfileFPSLimitRow.Visibility = fpsLimitVisibility;
                     GameProfileFPSLimitText.Text = gameProfile.FPSLimitEnabled ? $"{gameProfile.FPSLimitValue}" : "Off";
 
-                    // AutoTDP
-                    GameProfileAutoTDPLabel.Visibility = autoTDPVisibility;
-                    GameProfileAutoTDPText.Visibility = autoTDPVisibility;
-                    GameProfileAutoTDPText.Text = gameProfile.AutoTDPEnabled ? $"{gameProfile.AutoTDPTargetFPS}fps" : "Off";
-
                     // Power Mode
-                    GameProfilePowerModeLabel.Visibility = powerModeVisibility;
-                    GameProfilePowerModeText.Visibility = powerModeVisibility;
+                    GameProfilePowerModeRow.Visibility = powerModeVisibility;
                     GameProfilePowerModeText.Text = GetPowerModeShortName(gameProfile.OSPowerMode);
 
                     // AMD Features
-                    GameProfileAMDLabel.Visibility = amdVisibility;
-                    GameProfileAMDText.Visibility = amdVisibility;
+                    GameProfileAMDRow.Visibility = amdVisibility;
                     var gameAmdFeatures = GetAMDFeaturesShortString(gameProfile);
                     GameProfileAMDText.Text = string.IsNullOrEmpty(gameAmdFeatures) ? "Off" : gameAmdFeatures;
 
                     // HDR
-                    GameProfileHDRLabel.Visibility = hdrVisibility;
-                    GameProfileHDRText.Visibility = hdrVisibility;
+                    GameProfileHDRRow.Visibility = hdrVisibility;
                     GameProfileHDRText.Text = gameProfile.HDREnabled ? "On" : "Off";
 
                     // Resolution
-                    GameProfileResolutionLabel.Visibility = resolutionVisibility;
-                    GameProfileResolutionText.Visibility = resolutionVisibility;
+                    GameProfileResolutionRow.Visibility = resolutionVisibility;
                     GameProfileResolutionText.Text = string.IsNullOrEmpty(gameProfile.Resolution) ? "Native" : gameProfile.Resolution;
 
-                    // Sticky TDP
-                    GameProfileStickyTDPLabel.Visibility = stickyTDPVisibility;
-                    GameProfileStickyTDPText.Visibility = stickyTDPVisibility;
-                    GameProfileStickyTDPText.Text = gameProfile.StickyTDPEnabled ? "On" : "Off";
+                    // Refresh Rate
+                    GameProfileRefreshRateRow.Visibility = refreshRateVisibility;
+                    GameProfileRefreshRateText.Text = GetRefreshRateShortString(gameProfile);
+
+                    // Overlay Level
+                    GameProfileOverlayLevelRow.Visibility = overlayLevelVisibility;
+                    GameProfileOverlayLevelText.Text = GetOverlayLevelShortName(gameProfile.OverlayLevel);
+
+                    UpdateLastVisibleSeparator(
+                        (GameProfileTDPModeRow, GameProfileTDPModeSeparator),
+                        (GameProfileTDPRow, GameProfileTDPSeparator),
+                        (GameProfileCPUBoostRow, GameProfileCPUBoostSeparator),
+                        (GameProfileCPUEPPRow, GameProfileCPUEPPSeparator),
+                        (GameProfileFPSLimitRow, GameProfileFPSLimitSeparator),
+                        (GameProfilePowerModeRow, GameProfilePowerModeSeparator),
+                        (GameProfileAMDRow, GameProfileAMDSeparator),
+                        (GameProfileHDRRow, GameProfileHDRSeparator),
+                        (GameProfileResolutionRow, GameProfileResolutionSeparator),
+                        (GameProfileRefreshRateRow, GameProfileRefreshRateSeparator),
+                        (GameProfileOverlayLevelRow, GameProfileOverlayLevelSeparator));
                 }
             }
 
             // Update all saved game profiles display
             UpdateAllGameProfilesDisplay();
+        }
+
+        /// <summary>
+        /// Given an ordered list of (row, separator) pairs, hides the separator belonging to
+        /// whichever row is actually the LAST VISIBLE one (not necessarily the last in the fixed
+        /// design order, since users can enable/disable individual "Save X" categories per
+        /// profile) and ensures every other visible row's separator stays shown. Each row's
+        /// separator lives inside that row's own collapsible StackPanel, so setting Row.Visibility
+        /// already hides/shows content+separator together — this only needs to correct the single
+        /// trailing separator so the box doesn't end with a stray line flush against the padding.
+        /// </summary>
+        private static void UpdateLastVisibleSeparator(params (FrameworkElement Row, Border Separator)[] rows)
+        {
+            Border lastVisibleSeparator = null;
+            foreach (var (row, separator) in rows)
+            {
+                if (row == null || separator == null) continue;
+                if (row.Visibility != Visibility.Visible) continue;
+
+                if (lastVisibleSeparator != null) lastVisibleSeparator.Visibility = Visibility.Visible;
+                separator.Visibility = Visibility.Collapsed;
+                lastVisibleSeparator = separator;
+            }
         }
 
         private static string GetPowerModeShortName(int mode)
@@ -360,6 +347,23 @@ namespace XboxGamingBar
                 case 1: return "Balanced";
                 case 2: return "Performance";
                 default: return "Balanced";
+            }
+        }
+
+        private static string GetRefreshRateShortString(PerformanceProfile profile)
+        {
+            return profile.RefreshRate.HasValue ? $"{profile.RefreshRate.Value} Hz" : "Auto";
+        }
+
+        private static string GetOverlayLevelShortName(int level)
+        {
+            switch (level)
+            {
+                case 0: return "Off";
+                case 1: return "Basic";
+                case 2: return "Detailed";
+                case 3: return "Full";
+                default: return "Off";
             }
         }
 
@@ -380,19 +384,6 @@ namespace XboxGamingBar
         /// </summary>
         private string GetProfileTDPModeName(PerformanceProfile profile)
         {
-            // If TDPModeIndex is set and we have custom presets, use the preset name
-            if (profile.TDPModeIndex >= 0 && useCustomTDPPresets && tdpPresets != null)
-            {
-                if (profile.TDPModeIndex < tdpPresets.Count)
-                {
-                    return tdpPresets[profile.TDPModeIndex].Name;
-                }
-                else if (profile.TDPModeIndex == tdpPresets.Count)
-                {
-                    return "Custom"; // The actual Custom mode after all presets
-                }
-            }
-            // Fall back to legacy mode name
             return GetLegionModeShortName(profile.LegionPerformanceMode);
         }
 
@@ -402,15 +393,10 @@ namespace XboxGamingBar
         /// </summary>
         private int GetProfileTDPModeIndex(PerformanceProfile profile)
         {
-            // If TDPModeIndex is set, use it directly (for custom presets)
-            if (profile.TDPModeIndex >= 0)
+            // If TDPModeIndex is set, use it directly
+            if (profile.TDPModeIndex >= 0 && profile.TDPModeIndex <= 3)
             {
-                // Validate the index is still valid with current preset configuration
-                int maxIndex = useCustomTDPPresets && tdpPresets != null ? tdpPresets.Count : 3;
-                if (profile.TDPModeIndex <= maxIndex)
-                {
-                    return profile.TDPModeIndex;
-                }
+                return profile.TDPModeIndex;
             }
             // Fall back to legacy: convert LegionPerformanceMode to index
             int[] modeValues = { 1, 2, 3, 255 }; // Quiet, Balanced, Performance, Custom
@@ -418,5 +404,22 @@ namespace XboxGamingBar
             return index >= 0 ? index : 1; // Default to Balanced if not found
         }
 
+
+        /// <summary>
+        /// Gets a short string representation of enabled AMD features for display in profile cards
+        /// </summary>
+        private static string GetAMDFeaturesShortString(PerformanceProfile profile)
+        {
+            var features = new List<string>();
+
+            if (profile.FluidMotionFrames) features.Add("AFMF");
+            if (profile.RadeonSuperResolution) features.Add("RSR");
+            if (profile.ImageSharpening) features.Add("RIS");
+            if (profile.RadeonAntiLag) features.Add("AL");
+            if (profile.RadeonBoost) features.Add("Boost");
+            if (profile.RadeonChill) features.Add("Chill");
+
+            return string.Join(",", features);
+        }
     }
 }

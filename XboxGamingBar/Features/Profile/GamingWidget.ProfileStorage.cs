@@ -1,4 +1,4 @@
-using Microsoft.Gaming.XboxGameBar;
+﻿using Microsoft.Gaming.XboxGameBar;
 using Microsoft.Gaming.XboxGameBar.Input;
 using Microsoft.UI.Xaml.Controls;
 using NLog;
@@ -59,8 +59,6 @@ namespace XboxGamingBar
             container.Values["TDP"] = profile.TDP;
             container.Values["CPUBoost"] = profile.CPUBoost;
             container.Values["CPUEPP"] = profile.CPUEPP;
-            container.Values["MaxCPUState"] = profile.MaxCPUState;
-            container.Values["MinCPUState"] = profile.MinCPUState;
             container.Values["FluidMotionFrames"] = profile.FluidMotionFrames;
             container.Values["RadeonSuperResolution"] = profile.RadeonSuperResolution;
             container.Values["RadeonSuperResolutionSharpness"] = profile.RadeonSuperResolutionSharpness;
@@ -95,7 +93,6 @@ namespace XboxGamingBar
             container.Values["StickyTDPEnabled"] = profile.StickyTDPEnabled;
             container.Values["StickyTDPInterval"] = profile.StickyTDPInterval;
             container.Values["OverlayLevel"] = profile.OverlayLevel;
-            container.Values["CPUAffinity"] = profile.CPUAffinity;
             // Last-saved timestamp drives the "modified Nm/h/d ago" line on the profile
             // card and the "Last Modified" sort option in the Profiles tab. Stored as
             // UTC ticks so it survives timezone changes.
@@ -117,8 +114,6 @@ namespace XboxGamingBar
                 // Use current system values as defaults for EPP and CPU Boost (synced from helper)
                 profile.CPUBoost = container.Values.ContainsKey("CPUBoost") ? (bool)container.Values["CPUBoost"] : (cpuBoost?.Value ?? false);
                 profile.CPUEPP = container.Values.ContainsKey("CPUEPP") ? (double)container.Values["CPUEPP"] : (cpuEPP?.Value ?? 80);
-                profile.MaxCPUState = container.Values.ContainsKey("MaxCPUState") ? (int)container.Values["MaxCPUState"] : 100;
-                profile.MinCPUState = container.Values.ContainsKey("MinCPUState") ? (int)container.Values["MinCPUState"] : 5;
                 profile.FluidMotionFrames = container.Values.ContainsKey("FluidMotionFrames") ? (bool)container.Values["FluidMotionFrames"] : false;
                 profile.RadeonSuperResolution = container.Values.ContainsKey("RadeonSuperResolution") ? (bool)container.Values["RadeonSuperResolution"] : false;
                 profile.RadeonSuperResolutionSharpness = container.Values.ContainsKey("RadeonSuperResolutionSharpness") ? (double)container.Values["RadeonSuperResolutionSharpness"] : 80;
@@ -156,7 +151,6 @@ namespace XboxGamingBar
                 profile.StickyTDPEnabled = container.Values.ContainsKey("StickyTDPEnabled") ? (bool)container.Values["StickyTDPEnabled"] : true;
                 profile.StickyTDPInterval = container.Values.ContainsKey("StickyTDPInterval") ? (int)container.Values["StickyTDPInterval"] : 5;
                 profile.OverlayLevel = container.Values.ContainsKey("OverlayLevel") ? (int)container.Values["OverlayLevel"] : 0;
-                profile.CPUAffinity = container.Values.ContainsKey("CPUAffinity") ? (string)container.Values["CPUAffinity"] : "";
 
                 Logger.Info($"Loaded {profileName} profile from storage");
             }

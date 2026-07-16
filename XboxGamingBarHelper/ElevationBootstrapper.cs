@@ -23,6 +23,21 @@ namespace XboxGamingBarHelper
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
         private const int ProcessStartTimeoutMs = 5000;
 
+        // Same mutex name Program.cs's --setup path uses (SetupInProgressMutexName) to tell
+        // the freshly-spawned deployed helper's AnotherHelperIsAlive() peer-check "the other
+        // XboxGamingBarHelper.exe you're seeing is a relaunch bootstrapper, not a duplicate -
+        // don't wait for it to exit". Without this, a still-alive bootstrap process here raced
+        // against RunTaskNow()'s own 5s mutex-wait below: the new helper would see this process
+        // as a peer and wait up to 5s for IT to exit, while this process was simultaneously
+        // waiting up to 5s for the new helper's mutex - both timers expire around the same
+        // moment and BOTH processes give up and exit, leaving no helper running at all. Only
+        // hit when the helper genuinely wasn't running already (so this path actually has to
+        // call RunTaskNow), which in practice only happens right after killing the helper - a
+        // cold boot's ONLOGON task trigger (or the --setup flow's own copy of this mutex)
+        // starts the helper before the widget ever gets here.
+        private const string RelaunchInProgressMutexName = "Global\\GoTweaks_SetupInProgress";
+        private static Mutex relaunchInProgressMutex;
+
         /// <summary>
         /// Ensures the helper is running with admin privileges.
         /// Returns true if execution should continue, false if we're relaunching elevated.
@@ -178,6 +193,14 @@ namespace XboxGamingBarHelper
 
                 // Try to launch via scheduled task (no UAC)
                 Logger.Info("Deployment and task are ready, launching via scheduled task (no UAC)...");
+                try
+                {
+                    relaunchInProgressMutex = new Mutex(true, RelaunchInProgressMutexName, out _);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warn($"Could not acquire relaunch-in-progress mutex: {ex.Message} — continuing anyway");
+                }
                 if (ScheduledTaskService.RunTaskNow())
                 {
                     Logger.Info("Launched via scheduled task, exiting current instance");

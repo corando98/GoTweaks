@@ -1,4 +1,4 @@
-using NLog;
+﻿using NLog;
 using Shared.Constants;
 using Shared.Data;
 using Shared.IPC;
@@ -50,7 +50,6 @@ namespace XboxGamingBarHelper
             public static bool TDP = true;
             public static bool CPUBoost = true;
             public static bool CPUEPP = true;
-            public static bool CPUState = true;
             public static bool AMDFeatures = false;
             public static bool FPSLimit = true;
             public static bool AutoTDP = true;
@@ -60,7 +59,6 @@ namespace XboxGamingBarHelper
             public static bool RefreshRate = false;
             public static bool StickyTDP = false;
             public static bool OverlayLevel = false;
-            public static bool CPUAffinity = false;
             public static bool NintendoLayout = false;
             public static bool Vibration = false;
             public static bool Lighting = false;
@@ -76,7 +74,6 @@ namespace XboxGamingBarHelper
                 if (cfg.TryGetValue("TDP", out var v1)) ProfileSaveFlagsState.TDP = v1;
                 if (cfg.TryGetValue("CPUBoost", out var v2)) ProfileSaveFlagsState.CPUBoost = v2;
                 if (cfg.TryGetValue("CPUEPP", out var v3)) ProfileSaveFlagsState.CPUEPP = v3;
-                if (cfg.TryGetValue("CPUState", out var v4)) ProfileSaveFlagsState.CPUState = v4;
                 if (cfg.TryGetValue("AMDFeatures", out var v5)) ProfileSaveFlagsState.AMDFeatures = v5;
                 if (cfg.TryGetValue("FPSLimit", out var v6)) ProfileSaveFlagsState.FPSLimit = v6;
                 if (cfg.TryGetValue("AutoTDP", out var v7)) ProfileSaveFlagsState.AutoTDP = v7;
@@ -86,14 +83,13 @@ namespace XboxGamingBarHelper
                 if (cfg.TryGetValue("RefreshRate", out var v11)) ProfileSaveFlagsState.RefreshRate = v11;
                 if (cfg.TryGetValue("StickyTDP", out var v12)) ProfileSaveFlagsState.StickyTDP = v12;
                 if (cfg.TryGetValue("OverlayLevel", out var v13)) ProfileSaveFlagsState.OverlayLevel = v13;
-                if (cfg.TryGetValue("CPUAffinity", out var v14)) ProfileSaveFlagsState.CPUAffinity = v14;
                 if (cfg.TryGetValue("NintendoLayout", out var v15)) ProfileSaveFlagsState.NintendoLayout = v15;
                 if (cfg.TryGetValue("Vibration", out var v16)) ProfileSaveFlagsState.Vibration = v16;
                 if (cfg.TryGetValue("Lighting", out var v17)) ProfileSaveFlagsState.Lighting = v17;
                 if (cfg.TryGetValue("ButtonMappings", out var v18)) ProfileSaveFlagsState.ButtonMappings = v18;
                 Logger.Info("Applied ProfileSaveFlags from widget "
                     + $"(TDP={ProfileSaveFlagsState.TDP}, CPUBoost={ProfileSaveFlagsState.CPUBoost}, "
-                    + $"CPUEPP={ProfileSaveFlagsState.CPUEPP}, CPUState={ProfileSaveFlagsState.CPUState}, "
+                    + $"CPUEPP={ProfileSaveFlagsState.CPUEPP}, "
                     + $"AutoTDP={ProfileSaveFlagsState.AutoTDP}, NintendoLayout={ProfileSaveFlagsState.NintendoLayout}, "
                     + $"Vibration={ProfileSaveFlagsState.Vibration}, Lighting={ProfileSaveFlagsState.Lighting}, "
                     + $"ButtonMappings={ProfileSaveFlagsState.ButtonMappings})");
@@ -480,8 +476,6 @@ namespace XboxGamingBarHelper
             performanceManager.TDPBoostEnabled.SetValue(profileManager.GlobalProfile.TDPBoostEnabled);
             powerManager.CPUBoost.SetValue(profileManager.GlobalProfile.CPUBoost);
             powerManager.CPUEPP.SetValue(profileManager.GlobalProfile.CPUEPP);
-            powerManager.MaxCPUState.SetValue(profileManager.GlobalProfile.MaxCPUState);
-            powerManager.MinCPUState.SetValue(profileManager.GlobalProfile.MinCPUState);
             profileManager.PerGameProfile.SetValue(false);
 
             // Apply Legion controller settings from global profile
@@ -555,8 +549,6 @@ namespace XboxGamingBarHelper
                         performanceManager.TDPBoostEnabled.SetValue(profileManager.CurrentProfile.TDPBoostEnabled);
                         powerManager.CPUBoost.SetValue(profileManager.CurrentProfile.CPUBoost);
                         powerManager.CPUEPP.SetValue(profileManager.CurrentProfile.CPUEPP);
-                        powerManager.MaxCPUState.SetValue(profileManager.CurrentProfile.MaxCPUState);
-                        powerManager.MinCPUState.SetValue(profileManager.CurrentProfile.MinCPUState);
                         profileManager.PerGameProfile.SetValue(profileManager.CurrentProfile.Use);
 
                         // Apply Legion controller settings from profile (both global and per-game)
@@ -651,8 +643,6 @@ namespace XboxGamingBarHelper
                     performanceManager.TDPBoostEnabled.SetValue(gameProfile.TDPBoostEnabled);
                     powerManager.CPUBoost.SetValue(gameProfile.CPUBoost);
                     powerManager.CPUEPP.SetValue(gameProfile.CPUEPP);
-                    powerManager.MaxCPUState.SetValue(gameProfile.MaxCPUState);
-                    powerManager.MinCPUState.SetValue(gameProfile.MinCPUState);
                 }
                 else
                 {
@@ -832,8 +822,6 @@ namespace XboxGamingBarHelper
                             performanceManager.TDPBoostEnabled.SetValue(runningGameProfile.TDPBoostEnabled);
                             powerManager.CPUBoost.SetValue(runningGameProfile.CPUBoost);
                             powerManager.CPUEPP.SetValue(runningGameProfile.CPUEPP);
-                            powerManager.MaxCPUState.SetValue(runningGameProfile.MaxCPUState);
-                            powerManager.MinCPUState.SetValue(runningGameProfile.MinCPUState);
 
                             if (legionManager != null)
                             {
@@ -862,9 +850,6 @@ namespace XboxGamingBarHelper
                         Logger.Info($"Previous game had per-game profile active, restoring global profile for {systemManager.RunningGame.GameId}");
                         RestoreGlobalProfileSettings();
                     }
-
-                    // Apply CPU core affinity to the new game
-                    systemManager.ApplyAffinityToRunningGame();
 
                     // Switch Lossless Scaling profile for the detected game
                     if (losslessScalingManager.LosslessScalingInstalled.Value)

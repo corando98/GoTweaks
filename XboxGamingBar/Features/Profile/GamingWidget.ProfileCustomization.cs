@@ -1,4 +1,4 @@
-using Microsoft.Gaming.XboxGameBar;
+﻿using Microsoft.Gaming.XboxGameBar;
 using Microsoft.Gaming.XboxGameBar.Input;
 using Microsoft.UI.Xaml.Controls;
 using NLog;
@@ -55,7 +55,6 @@ namespace XboxGamingBar
                 _saveTDP = settings.Values.ContainsKey("ProfileSaveTDP") ? (bool)settings.Values["ProfileSaveTDP"] : true;
                 _saveCPUBoost = settings.Values.ContainsKey("ProfileSaveCPUBoost") ? (bool)settings.Values["ProfileSaveCPUBoost"] : true;
                 _saveCPUEPP = settings.Values.ContainsKey("ProfileSaveCPUEPP") ? (bool)settings.Values["ProfileSaveCPUEPP"] : true;
-                _saveCPUState = settings.Values.ContainsKey("ProfileSaveCPUState") ? (bool)settings.Values["ProfileSaveCPUState"] : true;
                 _saveAMDFeatures = settings.Values.ContainsKey("ProfileSaveAMDFeatures") ? (bool)settings.Values["ProfileSaveAMDFeatures"] : false;
                 _saveFPSLimit = settings.Values.ContainsKey("ProfileSaveFPSLimit") ? (bool)settings.Values["ProfileSaveFPSLimit"] : true;
                 _saveAutoTDP = settings.Values.ContainsKey("ProfileSaveAutoTDP") ? (bool)settings.Values["ProfileSaveAutoTDP"] : true;
@@ -90,7 +89,6 @@ namespace XboxGamingBar
                 _saveRefreshRate = settings.Values.ContainsKey("ProfileSaveRefreshRate") ? (bool)settings.Values["ProfileSaveRefreshRate"] : false;
                 _saveStickyTDP = settings.Values.ContainsKey("ProfileSaveStickyTDP") ? (bool)settings.Values["ProfileSaveStickyTDP"] : false;
                 _saveOverlayLevel = settings.Values.ContainsKey("ProfileSaveOverlayLevel") ? (bool)settings.Values["ProfileSaveOverlayLevel"] : false;
-                _saveCPUAffinity = settings.Values.ContainsKey("ProfileSaveCPUAffinity") ? (bool)settings.Values["ProfileSaveCPUAffinity"] : false;
                 _saveNintendoLayout = settings.Values.ContainsKey("ProfileSaveNintendoLayout") ? (bool)settings.Values["ProfileSaveNintendoLayout"] : false;
                 _saveVibration = settings.Values.ContainsKey("ProfileSaveVibration") ? (bool)settings.Values["ProfileSaveVibration"] : false;
                 _saveLighting = settings.Values.ContainsKey("ProfileSaveLighting") ? (bool)settings.Values["ProfileSaveLighting"] : false;
@@ -100,7 +98,6 @@ namespace XboxGamingBar
                 if (ProfileSaveTDPCheckBox != null) ProfileSaveTDPCheckBox.IsChecked = _saveTDP;
                 if (ProfileSaveCPUBoostCheckBox != null) ProfileSaveCPUBoostCheckBox.IsChecked = _saveCPUBoost;
                 if (ProfileSaveCPUEPPCheckBox != null) ProfileSaveCPUEPPCheckBox.IsChecked = _saveCPUEPP;
-                if (ProfileSaveCPUStateCheckBox != null) ProfileSaveCPUStateCheckBox.IsChecked = _saveCPUState;
                 if (ProfileSaveAMDFeaturesCheckBox != null) ProfileSaveAMDFeaturesCheckBox.IsChecked = _saveAMDFeatures;
                 if (ProfileSaveFPSLimitCheckBox != null) ProfileSaveFPSLimitCheckBox.IsChecked = _saveFPSLimit;
                 if (ProfileSaveAutoTDPCheckBox != null) ProfileSaveAutoTDPCheckBox.IsChecked = _saveAutoTDP;
@@ -110,7 +107,6 @@ namespace XboxGamingBar
                 if (ProfileSaveRefreshRateCheckBox != null) ProfileSaveRefreshRateCheckBox.IsChecked = _saveRefreshRate;
                 if (ProfileSaveStickyTDPCheckBox != null) ProfileSaveStickyTDPCheckBox.IsChecked = _saveStickyTDP;
                 if (ProfileSaveOverlayLevelCheckBox != null) ProfileSaveOverlayLevelCheckBox.IsChecked = _saveOverlayLevel;
-                if (ProfileSaveCPUAffinityCheckBox != null) ProfileSaveCPUAffinityCheckBox.IsChecked = _saveCPUAffinity;
                 if (ProfileSaveNintendoLayoutCheckBox != null) ProfileSaveNintendoLayoutCheckBox.IsChecked = _saveNintendoLayout;
                 if (ProfileSaveVibrationCheckBox != null) ProfileSaveVibrationCheckBox.IsChecked = _saveVibration;
                 if (ProfileSaveLightingCheckBox != null) ProfileSaveLightingCheckBox.IsChecked = _saveLighting;
@@ -130,7 +126,6 @@ namespace XboxGamingBar
             settings.Values["ProfileSaveTDP"] = ProfileSaveTDPCheckBox?.IsChecked ?? true;
             settings.Values["ProfileSaveCPUBoost"] = ProfileSaveCPUBoostCheckBox?.IsChecked ?? true;
             settings.Values["ProfileSaveCPUEPP"] = ProfileSaveCPUEPPCheckBox?.IsChecked ?? true;
-            settings.Values["ProfileSaveCPUState"] = ProfileSaveCPUStateCheckBox?.IsChecked ?? true;
             settings.Values["ProfileSaveAMDFeatures"] = ProfileSaveAMDFeaturesCheckBox?.IsChecked ?? false;
             settings.Values["ProfileSaveFPSLimit"] = ProfileSaveFPSLimitCheckBox?.IsChecked ?? true;
             settings.Values["ProfileSaveAutoTDP"] = ProfileSaveAutoTDPCheckBox?.IsChecked ?? true;
@@ -140,22 +135,10 @@ namespace XboxGamingBar
             settings.Values["ProfileSaveRefreshRate"] = ProfileSaveRefreshRateCheckBox?.IsChecked ?? false;
             settings.Values["ProfileSaveStickyTDP"] = ProfileSaveStickyTDPCheckBox?.IsChecked ?? false;
             settings.Values["ProfileSaveOverlayLevel"] = ProfileSaveOverlayLevelCheckBox?.IsChecked ?? false;
-            settings.Values["ProfileSaveCPUAffinity"] = ProfileSaveCPUAffinityCheckBox?.IsChecked ?? false;
             settings.Values["ProfileSaveNintendoLayout"] = ProfileSaveNintendoLayoutCheckBox?.IsChecked ?? false;
             settings.Values["ProfileSaveVibration"] = ProfileSaveVibrationCheckBox?.IsChecked ?? false;
             settings.Values["ProfileSaveLighting"] = ProfileSaveLightingCheckBox?.IsChecked ?? false;
             settings.Values["ProfileSaveButtonMappings"] = ProfileSaveButtonMappingsCheckBox?.IsChecked ?? false;
-        }
-
-        private void ProfileSettingCheckBox_Changed(object sender, RoutedEventArgs e)
-        {
-            if (isLoadingProfileSettings) return;
-
-            // Update backing fields from UI checkboxes
-            SyncProfileSettingsBackingFields();
-            SaveProfileCustomizationSettings();
-            SendProfileSaveFlagsToHelper();
-            Logger.Info($"Profile customization settings updated");
         }
 
         private void ProfileSettingsCheckBox_Changed(object sender, RoutedEventArgs e)
@@ -166,6 +149,10 @@ namespace XboxGamingBar
             SyncProfileSettingsBackingFields();
             SaveProfileCustomizationSettings();
             SendProfileSaveFlagsToHelper();
+            // Re-render the profile tables immediately so the row visibility (which
+            // categories are shown/hidden) reflects the new Save* selection without
+            // requiring the widget to be closed and reopened.
+            UpdateProfileDisplay();
             Logger.Info($"Profile customization settings updated");
         }
 
@@ -185,7 +172,6 @@ namespace XboxGamingBar
                 jsonObj["TDP"] = Windows.Data.Json.JsonValue.CreateBooleanValue(_saveTDP);
                 jsonObj["CPUBoost"] = Windows.Data.Json.JsonValue.CreateBooleanValue(_saveCPUBoost);
                 jsonObj["CPUEPP"] = Windows.Data.Json.JsonValue.CreateBooleanValue(_saveCPUEPP);
-                jsonObj["CPUState"] = Windows.Data.Json.JsonValue.CreateBooleanValue(_saveCPUState);
                 jsonObj["AMDFeatures"] = Windows.Data.Json.JsonValue.CreateBooleanValue(_saveAMDFeatures);
                 jsonObj["FPSLimit"] = Windows.Data.Json.JsonValue.CreateBooleanValue(_saveFPSLimit);
                 jsonObj["AutoTDP"] = Windows.Data.Json.JsonValue.CreateBooleanValue(_saveAutoTDP);
@@ -195,7 +181,6 @@ namespace XboxGamingBar
                 jsonObj["RefreshRate"] = Windows.Data.Json.JsonValue.CreateBooleanValue(_saveRefreshRate);
                 jsonObj["StickyTDP"] = Windows.Data.Json.JsonValue.CreateBooleanValue(_saveStickyTDP);
                 jsonObj["OverlayLevel"] = Windows.Data.Json.JsonValue.CreateBooleanValue(_saveOverlayLevel);
-                jsonObj["CPUAffinity"] = Windows.Data.Json.JsonValue.CreateBooleanValue(_saveCPUAffinity);
                 jsonObj["NintendoLayout"] = Windows.Data.Json.JsonValue.CreateBooleanValue(_saveNintendoLayout);
                 jsonObj["Vibration"] = Windows.Data.Json.JsonValue.CreateBooleanValue(_saveVibration);
                 jsonObj["Lighting"] = Windows.Data.Json.JsonValue.CreateBooleanValue(_saveLighting);
@@ -225,7 +210,6 @@ namespace XboxGamingBar
             _saveTDP = ProfileSaveTDPCheckBox?.IsChecked ?? true;
             _saveCPUBoost = ProfileSaveCPUBoostCheckBox?.IsChecked ?? true;
             _saveCPUEPP = ProfileSaveCPUEPPCheckBox?.IsChecked ?? true;
-            _saveCPUState = ProfileSaveCPUStateCheckBox?.IsChecked ?? true;
             _saveAMDFeatures = ProfileSaveAMDFeaturesCheckBox?.IsChecked ?? false;
             _saveFPSLimit = ProfileSaveFPSLimitCheckBox?.IsChecked ?? true;
             _saveAutoTDP = ProfileSaveAutoTDPCheckBox?.IsChecked ?? true;
@@ -235,7 +219,6 @@ namespace XboxGamingBar
             _saveRefreshRate = ProfileSaveRefreshRateCheckBox?.IsChecked ?? false;
             _saveStickyTDP = ProfileSaveStickyTDPCheckBox?.IsChecked ?? false;
             _saveOverlayLevel = ProfileSaveOverlayLevelCheckBox?.IsChecked ?? false;
-            _saveCPUAffinity = ProfileSaveCPUAffinityCheckBox?.IsChecked ?? false;
             _saveNintendoLayout = ProfileSaveNintendoLayoutCheckBox?.IsChecked ?? false;
             _saveVibration = ProfileSaveVibrationCheckBox?.IsChecked ?? false;
             _saveLighting = ProfileSaveLightingCheckBox?.IsChecked ?? false;

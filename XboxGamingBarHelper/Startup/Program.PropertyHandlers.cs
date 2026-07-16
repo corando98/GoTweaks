@@ -1,4 +1,4 @@
-using NLog;
+﻿using NLog;
 using Shared.Constants;
 using Shared.Data;
 using Shared.IPC;
@@ -40,33 +40,13 @@ namespace XboxGamingBarHelper
     internal partial class Program
     {
 
-        private static void CPUState_PropertyChanged(object sender, PropertyChangedEventArgs e)
-        {
-            // Skip during profile application to prevent cross-contamination
-            if (isApplyingProfile)
-            {
-                Logger.Debug($"Skipping CPUState_PropertyChanged - already applying profile");
-                return;
-            }
-
-            // Skip stale widget messages during cooldown after profile switch
-            if (IsInProfileSwitchCooldown())
-            {
-                Logger.Debug($"Skipping CPUState_PropertyChanged - in profile switch cooldown");
-                return;
-            }
-
-            // TEST [ProfileSaveFlags-CPUState]: With ProfileSaveCPUState unchecked, change
-            // Min/Max CPU State sliders in-game. Verify the change goes to GlobalProfile, not
-            // the per-game profile. Pre-flag baseline: always wrote to CurrentProfile.
-            RouteProfileSave(ProfileSaveFlagsState.CPUState, "CPUState",
-                cur => { cur.MaxCPUState = powerManager.MaxCPUState.Value; cur.MinCPUState = powerManager.MinCPUState.Value; },
-                glo => { glo.MaxCPUState = powerManager.MaxCPUState.Value; glo.MinCPUState = powerManager.MinCPUState.Value; });
-        }
-
         private static void SystemManager_ResumeFromSleep(object sender)
         {
             Logger.Info("System resumed from sleep/hibernation, refreshing hardware sensors and re-applying profile.");
+
+            // Re-arm the idle-to-hibernate monitor so a fresh sleep/hibernate cycle doesn't
+            // immediately re-trigger on stale pre-sleep idle timestamps.
+            ResetHibernateTimeoutAfterResume();
 
             // Reset RTSS OSD connection (can become stale after hibernation, causing frozen OSD values)
             rtssManager?.ResetRTSSConnection();
@@ -79,7 +59,7 @@ namespace XboxGamingBarHelper
             // until three tick-level write failures trigger the self-heal.
             legionManager?.RecoverEcFanOverrideAfterResume();
 
-            // Re-apply current profile settings (TDP, CPU boost, EPP, CPU state)
+            // Re-apply current profile settings (TDP, CPU boost, EPP)
             CurrentProfile_PropertyChanged(sender, null);
         }
 
@@ -139,17 +119,6 @@ namespace XboxGamingBarHelper
                 glo => glo.CPUEPP = powerManager.CPUEPP);
         }
 
-        private static void AutoHibernateEnabled_PropertyChanged(object sender, PropertyChangedEventArgs e)
-        {
-            if (settingsManager?.AutoHibernateEnabled == null) return;
-            SetAutoHibernateEnabled(settingsManager.AutoHibernateEnabled.Value);
-        }
-
-        private static void AutoHibernateIdleMinutes_PropertyChanged(object sender, PropertyChangedEventArgs e)
-        {
-            if (settingsManager?.AutoHibernateIdleMinutes == null) return;
-            UpdateAutoHibernateIdleTimeout(settingsManager.AutoHibernateIdleMinutes.Value);
-        }
 
     }
 }

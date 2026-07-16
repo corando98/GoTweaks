@@ -10,8 +10,8 @@
         PerGameProfile,
         CPUBoost,
         CPUEPP,
-        MaxCPUState,
-        MinCPUState,
+        MaxCPUState,             // RETIRED (#103) — do not reuse; enum values are positional wire IDs
+        MinCPUState,             // RETIRED (#103) — do not reuse
         LimitGPUClock,
         GPUClockMin,
         GPUClockMax,
@@ -105,7 +105,7 @@
         TdpMethod_InstallPawnIO,        // string - trigger to install PawnIO (write "install" to trigger)
 
         // Device detection (agnostic, works for any device)
-        DeviceType,                 // int (DeviceType enum) - detected device type (Generic=0, LegionGo=1, LegionGoS=2)
+        DeviceType,                 // int (DeviceType enum) - detected device type (Generic=0, LegionGo=1, LegionGo2=2, LegionGoS=3)
         DeviceManufacturer,         // string - device manufacturer (e.g., "LENOVO", "ASUS", "Valve")
         DeviceModel,                // string - device model identifier (e.g., "83E1", "83N0")
         DeviceSupportsWmiTdp,       // bool - whether device supports WMI-based TDP control
@@ -266,11 +266,11 @@
         TDPBoostSPPT,               // int - additional watts for SPPT (0-10, default 1)
         TDPBoostFPPT,               // int - additional watts for FPPT (0-15, default 3)
 
-        // CPU Core Configuration
-        CPUCoreConfig,              // string - "pCores,eCores,isHybrid" format (e.g., "3,5,true") - helper to widget (detection)
-        CPUCoreActiveConfig,        // string - "activePCores,activeECores" format (e.g., "2,4") - widget to helper (user selection)
-        CoreParkingPercent,         // int - CPMAXCORES percentage (0-100), 100 = all cores active, 50 = half parked
-        ForceParkMode,              // bool - Force affinity on ALL processes (aggressive mode)
+        // CPU Core Configuration — all RETIRED (out of scope for a predictable app); do not reuse
+        CPUCoreConfig,              // RETIRED — was "pCores,eCores,isHybrid" detection push
+        CPUCoreActiveConfig,        // RETIRED — was the affinity selection
+        CoreParkingPercent,         // RETIRED (#103) — do not reuse; was CPMAXCORES percentage
+        ForceParkMode,              // RETIRED — was force-affinity-on-all-processes
 
         // OS Power Mode (Windows 11 power slider)
         OSPowerMode,                // int - 0=Best Power Efficiency, 1=Balanced, 2=Best Performance
@@ -315,11 +315,7 @@
         // writes to GlobalProfile when the matching flag is false, CurrentProfile when true.
         ProfileSaveFlags,               // string - JSON map of flag name -> bool; sent on startup + on checkbox change
 
-        // Power Source Profile Config. Widget is a UWP that's suspended when Game Bar is
-        // dismissed, so AC/DC transitions happening while the user is in a game are dropped.
-        // Helper owns a mirror of the widget's power-plan auto-switch settings and acts on
-        // SystemEvents.PowerModeChanged StatusChange transitions independently.
-        PowerSourceProfileConfig,       // string - JSON: AutoSwitchEnabled, AcGuid, DcGuid
+        PowerSourceProfileConfig,       // RETIRED (#103) — do not reuse; was the power-plan auto-switch config
 
         // Per-state TDP/boost values for the active profile, sent by the widget so the
         // helper can apply them on AC/DC transitions without depending on the widget being
@@ -352,10 +348,12 @@
         // Screen Saver (idle display off for gaming)
         ScreenSaverEnabled,             // bool - when true, helper monitors idle time and triggers Windows screen saver
 
-        // Auto Hibernate (idle-based hibernation)
-        AutoHibernateEnabled,           // bool - when true, helper hibernates system after inactivity timeout
-        AutoHibernateIdleMinutes,       // int - idle minutes before hibernate
-        AutoHibernateMode,              // int - 0=Always, 1=AC Only, 2=DC Only
+        // Auto Hibernate — RETIRED, replaced by SystemHibernateTimeoutAC/DC (Power & Sleep
+        // card); do not reuse, enum values are positional wire IDs. Stored settings are
+        // migrated to the new AC/DC minutes at helper startup.
+        AutoHibernateEnabled,           // RETIRED
+        AutoHibernateIdleMinutes,       // RETIRED
+        AutoHibernateMode,              // RETIRED
 
         // GPD Controller Emulation
         GPDGyroSource,                  // int - gyro source (0=Internal Handheld, 1=Controller Internal)
@@ -551,5 +549,34 @@
         // friendly name). Not Legion-specific hardware, but only surfaced on Legion Go for now.
         // (Ported from Rayekkk fork d790f307; appended at the END per the positional-wire-id rule.)
         TouchscreenEnabled,             // bool - true = touch input active, false = digitizer disabled
+
+        // Read-only status: is the built-in panel the active display right now (vs. docked with
+        // only an external monitor active)? Gates Resolution / Refresh Rate / Rotation, which only
+        // make sense against the internal panel. Re-read on display-config changes (dock/undock).
+        // (Ported from Rayekkk fork 18787c67; appended at the END per the positional-wire-id rule.)
+        InternalPanelActive,        // bool
+
+        // What the physical power button does, read directly from the active Windows
+        // power plan's Power/Sleep buttons policy (Settings > Power & battery > Power
+        // button behavior) rather than a GoTweaks-owned default. 0=Do nothing, 1=Sleep,
+        // 2=Hibernate, 3=Shut down - matches the raw Windows PowerButtonAction values.
+        // (Ported from Rayekkk fork bf80e735; appended at the END per the positional-wire-id rule.)
+        SystemPowerButtonActionAC,  // int - action while plugged in (AC)
+        SystemPowerButtonActionDC,  // int - action while on battery (DC)
+
+        // Display (screen) off timeout, read directly from Windows' active power plan
+        // (SUB_VIDEO/VIDEOIDLE), separately for AC/DC. Raw value is SECONDS (0 = never),
+        // matching Windows exactly - same "pull from Windows" model as the Power Button.
+        SystemDisplayTimeoutAC,     // int seconds, 0 = never
+        SystemDisplayTimeoutDC,     // int seconds, 0 = never
+
+        // Idle-to-hibernate timeout, in MINUTES (0 = disabled). Entirely GoTweaks-owned:
+        // Windows only exposes a "sleep after X" idle timer via the standard power-plan
+        // API (no reliable "hibernate after X" setting to piggyback on), so the helper
+        // runs its own idle poll (Program.HibernateTimeout.cs) and calls SetSuspendState
+        // directly. Persisted helper-side (LocalSettingsHelper), not read from Windows.
+        // Replaces the old AutoHibernate feature (its enum slots below stay reserved).
+        SystemHibernateTimeoutAC,   // int minutes, 0 = disabled
+        SystemHibernateTimeoutDC,   // int minutes, 0 = disabled
     }
 }

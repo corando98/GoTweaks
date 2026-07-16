@@ -87,9 +87,24 @@ namespace XboxGamingBarHelper.Profile
             var globalProfilePath = GetGlobalProfilePath();
             if (!File.Exists(globalProfilePath))
             {
-                // Create global profile path when it's not previously exist.
-                GlobalProfile = new GameProfile(GameProfile.GLOBAL_PROFILE_NAME, GameProfile.GLOBAL_PROFILE_NAME, true, 25, true, 80, 100, 5, false, globalProfilePath, gameProfiles);
+                // First run: seed the global profile from the system's CURRENT power values
+                // instead of hardcoded defaults. Applying the profile is then a no-op until
+                // the user changes something in GoTweaks — we never overwrite a power plan
+                // the user tuned outside the app (issue #103).
+                bool systemCpuBoost = true;
+                int systemCpuEpp = 80;
+                try
+                {
+                    systemCpuBoost = Power.PowerManager.GetCpuBoostMode(false);
+                    systemCpuEpp = (int)Power.PowerManager.GetEppValue(false);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warn($"Could not read current power values for the initial global profile: {ex.Message}");
+                }
+                GlobalProfile = new GameProfile(GameProfile.GLOBAL_PROFILE_NAME, GameProfile.GLOBAL_PROFILE_NAME, true, 25, systemCpuBoost, systemCpuEpp, false, globalProfilePath, gameProfiles);
                 GlobalProfile.Save();
+                Logger.Info($"Created global profile from current system values: CPUBoost={systemCpuBoost}, EPP={systemCpuEpp}");
             }
             else
             {
@@ -256,7 +271,7 @@ namespace XboxGamingBarHelper.Profile
             }
 
             var newGameProfilePath = Path.Combine(GetGameProfilesFolder(), $"{Path.GetFileNameWithoutExtension(gameId.Path)}{XML_EXTENSION}");
-            var newGameProfile = new GameProfile(gameId.Name, gameId.Path, true, CurrentProfile.TDP, CurrentProfile.CPUBoost, CurrentProfile.CPUEPP, CurrentProfile.MaxCPUState, CurrentProfile.MinCPUState, CurrentProfile.TDPBoostEnabled, newGameProfilePath, gameProfiles);
+            var newGameProfile = new GameProfile(gameId.Name, gameId.Path, true, CurrentProfile.TDP, CurrentProfile.CPUBoost, CurrentProfile.CPUEPP, CurrentProfile.TDPBoostEnabled, newGameProfilePath, gameProfiles);
             newGameProfile.Save();
             Logger.Info($"Add new profile for {gameId.Name} at {newGameProfilePath}.");
             return newGameProfile;

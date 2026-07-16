@@ -1,4 +1,4 @@
-using Microsoft.Gaming.XboxGameBar;
+﻿using Microsoft.Gaming.XboxGameBar;
 using Microsoft.Gaming.XboxGameBar.Input;
 using Microsoft.UI.Xaml.Controls;
 using NLog;
@@ -334,6 +334,7 @@ namespace XboxGamingBar
 
             // Row 3 - Display
             AddTileDefinition("Resolution", "Resolution", "\uE7F8", order: order++);
+            AddTileDefinition("RefreshRate", "Refresh Rate", "\uE72C", order: order++); // Refresh
             AddTileDefinition("Rotation", "Rotation", "\uE7AD", order: order++);
             AddTileDefinition("HDR", "HDR", "\uE706", order: order++);
             AddTileDefinition("Fullscreen", "Fullscreen", "\uE740", order: order++);
@@ -662,27 +663,6 @@ namespace XboxGamingBar
             catch (Exception ex)
             {
                 Logger.Error($"Error saving Quick Settings config: {ex.Message}");
-            }
-        }
-
-        private void CalibrateGyroButton_Click(object sender, Windows.UI.Xaml.RoutedEventArgs e)
-        {
-            try
-            {
-                if (!App.IsConnected) return;
-
-                var request = new Windows.Foundation.Collections.ValueSet
-                {
-                    { "Command", (int)Shared.Enums.Command.Set },
-                    { "Function", (int)Shared.Enums.Function.ControllerEmulationCalibrateGyro },
-                    { "Content", true }
-                };
-                App.PipeClient?.SendValueSet(request);
-                Logger.Info("Sent gyro calibration request to helper");
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Error sending gyro calibration: {ex.Message}");
             }
         }
 

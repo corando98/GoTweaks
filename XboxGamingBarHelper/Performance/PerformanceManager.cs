@@ -1723,6 +1723,22 @@ namespace XboxGamingBarHelper.Performance
                             currentTdp.SetValue(newTdpString);
                             lastTdpString = newTdpString;
                         }
+
+                        // Keep the master TDP property's (Function.TDP) CACHE in sync with the live
+                        // Custom SPL value, so a BatchGet on widget reconnect reflects the true SPL
+                        // instead of a stale value frozen at whatever TDP was last explicitly set to.
+                        // Nothing else does this: dragging the Custom sliders only goes through the
+                        // separate LegionCustomTDPSlow/Fast/Peak wire channels.
+                        // MUST be SetValueSilent, not SetValue: TDPProperty.NotifyPropertyChanged
+                        // unconditionally calls Manager.SetTDP(Value), which in Custom mode re-pushes
+                        // the CACHED customTDPFast/Peak over WMI. SPL changes on every tick of a
+                        // slider drag, so a plain SetValue() here fires that reassert cascade several
+                        // times a second, racing the real SPPT/FPPT writes coming from the boost
+                        // sliders and stomping them back to stale cached values.
+                        if (TDP.Value != slow.Value)
+                        {
+                            TDP.SetValueSilent(slow.Value);
+                        }
                     }
                     else
                     {

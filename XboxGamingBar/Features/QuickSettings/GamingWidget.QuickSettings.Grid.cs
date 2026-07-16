@@ -187,27 +187,6 @@ namespace XboxGamingBar
         }
 
         /// <summary>
-        /// Handle delete button click on sortable tile for custom shortcuts
-        /// </summary>
-        private void SortableTileDelete_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (!(sender is Button button) || !(button.Tag is string tileId))
-                    return;
-
-                if (!qsTileMap.TryGetValue(tileId, out var tile))
-                    return;
-
-                DeleteCustomShortcutTile(tile);
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Error handling sortable tile delete: {ex.Message}");
-            }
-        }
-
-        /// <summary>
         /// Handle tap on sortable tile - select, swap, or toggle visibility
         /// </summary>
         private void SortableTile_Click(object sender, RoutedEventArgs e)
@@ -412,28 +391,6 @@ namespace XboxGamingBar
                 // Don't rebuild main tiles here - they'll update when panel closes
 
                 Logger.Info($"Deleted custom shortcut tile: {tile.Name}");
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Error deleting custom shortcut tile: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// Delete a custom shortcut tile (button click handler - legacy)
-        /// </summary>
-        private void DeleteCustomShortcut_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (sender is Button button && button.Tag is string tileId)
-                {
-                    var tile = qsTileDefinitions.FirstOrDefault(t => t.Id == tileId);
-                    if (tile != null)
-                    {
-                        DeleteCustomShortcutTile(tile);
-                    }
-                }
             }
             catch (Exception ex)
             {

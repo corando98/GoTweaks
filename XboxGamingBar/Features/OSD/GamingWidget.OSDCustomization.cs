@@ -130,7 +130,6 @@ namespace XboxGamingBar
         private bool isLightingExpanded = false;
         private bool isFanCurveExpanded = false;
         private bool isControllerEmulationExpanded = false;
-        private bool isControllerEmulationInputNotesExpanded = false;
         private bool fanCurveGraphInitialized = false;
 
         // Display and OSD settings
@@ -172,11 +171,6 @@ namespace XboxGamingBar
         private bool isCPUExtrasExpanded = false;
         private bool isDebugExpanded = false;
         private bool isLoadingTDPLimits = false;
-        private bool isLoadingPowerPlans = false;
-        private List<PowerPlanItem> availablePowerPlans = new List<PowerPlanItem>();
-        private Guid acPowerPlanGuid = Guid.Empty;
-        private Guid dcPowerPlanGuid = Guid.Empty;
-        private bool powerPlanAutoSwitch = false; // Default to OFF - will be loaded from settings
         private int deviceTDPMin = 4;
         private int deviceTDPMax = 35;
         private DispatcherTimer tdpLimitsDebounceTimer;
@@ -239,13 +233,6 @@ namespace XboxGamingBar
             {
                 isLoadingOSDConfig = false;
             }
-        }
-
-        private void OSDOption_Changed(object sender, RoutedEventArgs e)
-        {
-            if (isLoadingOSDConfig) return;
-
-            SaveCurrentOSDConfig();
         }
 
         /// <summary>
@@ -335,28 +322,6 @@ namespace XboxGamingBar
                     SaveOSDConfigToStorage();
                     SendOSDConfigToHelper();
                 }
-            }
-        }
-
-        private void OSDItemLabelColor_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (isLoadingOSDConfig) return;
-
-            if (sender is ComboBox cb && cb.Tag is string itemId && cb.SelectedItem is ComboBoxItem selected && selected.Tag is string colorTag)
-            {
-                int currentLevel = osdCustomizeLevel;
-                if (!osdItemLabelColors.ContainsKey(currentLevel))
-                {
-                    osdItemLabelColors[currentLevel] = new Dictionary<string, string>();
-                }
-                osdItemLabelColors[currentLevel][itemId] = colorTag;
-
-                // Update the view model to refresh the preview
-                var vm = osdItemViewModels.FirstOrDefault(v => v.Id == itemId);
-                if (vm != null) vm.LabelColor = colorTag;
-
-                SaveOSDConfigToStorage();
-                SendOSDConfigToHelper();
             }
         }
 
@@ -684,82 +649,6 @@ namespace XboxGamingBar
             }
         }
 
-        /* DISABLED: Custom games, blacklist, and current apps features - caused user confusion
-        private async void CustomGameAddButton_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                var picker = new Windows.Storage.Pickers.FileOpenPicker();
-                picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.ComputerFolder;
-                picker.FileTypeFilter.Add(".exe");
-                picker.ViewMode = Windows.Storage.Pickers.PickerViewMode.List;
-
-                var file = await picker.PickSingleFileAsync();
-                if (file != null)
-                {
-                    profileCustomGamePath?.AddPath(file.Path);
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error adding custom game: {ex.Message}");
-            }
-        }
-
-        private void CustomGameRemoveButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is Button button && button.Tag is string path)
-            {
-                profileCustomGamePath?.RemovePath(path);
-            }
-        }
-
-        private void BlacklistRemoveButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is Button button && button.Tag is string path)
-            {
-                profileBlacklistPaths?.RemovePath(path);
-            }
-        }
-
-        private async void ForegroundAppAddCustom_Click(object sender, RoutedEventArgs e)
-        {
-            var button = sender as Button;
-            var path = button?.Tag as string;
-            if (!string.IsNullOrEmpty(path))
-            {
-                profileBlacklistPaths?.RemovePath(path);
-                profileCustomGamePath?.AddPath(path);
-                await System.Threading.Tasks.Task.Delay(200);
-                await foregroundApp?.Sync();
-            }
-        }
-
-        private async void ForegroundAppAddBlacklist_Click(object sender, RoutedEventArgs e)
-        {
-            var button = sender as Button;
-            var path = button?.Tag as string;
-            if (!string.IsNullOrEmpty(path))
-            {
-                profileCustomGamePath?.RemovePath(path);
-                profileBlacklistPaths?.AddPath(path);
-                await System.Threading.Tasks.Task.Delay(200);
-                await foregroundApp?.Sync();
-            }
-        }
-
-        private void UpdateForegroundAppsList(List<string> paths)
-        {
-            // ... method body removed for brevity ...
-        }
-
-        private Border CreateForegroundAppRow(string path)
-        {
-            // ... method body removed for brevity ...
-            return null;
-        }
-        END DISABLED */
-
         private void ButtonRemappingExpandToggle_Click(object sender, RoutedEventArgs e)
         {
             isButtonRemappingExpanded = !isButtonRemappingExpanded;
@@ -946,26 +835,7 @@ namespace XboxGamingBar
                 ControllerEmulationExpandIcon.Glyph = isControllerEmulationExpanded ? "\uE70E" : "\uE70D";
             }
 
-            UpdateControllerEmulationMouseSettingsVisibility();
             UpdateSystemControllerEmulationNavigation();
-        }
-
-        private void ControllerEmulationInputNotesExpandButton_Click(object sender, RoutedEventArgs e)
-        {
-            isControllerEmulationInputNotesExpanded = !isControllerEmulationInputNotesExpanded;
-
-            if (ControllerEmulationInputNotesContent != null)
-            {
-                ControllerEmulationInputNotesContent.Visibility = isControllerEmulationInputNotesExpanded
-                    ? Visibility.Visible
-                    : Visibility.Collapsed;
-            }
-
-            if (ControllerEmulationInputNotesExpandIcon != null)
-            {
-                // E70D = ChevronDown, E70E = ChevronUp
-                ControllerEmulationInputNotesExpandIcon.Glyph = isControllerEmulationInputNotesExpanded ? "\uE70E" : "\uE70D";
-            }
         }
 
         private void TDPSettingsExpandButton_Click(object sender, RoutedEventArgs e)
@@ -1000,73 +870,6 @@ namespace XboxGamingBar
             }
         }
 
-        private void AutoHibernateTimeoutSlider_ValueChanged(object sender, Windows.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
-        {
-            if (AutoHibernateTimeoutValue != null)
-            {
-                AutoHibernateTimeoutValue.Text = $"{(int)e.NewValue} min";
-            }
-        }
-
-        private void ControllerEmulationMouseSensitivitySlider_ValueChanged(object sender, Windows.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
-        {
-            if (ControllerEmulationMouseSensitivityValue != null)
-            {
-                ControllerEmulationMouseSensitivityValue.Text = ((int)e.NewValue).ToString();
-            }
-        }
-
-        private void ControllerEmulationMouseThresholdSlider_ValueChanged(object sender, Windows.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
-        {
-            if (ControllerEmulationMouseThresholdValue != null)
-            {
-                ControllerEmulationMouseThresholdValue.Text = ((int)e.NewValue).ToString();
-            }
-        }
-
-        private void ControllerEmulationMouseGainXSlider_ValueChanged(object sender, Windows.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
-        {
-            if (ControllerEmulationMouseGainXValue != null)
-            {
-                ControllerEmulationMouseGainXValue.Text = ((int)e.NewValue).ToString();
-            }
-        }
-
-        private void ControllerEmulationMouseGainYSlider_ValueChanged(object sender, Windows.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
-        {
-            if (ControllerEmulationMouseGainYValue != null)
-            {
-                ControllerEmulationMouseGainYValue.Text = ((int)e.NewValue).ToString();
-            }
-        }
-
-        private void GyroActivationExpandToggle_Click(object sender, RoutedEventArgs e)
-        {
-            isGyroActivationExpanded = !isGyroActivationExpanded;
-            if (GyroActivationContent != null)
-                GyroActivationContent.Visibility = isGyroActivationExpanded ? Visibility.Visible : Visibility.Collapsed;
-            if (GyroActivationExpandIcon != null)
-                GyroActivationExpandIcon.Glyph = isGyroActivationExpanded ? "\uE70E" : "\uE70D";
-        }
-
-        private void FeaturesExpandToggle_Click(object sender, RoutedEventArgs e)
-        {
-            isFeaturesExpanded = !isFeaturesExpanded;
-            if (FeaturesContent != null)
-                FeaturesContent.Visibility = isFeaturesExpanded ? Visibility.Visible : Visibility.Collapsed;
-            if (FeaturesExpandIcon != null)
-                FeaturesExpandIcon.Glyph = isFeaturesExpanded ? "\uE70E" : "\uE70D";
-        }
-
-        private void JoystickOutputExpandToggle_Click(object sender, RoutedEventArgs e)
-        {
-            isJoystickOutputExpanded = !isJoystickOutputExpanded;
-            if (JoystickOutputContent != null)
-                JoystickOutputContent.Visibility = isJoystickOutputExpanded ? Visibility.Visible : Visibility.Collapsed;
-            if (JoystickOutputExpandIcon != null)
-                JoystickOutputExpandIcon.Glyph = isJoystickOutputExpanded ? "\uE70E" : "\uE70D";
-        }
-
         private void StickSensitivityV2Slider_ValueChanged(object sender, Windows.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
         {
             if (StickSensitivityV2ValueText != null)
@@ -1076,150 +879,6 @@ namespace XboxGamingBar
         // Min/Max gyro speed, Min/Max output, Power curve, Deadzone, Precision speed,
         // Output mix slider value-change handlers all removed in #79 round 5
         // along with the underlying sliders.
-
-        // True while LoadAutoHibernateModeSetting (or any programmatic SelectedIndex assignment) is
-        // mid-flight. Without this, the load assigning SelectedIndex fires SelectionChanged, which
-        // persists + sends — fine when the value matches, but if XAML later re-renders the ComboBox
-        // and the SelectedIndex drops to the default 0 (Always), SelectionChanged fires again and
-        // silently overwrites the user's saved DC Only choice with Always (#88 #3, kayti).
-        private bool _isLoadingAutoHibernateMode;
-
-        private async void AutoHibernateModeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (AutoHibernateModeComboBox?.SelectedItem == null) return;
-            var selected = AutoHibernateModeComboBox.SelectedItem as ComboBoxItem;
-            if (selected?.Tag == null) return;
-
-            // Programmatic SelectedIndex assignment from the load path — skip persist + send. The
-            // ComboBox already matches the saved/sent value, so re-writing it adds no information
-            // and any later spurious reset to default would otherwise clobber the saved choice.
-            if (_isLoadingAutoHibernateMode)
-            {
-                Logger.Info($"AutoHibernateMode SelectionChanged ignored (load-driven): {selected.Content}");
-                return;
-            }
-
-            int mode = int.Parse(selected.Tag.ToString());
-
-            // Persist locally so the AC/DC choice survives reboot (helper does not persist it)
-            try { ApplicationData.Current.LocalSettings.Values["AutoHibernateMode"] = mode; }
-            catch (Exception ex) { Logger.Warn($"Could not persist AutoHibernateMode: {ex.Message}"); }
-
-            try
-            {
-                if (App.IsConnected)
-                {
-                    var request = new Windows.Foundation.Collections.ValueSet
-                    {
-                        { "Command", (int)Shared.Enums.Command.Set },
-                        { "Function", (int)Shared.Enums.Function.AutoHibernateMode },
-                        { "Content", mode }
-                    };
-                    await App.SendMessageAsync(request);
-                    Logger.Info($"Auto Hibernate mode set to: {selected.Content}");
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Error sending Auto Hibernate mode: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// Sends the currently-selected Auto Hibernate AC/DC mode to the helper. Safe to call any
-        /// time; no-op if not connected. Used on pipe-connect to guarantee the helper matches the
-        /// widget's persisted choice (the Loaded-time send happens before the pipe is up). (#88 #3)
-        /// </summary>
-        private async void SendAutoHibernateModeToHelper()
-        {
-            try
-            {
-                if (!App.IsConnected) return;
-                var selected = AutoHibernateModeComboBox?.SelectedItem as ComboBoxItem;
-                if (selected?.Tag == null) return;
-                if (!int.TryParse(selected.Tag.ToString(), out int mode)) return;
-                var request = new Windows.Foundation.Collections.ValueSet
-                {
-                    { "Command", (int)Shared.Enums.Command.Set },
-                    { "Function", (int)Shared.Enums.Function.AutoHibernateMode },
-                    { "Content", mode }
-                };
-                await App.SendMessageAsync(request);
-                Logger.Info($"Re-sent Auto Hibernate mode on connect: {mode}");
-            }
-            catch (Exception ex) { Logger.Warn($"SendAutoHibernateModeToHelper failed: {ex.Message}"); }
-        }
-
-        /// <summary>
-        /// Restores the saved Auto Hibernate power-source mode (Always/AC/DC) on startup.
-        ///
-        /// Prefer the shared settings.json file (the helper's persistence store) over UWP
-        /// LocalSettings: Game Bar tears down widget instances aggressively, and UWP LocalSettings
-        /// writes can be lost if the host suspends/terminates the widget before flush. The helper
-        /// writes the latest mode to settings.json on every pipe-receipt, so that file is always
-        /// the freshest source. (Issue #88 bug #3 follow-up — kayti and diego both repro'd the
-        /// UWP-flush race where the widget read a stale 0 after a Kill Helper test.)
-        /// </summary>
-        private void LoadAutoHibernateModeSetting()
-        {
-            try
-            {
-                int mode = 0;
-                bool found = false;
-
-                // Prefer the JSON file written by the helper — it round-trips reliably across
-                // widget tear-downs (UWP LocalSettings can be buffered and lost when Game Bar
-                // suspends the widget process before the write flushes to disk).
-                try
-                {
-                    string jsonPath = System.IO.Path.Combine(
-                        ApplicationData.Current.LocalFolder.Path, "settings.json");
-                    if (System.IO.File.Exists(jsonPath))
-                    {
-                        string text = System.IO.File.ReadAllText(jsonPath);
-                        if (!string.IsNullOrWhiteSpace(text) && Windows.Data.Json.JsonObject.TryParse(text, out var jsonObj))
-                        {
-                            if (jsonObj.TryGetValue("AutoHibernateMode", out var jv) &&
-                                jv.ValueType == Windows.Data.Json.JsonValueType.Number)
-                            {
-                                mode = (int)jv.GetNumber();
-                                found = true;
-                            }
-                        }
-                    }
-                }
-                catch (Exception ex) { Logger.Debug($"AutoHibernateMode JSON read failed, falling back: {ex.Message}"); }
-
-                if (!found)
-                {
-                    var settings = ApplicationData.Current.LocalSettings;
-                    if (!settings.Values.TryGetValue("AutoHibernateMode", out object val)) return;
-                    mode = Convert.ToInt32(val);
-                }
-                else
-                {
-                    // Mirror the freshly-loaded value back into UWP LocalSettings so any code path
-                    // that reads from LocalSettings (and our own load on next session) sees the
-                    // same authoritative value.
-                    try { ApplicationData.Current.LocalSettings.Values["AutoHibernateMode"] = mode; }
-                    catch { }
-                }
-                if (AutoHibernateModeComboBox != null)
-                {
-                    // Programmatic load — guard so the resulting SelectionChanged doesn't re-persist
-                    // (harmless when the value matches, but XAML can later reset SelectedIndex to 0
-                    // during re-render, which would silently overwrite the saved choice).
-                    _isLoadingAutoHibernateMode = true;
-                    try { AutoHibernateModeComboBox.SelectedIndex = mode; }
-                    finally { _isLoadingAutoHibernateMode = false; }
-                }
-                Logger.Info($"Loaded Auto Hibernate mode setting: {mode}");
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Error loading Auto Hibernate mode setting: {ex.Message}");
-            }
-        }
 
         private void LoadForceDefaultGameProfileSetting()
         {

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Threading.Tasks;
 using Windows.Data.Json;
 using Windows.Foundation.Collections;
@@ -45,9 +45,9 @@ namespace XboxGamingBar
             try
             {
                 if (GoTweaksUpdateOnStartCheckbox != null)
-                    GoTweaksUpdateOnStartCheckbox.IsChecked = GoTweaksCheckOnStart;
+                    GoTweaksUpdateOnStartCheckbox.IsOn = GoTweaksCheckOnStart;
                 if (GoTweaksHideBannerCheckbox != null)
-                    GoTweaksHideBannerCheckbox.IsChecked = GoTweaksHideBanner;
+                    GoTweaksHideBannerCheckbox.IsOn = GoTweaksHideBanner;
                 if (DriverUpdatesUpdateOnStartCheckbox != null)
                     DriverUpdatesUpdateOnStartCheckbox.IsChecked = DriverUpdatesCheckOnStart;
                 if (DriverUpdatesHideBannerCheckbox != null)
@@ -78,7 +78,7 @@ namespace XboxGamingBar
         {
             if (_isLoadingUpdatePreferenceCheckboxes) return;
             if (GoTweaksUpdateOnStartCheckbox == null) return;
-            bool on = GoTweaksUpdateOnStartCheckbox.IsChecked == true;
+            bool on = GoTweaksUpdateOnStartCheckbox.IsOn;
             GoTweaksCheckOnStart = on;
             // Forward to helper so its next startup honours the toggle. Mirrors
             // the DriverCheckOnStart path; helper persists it via
@@ -100,7 +100,7 @@ namespace XboxGamingBar
         {
             if (_isLoadingUpdatePreferenceCheckboxes) return;
             if (GoTweaksHideBannerCheckbox == null) return;
-            GoTweaksHideBanner = GoTweaksHideBannerCheckbox.IsChecked == true;
+            GoTweaksHideBanner = GoTweaksHideBannerCheckbox.IsOn;
             if (QuickGoTweaksUpdateTile != null && GoTweaksHideBanner)
             {
                 QuickGoTweaksUpdateTile.Visibility = Visibility.Collapsed;
@@ -136,11 +136,11 @@ namespace XboxGamingBar
                 await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
                 {
                     if (GoTweaksUpdateOnStartCheckbox != null &&
-                        GoTweaksUpdateOnStartCheckbox.IsChecked != checkOnStart)
-                        GoTweaksUpdateOnStartCheckbox.IsChecked = checkOnStart;
+                        GoTweaksUpdateOnStartCheckbox.IsOn != checkOnStart)
+                        GoTweaksUpdateOnStartCheckbox.IsOn = checkOnStart;
                     if (GoTweaksHideBannerCheckbox != null &&
-                        GoTweaksHideBannerCheckbox.IsChecked != hideBanner)
-                        GoTweaksHideBannerCheckbox.IsChecked = hideBanner;
+                        GoTweaksHideBannerCheckbox.IsOn != hideBanner)
+                        GoTweaksHideBannerCheckbox.IsOn = hideBanner;
 
                     bool showBanner = isUpdate && !string.IsNullOrWhiteSpace(url) && !hideBanner;
                     if (QuickGoTweaksUpdateTile != null)

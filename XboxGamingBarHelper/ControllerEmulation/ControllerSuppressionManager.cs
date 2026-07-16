@@ -84,6 +84,53 @@ namespace XboxGamingBarHelper.ControllerEmulation
 
         public bool IsAvailable => TryGetApiService(out _, logMissing: false) || EnsureCliResolved(logMissing: false);
 
+        // Game launchers that defeat stock-controller hiding when they sit on the
+        // HidHide allowlist: an allowlisted app sees every hidden device, so the
+        // stock pad stays visible (and double-inputs) inside it regardless of what
+        // GoTweaks cloaks. Usually a leftover from DS4Windows-style setups.
+        private static readonly string[] LauncherAllowlistOffenders =
+        {
+            "steam.exe",
+            "epicgameslauncher.exe",
+            "playnite.desktopapp.exe",
+            "playnite.fullscreenapp.exe",
+        };
+
+        /// <summary>
+        /// Returns the file name of a known game launcher found on the HidHide
+        /// allowlist (e.g. "steam.exe"), or null when none is present or the
+        /// allowlist can't be read. Used by SetupHealthService to warn that
+        /// stock-controller hiding won't apply inside that app.
+        /// </summary>
+        public string GetAllowlistedGameLauncher()
+        {
+            try
+            {
+                if (!TryGetApiService(out IHidHideControlService service, logMissing: false))
+                {
+                    return null;
+                }
+
+                foreach (string path in service.ApplicationPaths ?? Array.Empty<string>())
+                {
+                    if (string.IsNullOrWhiteSpace(path)) continue;
+                    string file = System.IO.Path.GetFileName(path.Trim());
+                    foreach (string offender in LauncherAllowlistOffenders)
+                    {
+                        if (string.Equals(file, offender, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return file;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Debug($"GetAllowlistedGameLauncher failed: {ex.Message}");
+            }
+            return null;
+        }
+
         public ControllerSuppressionManager()
         {
             EnsureCliResolved(logMissing: true);

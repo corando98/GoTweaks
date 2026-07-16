@@ -1,4 +1,4 @@
-using Microsoft.Gaming.XboxGameBar;
+﻿using Microsoft.Gaming.XboxGameBar;
 using Microsoft.Gaming.XboxGameBar.Input;
 using Microsoft.UI.Xaml.Controls;
 using NLog;
@@ -232,11 +232,6 @@ namespace XboxGamingBar
             {
                 profile.CPUEPP = CPUEPPSlider.Value;
             }
-            if (SaveCPUState && MaxCPUStateComboBox != null && MinCPUStateComboBox != null)
-            {
-                profile.MaxCPUState = GetSelectedCPUStateValue(MaxCPUStateComboBox);
-                profile.MinCPUState = GetSelectedCPUStateValue(MinCPUStateComboBox);
-            }
             if (SaveAMDFeatures && AMDFluidMotionFrameToggle != null)
             {
                 profile.FluidMotionFrames = AMDFluidMotionFrameToggle.IsOn;
@@ -312,12 +307,6 @@ namespace XboxGamingBar
             {
                 profile.OverlayLevel = PerformanceOverlayComboBox.SelectedIndex;
             }
-            // CPU Affinity
-            if (SaveCPUAffinity)
-            {
-                profile.CPUAffinity = $"{activePCores},{activeECores}";
-            }
-
             // Persist to storage
             Logger.Info($"Saving profile {profileName}: TDP={profile.TDP}W");
             SaveProfileToStorage(profileName, profile);
@@ -336,6 +325,28 @@ namespace XboxGamingBar
 
             // Update profile display
             UpdateProfileDisplay();
+        }
+
+        /// <summary>
+        /// Fired whenever an AMD feature property's value changes, from EITHER direction: a
+        /// genuine widget-side toggle click (already captured via SettingChanged ->
+        /// SaveCurrentSettingsToProfile through the control's own Toggled event) or a helper-
+        /// pushed update reflecting the real driver state (e.g. Anti-Lag/Boost/Chill changed
+        /// externally via AMD Software: Adrenalin Edition, or a hardware read-back on connect).
+        /// The helper-driven direction is deliberately skipped by SettingChanged's
+        /// WidgetSliderProperty.HelperSyncCount guard, to avoid a startup BatchGet flood
+        /// clobbering a freshly-loaded profile - but that also means the profile table's AMD row
+        /// never learns about a driver-side change, and shows stale data (e.g. "Off") forever.
+        /// Deferring one dispatcher tick lets the isApplyingHelperUpdate window close before
+        /// SaveCurrentSettingsToProfile's own guards (isLoadingProfile/isSwitchingProfile/
+        /// isInitialSync) decide whether it's safe to resync the active profile + redraw the table.
+        /// </summary>
+        private void AMDFeatureProperty_ChangedResyncProfile(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+            {
+                SaveCurrentSettingsToProfile(currentProfileName);
+            });
         }
 
         private void LoadProfileSettings(string profileName, bool isExplicitSwitch = false)
@@ -468,21 +479,6 @@ namespace XboxGamingBar
                     {
                         cpuEPP?.SetValue((int)profile.CPUEPP);
                     }
-                }
-                if (SaveCPUState)
-                {
-                    SetCPUStateComboBoxValue(MaxCPUStateComboBox, profile.MaxCPUState);
-                    SetCPUStateComboBoxValue(MinCPUStateComboBox, profile.MinCPUState);
-                    // Send to helper explicitly — skip when helper triggered the switch
-                    if (!isApplyingHelperUpdate)
-                    {
-                        maxCPUState?.SetValue(profile.MaxCPUState);
-                        minCPUState?.SetValue(profile.MinCPUState);
-                    }
-                    // Update CPU Boost enabled state based on Max CPU State.
-                    // allowAutoDisable:false — don't let a transient/stale combo value stomp the
-                    // CPUBoost we just loaded from the profile or push false to the helper (#88 bug #4).
-                    UpdateCPUBoostEnabledState(allowAutoDisable: false);
                 }
                 if (SaveAMDFeatures)
                 {
@@ -937,35 +933,6 @@ namespace XboxGamingBar
                     {
                         PerformanceOverlayComboBox.SelectedIndex = level;
                         // The SelectionChanged handler will update PerformanceOverlaySlider and send to system
-                    }
-                }
-
-                // CPU Affinity
-                if (SaveCPUAffinity && !string.IsNullOrEmpty(profile.CPUAffinity))
-                {
-                    var parts = profile.CPUAffinity.Split(',');
-                    if (parts.Length == 2 && int.TryParse(parts[0], out int pCores) && int.TryParse(parts[1], out int eCores))
-                    {
-                        // Validate that at least one core type is active
-                        if (pCores > 0 || eCores > 0)
-                        {
-                            isLoadingCPUCoreConfig = true;
-                            try
-                            {
-                                activePCores = pCores;
-                                activeECores = eCores;
-                                // Update UI controls
-                                UpdatePCoreComboBox();
-                                UpdateECoreComboBox();
-                            }
-                            finally
-                            {
-                                isLoadingCPUCoreConfig = false;
-                            }
-                            // Send to helper
-                            SendCPUCoreConfigToHelper();
-                            Logger.Info($"Applied CPU Affinity from profile: P={pCores}, E={eCores}");
-                        }
                     }
                 }
 

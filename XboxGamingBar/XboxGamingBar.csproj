@@ -91,8 +91,6 @@
     <Compile Include="Converter\SharpnessPercentStringConverter.cs" />
     <Compile Include="Data\AMD\AMDRadeonAntiLagEnabledProperty.cs" />
     <Compile Include="Data\AMD\AMDRadeonAntiLagSupportedProperty.cs" />
-    <Compile Include="Data\AutoHibernateEnabledProperty.cs" />
-    <Compile Include="Data\AutoHibernateIdleMinutesProperty.cs" />
     <Compile Include="Data\AMD\AMDFluidMotionFrameEnabledProperty.cs" />
     <Compile Include="Data\AMD\AMDFluidMotionFrameSupportedProperty.cs" />
     <Compile Include="Data\AMD\AMDFluidMotionFrameComboProperty.cs" />
@@ -114,10 +112,6 @@
     <Compile Include="Data\Profile\DeleteGameProfileProperty.cs" />
     <Compile Include="Data\Profile\ProfileMatchByExeProperty.cs" />
     <Compile Include="Data\Profile\ProfileGamesOnlyProperty.cs" />
-    <Compile Include="Data\Profile\ProfileCustomGamePathProperty.cs" />
-    <Compile Include="Data\Profile\ProfileBlacklistPathsProperty.cs" />
-    <Compile Include="Data\ForegroundAppProperty.cs" />
-    <Compile Include="Data\UseManufacturerWMIProperty.cs" />
     <Compile Include="Data\TdpMethodProperty.cs" />
     <Compile Include="Data\EmulationBackendProperty.cs" />
     <Compile Include="Data\UsbipInstalledProperty.cs" />
@@ -137,12 +131,8 @@
     <Compile Include="Data\PawnIOAvailableProperty.cs" />
     <Compile Include="Data\PawnIOInstalledProperty.cs" />
     <Compile Include="Data\InstallPawnIOProperty.cs" />
-    <Compile Include="Data\HidHideInstalledProperty.cs" />
-    <Compile Include="Data\InstallHidHideProperty.cs" />
     <Compile Include="Data\CPUBoostProperty.cs" />
     <Compile Include="Data\IsForegroundProperty.cs" />
-    <Compile Include="Data\MaxCPUStateProperty.cs" />
-    <Compile Include="Data\MinCPUStateProperty.cs" />
     <!-- GPU Clock - DISABLED: Not supported by RyzenAdj on this hardware (returns error -1) -->
     <!--<Compile Include="Data\LimitGPUClockProperty.cs" />
     <Compile Include="Data\GPUClockMinProperty.cs" />
@@ -196,7 +186,6 @@
     <Compile Include="Data\GPD\GPDApplyMappingsProperty.cs" />
     <Compile Include="Data\GPD\GPDButtonL4Property.cs" />
     <Compile Include="Data\GPD\GPDButtonR4Property.cs" />
-    <Compile Include="Data\GPD\GPDControllerEmulationProperties.cs" />
     <Compile Include="Data\Controller\ControllerEmulationProperties.cs" />
     <Compile Include="Data\Legion\LegionTouchpadEnabledProperty.cs" />
     <Compile Include="Data\Legion\LegionLightModeProperty.cs" />
@@ -272,6 +261,9 @@
     <Compile Include="Data\ResolutionProperty.cs" />
     <Compile Include="Data\ResolutionsProperty.cs" />
     <Compile Include="Data\DisplayOrientationProperty.cs" />
+    <Compile Include="Data\InternalPanelActiveProperty.cs" />
+    <Compile Include="Data\IntTagComboProperty.cs" />
+    <Compile Include="Data\PowerButtonActionProperty.cs" />
     <Compile Include="Data\HDRSupportedProperty.cs" />
     <Compile Include="Data\HDREnabledProperty.cs" />
     <Compile Include="Data\AdaptiveBrightnessModeProperty.cs" />
@@ -293,13 +285,13 @@
     <Compile Include="Data\Base\WidgetToggleProperty.cs" />
     <Compile Include="Event\BackgroundTaskCancellationEventArgs.cs" />
     <Compile Include="IPC\NamedPipeClient.cs" />
+    <Compile Include="GamingWidget.PowerAndSleep.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
     <Compile Include="GamingWidget.xaml.cs">
       <DependentUpon>GamingWidget.xaml</DependentUpon>
     </Compile>
     <Compile Include="GamingWidget.ViiperStickTrigger.cs">
-      <DependentUpon>GamingWidget.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Features\Performance\GamingWidget.CPUState.cs">
       <DependentUpon>GamingWidget.xaml</DependentUpon>
     </Compile>
     <Compile Include="Features\Profile\GamingWidget.ProfileDeletion.cs">
@@ -312,6 +304,9 @@
       <DependentUpon>GamingWidget.xaml</DependentUpon>
     </Compile>
     <Compile Include="Features\Hotkeys\GamingWidget.HotkeyInit.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Display\GamingWidget.DisplayGating.cs">
       <DependentUpon>GamingWidget.xaml</DependentUpon>
     </Compile>
     <Compile Include="Features\Lifecycle\GamingWidget.WidgetEvents.cs">
@@ -428,7 +423,7 @@
     <Compile Include="Features\Performance\GamingWidget.TdpBoost.cs">
       <DependentUpon>GamingWidget.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Features\Performance\GamingWidget.Advanced.cs">
+    <Compile Include="Features\Performance\GamingWidget.DgpToggle.cs">
       <DependentUpon>GamingWidget.xaml</DependentUpon>
     </Compile>
     <Compile Include="Features\Devices\GamingWidget.GpdTabCallbacks.cs">
@@ -443,13 +438,13 @@
     <Compile Include="Features\OSD\GamingWidget.OSDCustomization.cs">
       <DependentUpon>GamingWidget.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Features\OSD\GamingWidget.PowerPlans.cs">
+    <Compile Include="Features\OSD\GamingWidget.PowerSourceValues.cs">
       <DependentUpon>GamingWidget.xaml</DependentUpon>
     </Compile>
     <Compile Include="Features\OSD\GamingWidget.SavedProfiles.cs">
       <DependentUpon>GamingWidget.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Features\OSD\GamingWidget.PowerPlanApplication.cs">
+    <Compile Include="Features\OSD\GamingWidget.HelperMessaging.cs">
       <DependentUpon>GamingWidget.xaml</DependentUpon>
     </Compile>
     <Compile Include="Features\Controller\GamingWidget.ControllerProfileStorage.cs">

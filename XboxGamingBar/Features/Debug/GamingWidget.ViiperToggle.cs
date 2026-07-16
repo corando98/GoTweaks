@@ -121,9 +121,9 @@ namespace XboxGamingBar
 
                 // Backend swap can change which body (legacy vs VIIPER) is currently
                 // visible, so rebuild the System tab D-pad chain (ExpandButton →
-                // EnabledToggle → first-body-item → … → AutoHibernateToggle) for the
-                // new configuration. Without this, gamepad navigation lands wherever
-                // the previous backend's chain pointed.
+                // EnabledToggle → first-body-item → …) for the new configuration.
+                // Without this, gamepad navigation lands wherever the previous
+                // backend's chain pointed.
                 UpdateSystemControllerEmulationNavigation();
             });
         }

@@ -1,4 +1,4 @@
-using NLog;
+﻿using NLog;
 using Shared.Constants;
 using Shared.Data;
 using Shared.IPC;
@@ -61,15 +61,10 @@ namespace XboxGamingBarHelper
                 // Convert to ValueSet for compatibility with existing handlers
                 var valueSet = pipeMsg.ToValueSet();
 
-                // Handle power plan change request
-                if (pipeMsg.Extra.TryGetValue("PowerPlan", out object powerPlanValue) && powerPlanValue is string guidStr)
+                // Handle "Disable Sleep Timer (AC+DC)" request from the Power & Sleep card
+                if (pipeMsg.Extra.ContainsKey("DisableWindowsSleepTimers"))
                 {
-                    if (Guid.TryParse(guidStr, out Guid planGuid))
-                    {
-                        Logger.Info($"Setting power plan to: {planGuid}");
-                        Power.PowerManager.SetActivePowerPlan(planGuid);
-                    }
-                    SendPipeAck(pipeMsg.RequestId);
+                    HandleDisableWindowsSleepTimers(pipeMsg);
                     return;
                 }
 
@@ -392,14 +387,10 @@ namespace XboxGamingBarHelper
                         globalProfile.TDP = import.GlobalProfile.TDP;
                         globalProfile.CPUBoost = import.GlobalProfile.CPUBoost;
                         globalProfile.CPUEPP = import.GlobalProfile.CPUEPP;
-                        globalProfile.MaxCPUState = import.GlobalProfile.MaxCPUState;
-                        globalProfile.MinCPUState = import.GlobalProfile.MinCPUState;
                         globalProfile.TDPBoostEnabled = import.GlobalProfile.TDPBoostEnabled;
                         globalProfile.TDP_DC = import.GlobalProfile.TDP_DC;
                         globalProfile.CPUBoost_DC = import.GlobalProfile.CPUBoost_DC;
                         globalProfile.CPUEPP_DC = import.GlobalProfile.CPUEPP_DC;
-                        globalProfile.MaxCPUState_DC = import.GlobalProfile.MaxCPUState_DC;
-                        globalProfile.MinCPUState_DC = import.GlobalProfile.MinCPUState_DC;
                         globalProfile.FPSLimit = import.GlobalProfile.FPSLimit;
                         globalProfile.FPSLimit_DC = import.GlobalProfile.FPSLimit_DC;
                         globalProfile.OSPowerMode = import.GlobalProfile.OSPowerMode;
@@ -977,16 +968,6 @@ namespace XboxGamingBarHelper
                         ApplyProfileSaveFlags(request.Content.ToString());
                     }
                 }
-                // Power Source Profile Config: mirror of the widget's AC/DC power-plan
-                // auto-switch settings. Helper uses these on SystemManager.PowerSourceChanged
-                // so the switch still happens while the widget is suspended (issue #72).
-                else if (functionValue == (int)Function.PowerSourceProfileConfig)
-                {
-                    if (request.Content != null)
-                    {
-                        ApplyPowerSourceProfileConfig(request.Content.ToString());
-                    }
-                }
                 // Per-state TDP / TDPBoost values from the widget. Cached so the helper
                 // can apply them on AC/DC transitions independent of widget lifecycle.
                 else if (functionValue == (int)Function.PowerSourceProfileValues)
@@ -1123,20 +1104,9 @@ namespace XboxGamingBarHelper
                         });
                     }
                 }
-                // Auto Hibernate Mode: 0=Always, 1=AC Only, 2=DC Only
-                else if (functionValue == (int)Function.AutoHibernateMode)
-                {
-                    if (request.Content != null && int.TryParse(request.Content.ToString(), out int mode))
-                    {
-                        autoHibernateMode = mode;
-                        // Persist so the AC/DC choice survives reboot even if the widget never opens
-                        // (issue #88 bug #3). LocalSettingsHelper (UWP LocalSettings + JSON fallback)
-                        // round-trips reliably in the MSIX-deployed helper across reboots/updates;
-                        // Properties.Settings.Default did not, so the value reverted to 0=Always.
-                        XboxGamingBarHelper.Settings.LocalSettingsHelper.SetValue("AutoHibernateMode", mode);
-                        Logger.Info($"Pipe: Auto Hibernate mode set to: {mode} ({(mode == 0 ? "Always" : mode == 1 ? "AC Only" : "DC Only")})");
-                    }
-                }
+                // (AutoHibernateMode handler removed — the AutoHibernate feature is replaced
+                // by the Power & Sleep card's per-AC/DC Hibernate Timeout; its Function enum
+                // entries stay reserved so wire values of later entries don't shift.)
                 // (ViGEmBusInstalled / InstallViGEmBus handlers removed — ViGEm
                 // backend retired. The Function enum entries stay so the wire
                 // values of later entries don't shift; unknown functions from
@@ -1958,7 +1928,15 @@ namespace XboxGamingBarHelper
                                 || (legionButtonMonitor?.HasGuideActionConfigured ?? false);
                 bool usbip = settingsManager?.UsbipInstalled?.Value ?? true; // assume fine when unknown
 
-                string json = Services.SetupHealthService.EvaluateJson(isLegion, controllerFeatures, pawnIO, usbipNeeded, usbip);
+                // Only flag launcher-on-allowlist while stock-controller hiding is in
+                // play — with emulation off the allowlist entry is harmless.
+                string allowlistedLauncher = null;
+                if (controllerEmulationManager?.ControllerEmulationEnabled?.Value ?? false)
+                {
+                    allowlistedLauncher = controllerEmulationManager?.SuppressionManager?.GetAllowlistedGameLauncher();
+                }
+
+                string json = Services.SetupHealthService.EvaluateJson(isLegion, controllerFeatures, pawnIO, usbipNeeded, usbip, allowlistedLauncher);
                 if (!force && string.Equals(json, lastSetupWarningsJson, StringComparison.Ordinal)) return;
                 lastSetupWarningsJson = json;
 
@@ -2001,6 +1979,24 @@ namespace XboxGamingBarHelper
             catch (Exception ex)
             {
                 Logger.Warn($"SendGyroBiasOffsetToWidget failed: {ex.Message}");
+            }
+        }
+
+        // DisableWindowsSleepTimers: zero Windows' own idle-to-sleep timeout for both AC
+        // and DC, so it doesn't put the system to Sleep before the GoTweaks Hibernate
+        // Timeout (Power & Sleep card) ever fires.
+        private static void HandleDisableWindowsSleepTimers(Shared.IPC.PipeMessage pipeMsg)
+        {
+            try
+            {
+                Logger.Info("Pipe: DisableWindowsSleepTimers request received - setting AC+DC Sleep idle timeout to Never");
+                PowerManager.DisableSleepTimers();
+                SendPipeAck(pipeMsg.RequestId, true);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Pipe: DisableWindowsSleepTimers failed: {ex.Message}");
+                SendPipeAck(pipeMsg.RequestId, false);
             }
         }
 

@@ -51,8 +51,6 @@ namespace XboxGamingBar
         public double TDP { get; set; } = 15;
         public bool CPUBoost { get; set; } = false;
         public double CPUEPP { get; set; } = 0;
-        public int MaxCPUState { get; set; } = 100;
-        public int MinCPUState { get; set; } = 5;
         public bool FluidMotionFrames { get; set; } = false;
         public bool RadeonSuperResolution { get; set; } = false;
         public double RadeonSuperResolutionSharpness { get; set; } = 80;
@@ -96,8 +94,6 @@ namespace XboxGamingBar
         public int StickyTDPInterval { get; set; } = 5;
         // Overlay Level (0=Off, 1-4 for RTSS/AMD)
         public int OverlayLevel { get; set; } = 0;
-        // CPU Affinity as "pCores,eCores" string
-        public string CPUAffinity { get; set; } = "";
 
         public PerformanceProfile Clone()
         {
@@ -106,8 +102,6 @@ namespace XboxGamingBar
                 TDP = this.TDP,
                 CPUBoost = this.CPUBoost,
                 CPUEPP = this.CPUEPP,
-                MaxCPUState = this.MaxCPUState,
-                MinCPUState = this.MinCPUState,
                 FluidMotionFrames = this.FluidMotionFrames,
                 RadeonSuperResolution = this.RadeonSuperResolution,
                 RadeonSuperResolutionSharpness = this.RadeonSuperResolutionSharpness,
@@ -138,8 +132,7 @@ namespace XboxGamingBar
                 RefreshRate = this.RefreshRate,
                 StickyTDPEnabled = this.StickyTDPEnabled,
                 StickyTDPInterval = this.StickyTDPInterval,
-                OverlayLevel = this.OverlayLevel,
-                CPUAffinity = this.CPUAffinity
+                OverlayLevel = this.OverlayLevel
             };
         }
     }
@@ -523,16 +516,6 @@ namespace XboxGamingBar
     }
 
     /// <summary>
-    /// Represents a power plan for UI binding
-    /// </summary>
-    public class PowerPlanItem
-    {
-        public Guid Guid { get; set; }
-        public string Name { get; set; }
-        public override string ToString() => Name;
-    }
-
-    /// <summary>
     /// An empty page that can be used on its own or navigated to within a Frame.
     /// </summary>
     public sealed partial class GamingWidget : Page, INotifyPropertyChanged
@@ -747,8 +730,6 @@ namespace XboxGamingBar
         private readonly DeleteGameProfileProperty deleteGameProfile;
         private readonly CPUBoostProperty cpuBoost;
         private readonly CPUEPPProperty cpuEPP;
-        private readonly MaxCPUStateProperty maxCPUState;
-        private readonly MinCPUStateProperty minCPUState;
         // GPU Clock - DISABLED: Not supported by RyzenAdj on this hardware (returns error -1)
         //private readonly LimitGPUClockProperty limitGPUClock;
         //private readonly GPUClockMinProperty gpuClockMin;
@@ -757,6 +738,7 @@ namespace XboxGamingBar
         private readonly RefreshRateProperty refreshRate;
         private readonly ResolutionsProperty resolutions;
         private readonly ResolutionProperty resolution;
+        private readonly InternalPanelActiveProperty internalPanelActive;
         private readonly DisplayOrientationProperty displayOrientation;
         private readonly HDRSupportedProperty hdrSupported;
         private readonly HDREnabledProperty hdrEnabled;
@@ -961,35 +943,14 @@ namespace XboxGamingBar
         private readonly GPDButtonProperty gpdButtonLSRight;
         private readonly ControllerEmulationAvailableProperty controllerEmulationAvailable;
         private readonly ControllerEmulationEnabledProperty controllerEmulationEnabled;
-        private readonly ControllerEmulationHideStockControllerProperty controllerEmulationHideStockController;
-        private readonly ControllerEmulationImprovedInputProperty controllerEmulationImprovedInput;
-        private readonly ControllerEmulationHideTargetProperty controllerEmulationHideTarget;
-        private readonly ControllerEmulationGyroSourceProperty controllerEmulationGyroSource;
-        private readonly ControllerEmulationModeProperty controllerEmulationMode;
-        private readonly ControllerEmulationRumbleProfileProperty controllerEmulationRumbleProfile;
         private readonly ControllerEmulationGyroActivationModeProperty controllerEmulationGyroActivationMode;
         private readonly ControllerEmulationGyroActivationButtonProperty controllerEmulationGyroActivationButton;
-        private readonly ControllerEmulationDs4OrientationProperty controllerEmulationDs4Orientation;
-        private readonly ControllerEmulationPs4TouchpadEnabledProperty controllerEmulationPs4TouchpadEnabled;
-        private readonly ControllerEmulationLedForwardingEnabledProperty controllerEmulationLedForwardingEnabled;
-        private readonly ControllerEmulationMouseSensitivityProperty controllerEmulationMouseSensitivity;
-        private readonly ControllerEmulationMouseThresholdProperty controllerEmulationMouseThreshold;
-        private readonly ControllerEmulationMouseAxisProperty controllerEmulationMouseAxis;
-        private readonly ControllerEmulationMouseInvertXProperty controllerEmulationMouseInvertX;
-        private readonly ControllerEmulationMouseInvertYProperty controllerEmulationMouseInvertY;
-        private readonly ControllerEmulationMouseGainXProperty controllerEmulationMouseGainX;
-        private readonly ControllerEmulationMouseGainYProperty controllerEmulationMouseGainY;
         private readonly ControllerEmulationStickInvertXProperty controllerEmulationStickInvertX;
         private readonly ControllerEmulationStickInvertYProperty controllerEmulationStickInvertY;
         private readonly ControllerEmulationStickSelectProperty controllerEmulationStickSelect;
-        private readonly ControllerEmulationStickOnlyJoystickDataProperty controllerEmulationStickOnlyJoystickData;
-        private readonly ControllerEmulationVirtualABXYLayoutProperty controllerEmulationVirtualAbxyLayout;
         private readonly ControllerEmulationStickSensitivityV2Property controllerEmulationStickSensitivityV2;
         private readonly ControllerEmulationStickOrientationV2Property controllerEmulationStickOrientationV2;
         private readonly ControllerEmulationStickConversionProperty controllerEmulationStickConversion;
-        private bool isGyroActivationExpanded;
-        private bool isFeaturesExpanded;
-        private bool isJoystickOutputExpanded;
         private bool controllerEmulationSupported = false;
         private bool isApplyingGpdRestoreDefaults = false;
         private readonly GPDFanCurveGraphProperty gpdFanCurveGraph;
@@ -1033,10 +994,12 @@ namespace XboxGamingBar
         private readonly PawnIOInstalledProperty pawnIOInstalled;
         private readonly InstallPawnIOProperty installPawnIO;
         private readonly SetupWarningsProperty setupWarnings;
-        private readonly HidHideInstalledProperty hidHideInstalled;
-        private readonly InstallHidHideProperty installHidHide;
-        private readonly AutoHibernateEnabledProperty autoHibernateEnabled;
-        private readonly AutoHibernateIdleMinutesProperty autoHibernateIdleMinutes;
+        private readonly PowerButtonActionProperty powerButtonActionAC;
+        private readonly PowerButtonActionProperty powerButtonActionDC;
+        private readonly IntTagComboProperty displayTimeoutAC;
+        private readonly IntTagComboProperty displayTimeoutDC;
+        private readonly IntTagComboProperty hibernateTimeoutAC;
+        private readonly IntTagComboProperty hibernateTimeoutDC;
 
         // AutoTDP properties
         private readonly AutoTDPEnabledProperty autoTDPEnabled;
@@ -1060,10 +1023,6 @@ namespace XboxGamingBar
         private int pendingAutoTDPMinTDP;
         private int pendingAutoTDPMaxTDP;
 
-        private readonly CPUCoreConfigProperty cpuCoreConfig;
-        private readonly CPUCoreActiveConfigProperty cpuCoreActiveConfig;
-        private readonly CoreParkingPercentProperty coreParkingPercent;
-        private readonly ForceParkModeProperty forceParkMode;
         private readonly ForceDefaultGameProfileProperty forceDefaultGameProfile;
         private readonly WidgetProperty<int> legionControllerSleepMinutes;
 
@@ -1083,10 +1042,6 @@ namespace XboxGamingBar
         // Profile Detection Settings
         private readonly ProfileMatchByExeProperty profileMatchByExe;
         private readonly ProfileGamesOnlyProperty profileGamesOnly;
-        // DISABLED: Custom games, blacklist, and current apps features - caused user confusion
-        // private readonly ProfileCustomGamePathProperty profileCustomGamePath;
-        // private readonly ProfileBlacklistPathsProperty profileBlacklistPaths;
-        // private readonly ForegroundAppProperty foregroundApp;
 
         // FPS Limit (RTSS)
         private readonly FPSLimitProperty fpsLimit;
@@ -1306,11 +1261,9 @@ namespace XboxGamingBar
         }
 
         // Profile save settings - backed by fields to avoid UI thread access issues
-        // These are updated in LoadProfileCustomizationSettings and ProfileSettingCheckBox_Changed
         private bool _saveTDP = true;
         private bool _saveCPUBoost = true;
         private bool _saveCPUEPP = true;
-        private bool _saveCPUState = true;
         private bool _saveAMDFeatures = false;
         private bool _saveFPSLimit = true;
         private bool _saveAutoTDP = true;
@@ -1320,7 +1273,6 @@ namespace XboxGamingBar
         private bool _saveRefreshRate = false;
         private bool _saveStickyTDP = false;
         private bool _saveOverlayLevel = false;
-        private bool _saveCPUAffinity = false;
         // Legion device-wide settings default to false so they behave as global device
         // settings rather than per-game; the helper routes writes to GlobalProfile when these
         // are false and still applies from the game profile only when the game stored a value.
@@ -1332,7 +1284,6 @@ namespace XboxGamingBar
         private bool SaveTDP => _saveTDP;
         private bool SaveCPUBoost => _saveCPUBoost;
         private bool SaveCPUEPP => _saveCPUEPP;
-        private bool SaveCPUState => _saveCPUState;
         private bool SaveAMDFeatures => _saveAMDFeatures;
         private bool SaveFPSLimit => _saveFPSLimit;
         private bool SaveAutoTDP => _saveAutoTDP;
@@ -1342,7 +1293,6 @@ namespace XboxGamingBar
         private bool SaveRefreshRate => _saveRefreshRate;
         private bool SaveStickyTDP => _saveStickyTDP;
         private bool SaveOverlayLevel => _saveOverlayLevel;
-        private bool SaveCPUAffinity => _saveCPUAffinity;
         private bool SaveNintendoLayout => _saveNintendoLayout;
         private bool SaveVibration => _saveVibration;
         private bool SaveLighting => _saveLighting;
@@ -1445,8 +1395,6 @@ namespace XboxGamingBar
             deleteGameProfile = new DeleteGameProfileProperty();
             cpuBoost = new CPUBoostProperty(CPUBoostToggle, this);
             cpuEPP = new CPUEPPProperty(80, CPUEPPSlider, this);
-            maxCPUState = new MaxCPUStateProperty();
-            minCPUState = new MinCPUStateProperty();
             // GPU Clock - DISABLED: Not supported by RyzenAdj on this hardware (returns error -1)
             //limitGPUClock = new LimitGPUClockProperty(LimitGPUClockToggle, this);
             //gpuClockMin = new GPUClockMinProperty(GPUClockMinSlider, this);
@@ -1456,6 +1404,7 @@ namespace XboxGamingBar
             refreshRates.SetRefreshRateProperty(refreshRate); // Wire up for selection restoration on dock/undock
             resolutions = new ResolutionsProperty(ResolutionComboBox, this);
             resolution = new ResolutionProperty(ResolutionComboBox, this);
+            internalPanelActive = new InternalPanelActiveProperty(true, this);
             resolutions.SetResolutionProperty(resolution); // Wire up for selection restoration on dock/undock
             displayOrientation = new DisplayOrientationProperty();
             hdrSupported = new HDRSupportedProperty(HDRToggle, this);
@@ -1688,35 +1637,16 @@ namespace XboxGamingBar
             gpdButtonLSRight = new GPDButtonProperty(this, Function.GPDButtonLSRight);
             controllerEmulationAvailable = new ControllerEmulationAvailableProperty(this);
             controllerEmulationEnabled = new ControllerEmulationEnabledProperty(ControllerEmulationEnabledToggle, this);
-            controllerEmulationHideStockController = new ControllerEmulationHideStockControllerProperty(ControllerEmulationHideStockControllerToggle, this);
-            controllerEmulationImprovedInput = new ControllerEmulationImprovedInputProperty(ControllerEmulationImprovedInputToggle, this);
-            controllerEmulationImprovedInput.PropertyChanged += ControllerEmulationImprovedInput_PropertyChanged;
-            controllerEmulationHideTarget = new ControllerEmulationHideTargetProperty(ControllerEmulationHideTargetComboBox, this);
-            controllerEmulationGyroSource = new ControllerEmulationGyroSourceProperty(ControllerEmulationGyroSourceComboBox, this);
-            controllerEmulationMode = new ControllerEmulationModeProperty(ControllerEmulationModeComboBox, this);
-            controllerEmulationRumbleProfile = new ControllerEmulationRumbleProfileProperty(ControllerEmulationRumbleProfileComboBox, this);
             controllerEmulationGyroActivationMode = new ControllerEmulationGyroActivationModeProperty(ControllerEmulationGyroActivationModeComboBox, this);
             controllerEmulationGyroActivationButton = new ControllerEmulationGyroActivationButtonProperty(ControllerEmulationGyroActivationButtonComboBox, this);
-            controllerEmulationDs4Orientation = new ControllerEmulationDs4OrientationProperty(ControllerEmulationDs4OrientationComboBox, this);
-            controllerEmulationPs4TouchpadEnabled = new ControllerEmulationPs4TouchpadEnabledProperty(ControllerEmulationPs4TouchpadToggle, this);
-            controllerEmulationLedForwardingEnabled = new ControllerEmulationLedForwardingEnabledProperty(ControllerEmulationLedForwardingToggle, this);
-            controllerEmulationMouseSensitivity = new ControllerEmulationMouseSensitivityProperty(ControllerEmulationMouseSensitivitySlider, this);
-            controllerEmulationMouseThreshold = new ControllerEmulationMouseThresholdProperty(ControllerEmulationMouseThresholdSlider, this);
-            controllerEmulationMouseAxis = new ControllerEmulationMouseAxisProperty(ControllerEmulationMouseAxisComboBox, this);
-            controllerEmulationMouseInvertX = new ControllerEmulationMouseInvertXProperty(ControllerEmulationMouseInvertXToggle, this);
-            controllerEmulationMouseInvertY = new ControllerEmulationMouseInvertYProperty(ControllerEmulationMouseInvertYToggle, this);
-            controllerEmulationMouseGainX = new ControllerEmulationMouseGainXProperty(ControllerEmulationMouseGainXSlider, this);
-            controllerEmulationMouseGainY = new ControllerEmulationMouseGainYProperty(ControllerEmulationMouseGainYSlider, this);
             controllerEmulationStickInvertX = new ControllerEmulationStickInvertXProperty(ControllerEmulationStickInvertXToggle, this);
             controllerEmulationStickInvertY = new ControllerEmulationStickInvertYProperty(ControllerEmulationStickInvertYToggle, this);
             controllerEmulationStickSelect = new ControllerEmulationStickSelectProperty(ControllerEmulationStickSelectComboBox, this);
-            controllerEmulationStickOnlyJoystickData = new ControllerEmulationStickOnlyJoystickDataProperty(ControllerEmulationStickOnlyJoystickToggle, this);
             // Min/Max gyro speed, Min/Max output, Power curve, Deadzone, Precision speed,
             // Output mix — pipeline removed in #79 round 5 (matches HC). Sensitivity stays.
             controllerEmulationStickSensitivityV2 = new ControllerEmulationStickSensitivityV2Property(StickSensitivityV2Slider, this);
             controllerEmulationStickOrientationV2 = new ControllerEmulationStickOrientationV2Property(StickOrientationV2ComboBox, this);
             controllerEmulationStickConversion = new ControllerEmulationStickConversionProperty(StickConversionComboBox, this);
-            controllerEmulationVirtualAbxyLayout = new ControllerEmulationVirtualABXYLayoutProperty(ControllerEmulationVirtualAbxyLayoutComboBox, this);
             gpdFanCurveGraph = new GPDFanCurveGraphProperty(this);
             gpdFanCurveGraph.SetGraphUpdateCallback(OnGPDFanCurveUpdated);
             gpdCPUTemp = new GPDCPUTempProperty(this);
@@ -1783,21 +1713,21 @@ namespace XboxGamingBar
             viiperDeviceType.PropertyChanged += (s, e) => { UpdateViiperConfigVisibility(); UpdateQuickSettingsTileStates(); UpdateViiperStickGyroSectionVisibility(); };
             // Re-evaluate sub-device-dependent panels (e.g. Joy-Con Pair per-half gyro) when the Nintendo sub-device changes.
             viiperNintendoSubDevice.PropertyChanged += (s, e) => UpdateViiperConfigVisibility();
-            controllerEmulationMode.PropertyChanged += (s, e) => UpdateQuickSettingsTileStates();
             winRing0Available = new WinRing0AvailableProperty(this);
             pawnIOAvailable = new PawnIOAvailableProperty();
             pawnIOInstalled = new PawnIOInstalledProperty(this);
             installPawnIO = new InstallPawnIOProperty(this);
             setupWarnings = new SetupWarningsProperty(this) { OnWarningsChanged = OnSetupWarningsChanged };
-            hidHideInstalled = new HidHideInstalledProperty(this);
-            installHidHide = new InstallHidHideProperty(this);
-            autoHibernateEnabled = new AutoHibernateEnabledProperty(AutoHibernateToggle, this);
-            autoHibernateIdleMinutes = new AutoHibernateIdleMinutesProperty(15, AutoHibernateTimeoutSlider, this);
+            powerButtonActionAC = new PowerButtonActionProperty(Shared.Enums.Function.SystemPowerButtonActionAC, PowerButtonActionACComboBox, this);
+            powerButtonActionDC = new PowerButtonActionProperty(Shared.Enums.Function.SystemPowerButtonActionDC, PowerButtonActionDCComboBox, this);
+            displayTimeoutAC = new IntTagComboProperty(600, Shared.Enums.Function.SystemDisplayTimeoutAC, DisplayTimeoutACComboBox, this);
+            displayTimeoutDC = new IntTagComboProperty(600, Shared.Enums.Function.SystemDisplayTimeoutDC, DisplayTimeoutDCComboBox, this);
+            hibernateTimeoutAC = new IntTagComboProperty(0, Shared.Enums.Function.SystemHibernateTimeoutAC, HibernateTimeoutACComboBox, this);
+            hibernateTimeoutDC = new IntTagComboProperty(0, Shared.Enums.Function.SystemHibernateTimeoutDC, HibernateTimeoutDCComboBox, this);
 
             // Set up callbacks for TDP method availability
             winRing0Available.SetAvailabilityCallback(UpdateWinRing0Visibility);
             pawnIOInstalled.SetInstalledCallback(UpdatePawnIOInstalledUI);
-            hidHideInstalled.SetInstalledCallback(UpdateHidHideInstalledUI);
 
             // AutoTDP properties
             autoTDPEnabled = new AutoTDPEnabledProperty(false);
@@ -1812,10 +1742,6 @@ namespace XboxGamingBar
             autoTDPResetML = new AutoTDPResetMLProperty(false);
             autoTDPPauseWhenUnfocused = new AutoTDPPauseWhenUnfocusedProperty(true); // Default: enabled
             tdpLimits = new TDPLimitsProperty("4,35");
-            cpuCoreConfig = new CPUCoreConfigProperty("");
-            cpuCoreActiveConfig = new CPUCoreActiveConfigProperty("");
-            coreParkingPercent = new CoreParkingPercentProperty(100); // 100% = all cores active
-            forceParkMode = new ForceParkModeProperty(false);
             forceDefaultGameProfile = new ForceDefaultGameProfileProperty(false);
             forceDefaultGameProfile.PropertyChanged += (s, args) => OnDgpEnabledSynced();
             // Headless: the helper pushes the persisted controller-sleep timeout on connect;
@@ -1837,11 +1763,6 @@ namespace XboxGamingBar
             // Profile Detection Settings
             profileMatchByExe = new ProfileMatchByExeProperty(ProfileMatchByExeToggle, this);
             profileGamesOnly = new ProfileGamesOnlyProperty(ProfileGamesOnlyToggle, this);
-            // DISABLED: Custom games, blacklist, and current apps features - caused user confusion
-            // profileCustomGamePath = new ProfileCustomGamePathProperty(CustomGamesList, CustomGamesEmptyText, this);
-            // profileBlacklistPaths = new ProfileBlacklistPathsProperty(BlacklistList, BlacklistEmptyText, this);
-            // foregroundApp = new ForegroundAppProperty(ForegroundAppsContainer, this);
-            // foregroundApp.OnAppsChanged = UpdateForegroundAppsList;
 
             // Set up Legion tab visibility callback
             legionGoDetected.SetVisibilityCallback(SetLegionTabVisibility);
@@ -1886,8 +1807,6 @@ namespace XboxGamingBar
                 deleteGameProfile,
                 cpuBoost,
                 cpuEPP,
-                maxCPUState,
-                minCPUState,
                 // GPU Clock - DISABLED: Not supported by RyzenAdj on this hardware (returns error -1)
                 //limitGPUClock,
                 //gpuClockMin,
@@ -1897,6 +1816,9 @@ namespace XboxGamingBar
                 resolutions,
                 resolution,
                 displayOrientation,
+                // Ordered after resolution/refreshRate so its OnBatchSyncCompleted runs last and
+                // overrides their own startup auto-enable when only an external monitor is active.
+                internalPanelActive,
                 hdrSupported,
                 hdrEnabled,
                 touchscreenEnabled,
@@ -2049,10 +1971,12 @@ namespace XboxGamingBar
                 pawnIOInstalled,
                 installPawnIO,
                 setupWarnings,
-                hidHideInstalled,
-                installHidHide,
-                autoHibernateEnabled,
-                autoHibernateIdleMinutes,
+                powerButtonActionAC,
+                powerButtonActionDC,
+                displayTimeoutAC,
+                displayTimeoutDC,
+                hibernateTimeoutAC,
+                hibernateTimeoutDC,
                 autoTDPEnabled,
                 autoTDPTargetFPS,
                 autoTDPCurrentFPS,
@@ -2067,10 +1991,6 @@ namespace XboxGamingBar
                 fpsLimit,
                 osPowerMode,
                 tdpLimits,
-                cpuCoreConfig,
-                cpuCoreActiveConfig,
-                coreParkingPercent,
-                forceParkMode,
                 tdpBoostEnabled,
                 tdpBoostSPPT,
                 tdpBoostFPPT,
@@ -2121,32 +2041,14 @@ namespace XboxGamingBar
                 gpdButtonLSRight,
                 controllerEmulationAvailable,
                 controllerEmulationEnabled,
-                controllerEmulationHideStockController,
-                controllerEmulationImprovedInput,
-                controllerEmulationHideTarget,
-                controllerEmulationGyroSource,
-                controllerEmulationMode,
-                controllerEmulationRumbleProfile,
                 controllerEmulationGyroActivationMode,
                 controllerEmulationGyroActivationButton,
-                controllerEmulationDs4Orientation,
-                controllerEmulationPs4TouchpadEnabled,
-                controllerEmulationLedForwardingEnabled,
-                controllerEmulationMouseSensitivity,
-                controllerEmulationMouseThreshold,
-                controllerEmulationMouseAxis,
-                controllerEmulationMouseInvertX,
-                controllerEmulationMouseInvertY,
-                controllerEmulationMouseGainX,
-                controllerEmulationMouseGainY,
                 controllerEmulationStickInvertX,
                 controllerEmulationStickInvertY,
                 controllerEmulationStickSelect,
-                controllerEmulationStickOnlyJoystickData,
                 controllerEmulationStickSensitivityV2,
                 controllerEmulationStickOrientationV2,
                 controllerEmulationStickConversion,
-                controllerEmulationVirtualAbxyLayout,
                 gpdFanCurveGraph,
                 gpdCPUTemp,
                 gpdFanCurveVisible,
@@ -2159,10 +2061,6 @@ namespace XboxGamingBar
                 // Profile Detection Settings
                 profileMatchByExe,
                 profileGamesOnly
-                // DISABLED: Custom games, blacklist, and current apps features
-                // profileCustomGamePath,
-                // profileBlacklistPaths,
-                // foregroundApp
             );
             widgetPropsTimer.Stop();
             Logger.Info($"[TIMING] WidgetProperties creation: {widgetPropsTimer.ElapsedMilliseconds}ms");
@@ -2205,7 +2103,6 @@ namespace XboxGamingBar
             LoadHideAdvancedOptions();
 
             // Initialize CPU State comboboxes with percentage values
-            InitializeCPUStateComboBoxes();
 
             // Check if this is a clean install (no saved Global profile)
             var settings = ApplicationData.Current.LocalSettings;
@@ -2336,14 +2233,10 @@ namespace XboxGamingBar
             // Load Performance Overlay setting
             LoadPerformanceOverlaySetting();
 
-            // Load Power Plan settings
-            LoadPowerPlanSettings();
-
             // Load Force Default Game Profile setting
             LoadForceDefaultGameProfileSetting();
 
             // Restore Auto Hibernate AC/DC power-source choice (issue #88 bug #3)
-            LoadAutoHibernateModeSetting();
 
             // Send OSD config to helper on startup
             SendOSDConfigToHelper();
@@ -2396,15 +2289,32 @@ namespace XboxGamingBar
             if (losslessScalingEnabled != null)
                 losslessScalingEnabled.PropertyChanged += QuickSettingsProperty_Changed;
             if (amdFluidMotionFrameEnabled != null)
+            {
                 amdFluidMotionFrameEnabled.PropertyChanged += QuickSettingsProperty_Changed;
+                amdFluidMotionFrameEnabled.PropertyChanged += AMDFeatureProperty_ChangedResyncProfile;
+            }
             if (amdRadeonSuperResolutionEnabled != null)
+            {
                 amdRadeonSuperResolutionEnabled.PropertyChanged += QuickSettingsProperty_Changed;
+                amdRadeonSuperResolutionEnabled.PropertyChanged += AMDFeatureProperty_ChangedResyncProfile;
+            }
             if (amdRadeonAntiLagEnabled != null)
+            {
                 amdRadeonAntiLagEnabled.PropertyChanged += QuickSettingsProperty_Changed;
+                amdRadeonAntiLagEnabled.PropertyChanged += AMDFeatureProperty_ChangedResyncProfile;
+            }
             if (amdRadeonChillEnabled != null)
+            {
                 amdRadeonChillEnabled.PropertyChanged += QuickSettingsProperty_Changed;
+                amdRadeonChillEnabled.PropertyChanged += AMDFeatureProperty_ChangedResyncProfile;
+            }
             if (amdRadeonBoostEnabled != null)
+            {
                 amdRadeonBoostEnabled.PropertyChanged += QuickSettingsProperty_Changed;
+                amdRadeonBoostEnabled.PropertyChanged += AMDFeatureProperty_ChangedResyncProfile;
+            }
+            if (amdImageSharpeningEnabled != null)
+                amdImageSharpeningEnabled.PropertyChanged += AMDFeatureProperty_ChangedResyncProfile;
             if (autoTDPEnabled != null)
                 autoTDPEnabled.PropertyChanged += QuickSettingsProperty_Changed;
 
@@ -2446,31 +2356,7 @@ namespace XboxGamingBar
                 controllerDeviceStatus.PropertyChanged += LegionControllerDeviceStatus_PropertyChanged;
             }
 
-            // Subscribe to CPU core config changes
-            if (cpuCoreConfig != null)
-                cpuCoreConfig.PropertyChanged += CPUCoreConfig_PropertyChanged;
-
             Logger.Info("Subscribed to Quick Settings property changes");
-        }
-
-        private void CPUCoreConfig_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
-        {
-            _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
-            {
-                if (cpuCoreConfig != null && !string.IsNullOrEmpty(cpuCoreConfig.Value))
-                {
-                    // Parse "pCores,eCores,isHybrid" format
-                    var parts = cpuCoreConfig.Value.Split(',');
-                    if (parts.Length >= 3 &&
-                        int.TryParse(parts[0], out int pCores) &&
-                        int.TryParse(parts[1], out int eCores) &&
-                        bool.TryParse(parts[2], out bool isHybrid))
-                    {
-                        Logger.Info($"Received CPU core config from helper: {pCores}P + {eCores}E cores, hybrid={isHybrid}");
-                        SetupCPUCoreConfigUI(pCores, eCores);
-                    }
-                }
-            });
         }
 
         private void QuickSettingsProperty_Changed(object sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -4807,7 +4693,6 @@ namespace XboxGamingBar
                 SendQuickMetricsEnabledToHelper();
                 SendScreenSaverEnabledToHelper();
                 SendProfileSaveFlagsToHelper();
-                SendPowerSourceProfileConfigToHelper();
                 SendPowerSourceProfileValuesToHelper();
                 // Without this, the helper's ControllerHotkeyMonitor only learns the
                 // widget's View+ABXY / Menu+DPad bindings on the next dropdown change.
@@ -4820,12 +4705,6 @@ namespace XboxGamingBar
                 // Same rationale for quick-tile combos: the helper loses its in-memory
                 // registrations on restart, so re-push them once the pipe is up.
                 SendTileHotkeysToHelper();
-
-                // Re-send the persisted Auto Hibernate AC/DC mode now that the pipe is up. At
-                // Loaded time (when LoadAutoHibernateModeSetting first runs) the pipe isn't
-                // connected, so that send is dropped; this guarantees the helper agrees with the
-                // widget's saved choice. (Issue #88 bug #3)
-                SendAutoHibernateModeToHelper();
 
                 await Task.Delay(200);
                 isInitialSync = false;

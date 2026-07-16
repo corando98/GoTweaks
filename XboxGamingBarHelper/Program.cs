@@ -245,13 +245,6 @@ namespace XboxGamingBarHelper
         /// <summary>
         /// Auto hibernate idle monitoring - hibernates after inactivity timeout
         /// </summary>
-        private static volatile bool autoHibernateEnabled = false;
-        private static volatile int autoHibernateMode = 0; // 0=Always, 1=AC Only, 2=DC Only
-        private static System.Threading.Timer autoHibernateTimer;
-        private static DateTime lastAutoHibernateAttemptUtc = DateTime.MinValue;
-        private static int autoHibernateIdleTimeoutMs = 15 * 60 * 1000; // 15 minutes idle before hibernate
-        private const int AutoHibernateCheckIntervalMs = 30000; // Check every 30 seconds
-        private const int AutoHibernateCooldownMs = 5 * 60 * 1000; // Minimum time between attempts
 
         /// <summary>
         /// Configures NLog to write logs to the package's LocalCache/Local folder.
@@ -375,6 +368,12 @@ namespace XboxGamingBarHelper
                 try
                 {
                     Logger.Warn("ProcessExit fired — releasing EC fan + HidHide suppression + VIIPER bus before shutdown");
+                    // Flush any pending debounced GameProfile writes (global.xml etc, 250ms debounce
+                    // in Shared/Data/GameProfile.cs) - without this a TDP change made just before an
+                    // update/exit-triggered Environment.Exit(0) is silently lost and the profile
+                    // reverts to whatever was last flushed.
+                    try { Shared.Data.GameProfile.FlushAllPendingWrites(); }
+                    catch (Exception ex) { Logger.Warn($"ProcessExit FlushAllPendingWrites threw: {ex.Message}"); }
                     legionManager?.EmergencyReleaseFanOverride();
                     try { controllerEmulationManager?.SuppressionManager?.Disable(); }
                     catch (Exception ex) { Logger.Warn($"ProcessExit HidHide.Disable threw: {ex.Message}"); }
@@ -389,6 +388,8 @@ namespace XboxGamingBarHelper
                 try
                 {
                     Logger.Error($"UnhandledException — releasing EC fan + HidHide suppression + VIIPER bus. Exception: {e.ExceptionObject}");
+                    try { Shared.Data.GameProfile.FlushAllPendingWrites(); }
+                    catch (Exception ex) { Logger.Warn($"UnhandledException FlushAllPendingWrites threw: {ex.Message}"); }
                     legionManager?.EmergencyReleaseFanOverride();
                     try { controllerEmulationManager?.SuppressionManager?.Disable(); }
                     catch (Exception ex) { Logger.Warn($"UnhandledException HidHide.Disable threw: {ex.Message}"); }
@@ -1210,6 +1211,11 @@ namespace XboxGamingBarHelper
             systemManager = tempSystemMgr;
             powerManager = tempPowerMgr;
 
+            // One-time cleanup for the power-plan features retired in #103: restore the
+            // user's original Max/Min processor state if an older build modified it, and
+            // reset leftover core-parking powercfg values. No-op once the markers clear.
+            Task.Run(() => Services.SystemRestoreService.RestoreRetiredSettings(systemManager));
+
             wave2Timer.Stop();
             Logger.Info($"[TIMING] Wave 2 (parallel): {wave2Timer.ElapsedMilliseconds}ms");
 
@@ -1419,9 +1425,13 @@ namespace XboxGamingBarHelper
                 profileManager.DeleteGameProfile,
                 powerManager.CPUBoost,
                 powerManager.CPUEPP,
-                powerManager.MaxCPUState,
-                powerManager.MinCPUState,
                 powerManager.OSPowerMode,
+                powerManager.PowerButtonActionAC,
+                powerManager.PowerButtonActionDC,
+                powerManager.DisplayTimeoutAC,
+                powerManager.DisplayTimeoutDC,
+                powerManager.HibernateTimeoutAC,
+                powerManager.HibernateTimeoutDC,
                 // GPU Clock - DISABLED: Not supported by RyzenAdj on this hardware (returns error -1)
                 //powerManager.LimitGPUClock,
                 //powerManager.GPUClockMin,
@@ -1436,10 +1446,8 @@ namespace XboxGamingBarHelper
                 systemManager.AdaptiveBrightnessMode,
                 systemManager.PanelBrightness,
                 systemManager.PanelBrightnessSupported,
+                systemManager.InternalPanelActive,
                 systemManager.TouchscreenEnabled,
-                systemManager.CPUCoreConfig,
-                systemManager.CPUCoreActiveConfig,
-                systemManager.CoreParkingPercent,
                 systemManager.TrackedGame,
                 rtssManager.RTSSInstalled,
                 rtssManager.OSDConfig,
@@ -1495,8 +1503,6 @@ namespace XboxGamingBarHelper
                 losslessScalingManager.LosslessScalingBringToForeground,
                 losslessScalingManager.LosslessScalingLaunch,
                 settingsManager.AutoStartRTSS,
-                settingsManager.AutoHibernateEnabled,
-                settingsManager.AutoHibernateIdleMinutes,
                 settingsManager.OnScreenDisplayProvider,
                 settingsManager.UseManufacturerWMI,
                 settingsManager.TdpMethod,
@@ -1572,46 +1578,13 @@ namespace XboxGamingBarHelper
                 // Handheld-agnostic controller emulation properties
                 controllerEmulationManager.ControllerEmulationAvailable,
                 controllerEmulationManager.ControllerEmulationEnabled,
-                controllerEmulationManager.ControllerEmulationHideStockController,
-                controllerEmulationManager.ControllerEmulationImprovedInput,
-                controllerEmulationManager.ControllerEmulationHideTarget,
-                controllerEmulationManager.ControllerEmulationGyroSource,
-                controllerEmulationManager.ControllerEmulationMode,
-                controllerEmulationManager.ControllerEmulationRumbleProfile,
                 controllerEmulationManager.ControllerEmulationGyroActivationMode,
                 controllerEmulationManager.ControllerEmulationGyroActivationButton,
-                controllerEmulationManager.ControllerEmulationDs4Orientation,
-                controllerEmulationManager.ControllerEmulationPs4TouchpadEnabled,
-                controllerEmulationManager.ControllerEmulationMouseSensitivity,
-                controllerEmulationManager.ControllerEmulationMouseThreshold,
-                controllerEmulationManager.ControllerEmulationMouseAxis,
-                controllerEmulationManager.ControllerEmulationMouseInvertX,
-                controllerEmulationManager.ControllerEmulationMouseInvertY,
-                controllerEmulationManager.ControllerEmulationMouseGainX,
-                controllerEmulationManager.ControllerEmulationMouseGainY,
-                controllerEmulationManager.ControllerEmulationStickSensitivity,
-                controllerEmulationManager.ControllerEmulationStickThreshold,
-                controllerEmulationManager.ControllerEmulationStickAxis,
                 controllerEmulationManager.ControllerEmulationStickInvertX,
                 controllerEmulationManager.ControllerEmulationStickInvertY,
-                controllerEmulationManager.ControllerEmulationStickGainX,
-                controllerEmulationManager.ControllerEmulationStickGainY,
                 controllerEmulationManager.ControllerEmulationStickSelect,
-                controllerEmulationManager.ControllerEmulationStickExcessMove,
-                controllerEmulationManager.ControllerEmulationStickRange,
-                controllerEmulationManager.ControllerEmulationStickOnlyJoystickData,
-                controllerEmulationManager.ControllerEmulationVirtualABXYLayout,
-                controllerEmulationManager.ControllerEmulationLedForwardingEnabled,
                 controllerEmulationManager.ControllerEmulationCalibrateGyro,
-                controllerEmulationManager.ControllerEmulationStickMinGyroSpeed,
-                controllerEmulationManager.ControllerEmulationStickMaxGyroSpeed,
-                controllerEmulationManager.ControllerEmulationStickMinOutput,
-                controllerEmulationManager.ControllerEmulationStickMaxOutput,
-                controllerEmulationManager.ControllerEmulationStickPowerCurve,
                 controllerEmulationManager.ControllerEmulationStickSensitivityV2,
-                controllerEmulationManager.ControllerEmulationStickDeadzone,
-                controllerEmulationManager.ControllerEmulationStickPrecisionSpeed,
-                controllerEmulationManager.ControllerEmulationStickOutputMix,
                 controllerEmulationManager.ControllerEmulationStickOrientationV2,
                 controllerEmulationManager.ControllerEmulationStickConversion,
                 // Legion Go specific properties
@@ -1707,7 +1680,6 @@ namespace XboxGamingBarHelper
                 autoTDPManager.LearnedGameData,
                 autoTDPManager.ResetML,
                 autoTDPManager.PauseWhenUnfocused,
-                systemManager.ForceParkMode,
                 performanceManager.TDPBoostEnabled,
                 performanceManager.TDPBoostSPPT,
                 performanceManager.TDPBoostFPPT,
@@ -1731,18 +1703,18 @@ namespace XboxGamingBarHelper
             performanceManager.TDPBoostEnabled.PropertyChanged += TDPBoostEnabled_PropertyChanged;
             powerManager.CPUBoost.PropertyChanged += CPUBoost_PropertyChanged;
             powerManager.CPUEPP.PropertyChanged += CPUEPP_PropertyChanged;
-            powerManager.MaxCPUState.PropertyChanged += CPUState_PropertyChanged;
-            powerManager.MinCPUState.PropertyChanged += CPUState_PropertyChanged;
-            if (settingsManager?.AutoHibernateEnabled != null)
-            {
-                settingsManager.AutoHibernateEnabled.PropertyChanged += AutoHibernateEnabled_PropertyChanged;
-                SetAutoHibernateEnabled(settingsManager.AutoHibernateEnabled.Value);
-            }
-            if (settingsManager?.AutoHibernateIdleMinutes != null)
-            {
-                settingsManager.AutoHibernateIdleMinutes.PropertyChanged += AutoHibernateIdleMinutes_PropertyChanged;
-                UpdateAutoHibernateIdleTimeout(settingsManager.AutoHibernateIdleMinutes.Value);
-            }
+            powerManager.HibernateTimeoutAC.PropertyChanged += UpdateHibernateTimeoutMonitorState;
+            powerManager.HibernateTimeoutDC.PropertyChanged += UpdateHibernateTimeoutMonitorState;
+            // One-time migration: the old AutoHibernate feature (single idle-minutes value
+            // + Always/AC-Only/DC-Only mode) is replaced by the Power & Sleep card's
+            // per-AC/DC Hibernate Timeout. Seed the new values from the stored old ones so
+            // an existing user's idle-hibernate keeps working after the update.
+            MigrateAutoHibernateSettings();
+
+            // GoTweaks-owned idle-to-hibernate monitor (Power & Sleep card). Only runs the
+            // polling timer while at least one of AC/DC is configured - see
+            // UpdateHibernateTimeoutMonitorState / the PropertyChanged subscriptions above.
+            UpdateHibernateTimeoutMonitorState();
             // GPU Clock - DISABLED: Not supported by RyzenAdj on this hardware (returns error -1)
             //powerManager.LimitGPUClock.PropertyChanged += GPUClock_PropertyChanged;
             //powerManager.GPUClockMin.PropertyChanged += GPUClock_PropertyChanged;

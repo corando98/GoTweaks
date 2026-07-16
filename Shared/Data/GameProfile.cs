@@ -99,36 +99,6 @@ namespace Shared.Data
             }
         }
 
-        [XmlElement("MaxCPUState")]
-        private int maxCPUState;
-        public int MaxCPUState
-        {
-            get { return maxCPUState; }
-            set
-            {
-                if (maxCPUState != value)
-                {
-                    maxCPUState = value;
-                    Save();
-                }
-            }
-        }
-
-        [XmlElement("MinCPUState")]
-        private int minCPUState;
-        public int MinCPUState
-        {
-            get { return minCPUState; }
-            set
-            {
-                if (minCPUState != value)
-                {
-                    minCPUState = value;
-                    Save();
-                }
-            }
-        }
-
         [XmlElement("TDPBoostEnabled")]
         private bool tdpBoostEnabled;
         public bool TDPBoostEnabled
@@ -227,36 +197,6 @@ namespace Shared.Data
                 if (cpuEppDC != value)
                 {
                     cpuEppDC = value;
-                    Save();
-                }
-            }
-        }
-
-        [XmlElement("MaxCPUState_DC")]
-        private int? maxCpuStateDC;
-        public int? MaxCPUState_DC
-        {
-            get { return maxCpuStateDC; }
-            set
-            {
-                if (maxCpuStateDC != value)
-                {
-                    maxCpuStateDC = value;
-                    Save();
-                }
-            }
-        }
-
-        [XmlElement("MinCPUState_DC")]
-        private int? minCpuStateDC;
-        public int? MinCPUState_DC
-        {
-            get { return minCpuStateDC; }
-            set
-            {
-                if (minCpuStateDC != value)
-                {
-                    minCpuStateDC = value;
                     Save();
                 }
             }
@@ -579,24 +519,6 @@ namespace Shared.Data
                 if (overlayLevel != value)
                 {
                     overlayLevel = value;
-                    Save();
-                }
-            }
-        }
-
-        /// <summary>
-        /// CPU Affinity configuration as "activePCores,activeECores" string
-        /// </summary>
-        [XmlElement("CPUAffinity")]
-        private string cpuAffinity;
-        public string CPUAffinity
-        {
-            get { return cpuAffinity; }
-            set
-            {
-                if (cpuAffinity != value)
-                {
-                    cpuAffinity = value;
                     Save();
                 }
             }
@@ -1196,7 +1118,7 @@ namespace Shared.Data
             set { cache = value; }
         }
 
-        public GameProfile(string gameName, string gamePath, bool inUse, int inTDP, bool inCPUBoost, int inCPUEPP, int inMaxCPUState, int inMinCPUState, bool inTDPBoostEnabled, string inPath, IDictionary<GameId, GameProfile> inCache)
+        public GameProfile(string gameName, string gamePath, bool inUse, int inTDP, bool inCPUBoost, int inCPUEPP, bool inTDPBoostEnabled, string inPath, IDictionary<GameId, GameProfile> inCache)
         {
             GameId = new GameId(gameName, gamePath);
             use = inUse;
@@ -1204,8 +1126,6 @@ namespace Shared.Data
             tdp = inTDP;
             cpuBoost = inCPUBoost;
             cpuEPP = inCPUEPP;
-            maxCPUState = inMaxCPUState;
-            minCPUState = inMinCPUState;
             tdpBoostEnabled = inTDPBoostEnabled;
             tdpBoostSPPT = 0; // 0 = property getter returns legacy default 1
             tdpBoostFPPT = 0; // 0 = property getter returns legacy default 3
@@ -1213,8 +1133,6 @@ namespace Shared.Data
             tdpDC = null;
             cpuBoostDC = null;
             cpuEppDC = null;
-            maxCpuStateDC = null;
-            minCpuStateDC = null;
             // DGP preferences
             dgpEnabledOnAC = null;
             dgpEnabledOnDC = null;
@@ -1238,9 +1156,7 @@ namespace Shared.Data
             resolution = null;
             refreshRate = null;
             stickyTDP = false;
-            // Overlay and CPU affinity
             overlayLevel = null;
-            cpuAffinity = null;
             // Legion controller remapping (shared AC/DC)
             legionButtonY1 = null;
             legionButtonY2 = null;

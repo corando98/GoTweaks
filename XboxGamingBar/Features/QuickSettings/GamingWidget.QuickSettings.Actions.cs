@@ -1,4 +1,4 @@
-using Microsoft.Gaming.XboxGameBar;
+﻿using Microsoft.Gaming.XboxGameBar;
 using Microsoft.Gaming.XboxGameBar.Input;
 using Microsoft.UI.Xaml.Controls;
 using NLog;
@@ -117,6 +117,9 @@ namespace XboxGamingBar
                                 break;
                             case "Rotation":
                                 CycleRotation();
+                                break;
+                            case "RefreshRate":
+                                CycleRefreshRate();
                                 break;
                             case "HDR":
                                 ToggleHDR();
@@ -570,6 +573,9 @@ namespace XboxGamingBar
 
         private void CycleResolution()
         {
+            // Resolution override only applies to the built-in panel; no-op while docked with
+            // only an external monitor active (the tile itself is dimmed + disabled too).
+            if (!IsInternalPanelActive) return;
             if (resolution != null && resolutions?.Value != null && resolutions.Value.Count > 0)
             {
                 // Filter out excluded resolutions for quick cycling
@@ -598,8 +604,33 @@ namespace XboxGamingBar
         /// <summary>
         /// Cycles display orientation between Landscape (0) and Portrait (1).
         /// </summary>
+        /// <summary>
+        /// Cycles the display refresh rate between 60Hz and 120Hz. Only offers a rate if the
+        /// display actually reports it as supported (refreshRates.Value); otherwise no-ops rather
+        /// than requesting a mode the driver would reject or silently ignore.
+        /// </summary>
+        private void CycleRefreshRate()
+        {
+            if (refreshRate == null || !IsInternalPanelActive) return;
+
+            int current = refreshRate.Value;
+            int next = current >= 120 ? 60 : 120;
+
+            if (refreshRates?.Value != null && refreshRates.Value.Count > 0 && !refreshRates.Value.Contains(next))
+            {
+                Logger.Info($"Refresh rate {next}Hz not in supported list, skipping cycle");
+                return;
+            }
+
+            refreshRate.SetValue(next);
+            Logger.Info($"Refresh rate cycled from {current}Hz to {next}Hz");
+        }
+
         private void CycleRotation()
         {
+            // Display rotation only applies to the built-in panel; no-op while docked with
+            // only an external monitor active (the tile itself is dimmed + disabled too).
+            if (!IsInternalPanelActive) return;
             if (displayOrientation != null)
             {
                 int currentOrientation = displayOrientation.Value;
@@ -1223,11 +1254,11 @@ namespace XboxGamingBar
             }
         }
 
-        // Cycle order for the Quick-tab Controller tile.
-        //   Legacy: every supported mode (0=Mouse, 1=Xbox Stick, 2=DS4 Motion, 3=DS4 Stick).
-        //   VIIPER: every supported virtual-device tag from ViiperDeviceTypeComboBox.
-        // Both cycles end at "Off" so the user can always get the tile back to disabled.
-        private static readonly int[] ControllerEmulationLegacyCycle = new[] { 0, 1, 2, 3 };
+        // Cycle order for the Quick-tab Controller tile: every supported virtual-device
+        // tag from ViiperDeviceTypeComboBox. VIIPER is the only emulation backend (the
+        // helper clamps any persisted legacy backend selection forward - CLAUDE.md SS21),
+        // so this is the only cycle left. Ends at "Off" so the user can always get the
+        // tile back to disabled.
         private static readonly string[] ControllerEmulationViiperCycle = new[]
         {
             // xboxelite2 dropped from the cycle alongside the UI option (the
@@ -1249,57 +1280,7 @@ namespace XboxGamingBar
                 return;
             }
 
-            bool isViiper = emulationBackend?.Value == true;
-            bool currentlyEnabled = controllerEmulationEnabled.Value;
-
-            if (isViiper)
-            {
-                CycleControllerEmulationViiper(currentlyEnabled);
-            }
-            else
-            {
-                CycleControllerEmulationLegacy(currentlyEnabled);
-            }
-        }
-
-        private void CycleControllerEmulationLegacy(bool currentlyEnabled)
-        {
-            int[] cycle = ControllerEmulationLegacyCycle;
-
-            if (!currentlyEnabled)
-            {
-                int firstMode = cycle[0];
-                controllerEmulationMode?.SetValue(firstMode);
-                controllerEmulationEnabled.SetValue(true);
-                if (ControllerEmulationEnabledToggle != null)
-                {
-                    ControllerEmulationEnabledToggle.IsOn = true;
-                }
-                Logger.Info($"Controller Emulation (Legacy) cycled: Off -> mode {firstMode}");
-                return;
-            }
-
-            int current = controllerEmulationMode?.Value ?? cycle[0];
-            int currentIndex = Array.IndexOf(cycle, current);
-            int nextIndex = currentIndex + 1;
-
-            if (currentIndex < 0 || nextIndex >= cycle.Length)
-            {
-                // Current mode is outside the cycle (e.g. Mouse or PS4-Stick set via System tab),
-                // or we're at the end — flip to Off.
-                controllerEmulationEnabled.SetValue(false);
-                if (ControllerEmulationEnabledToggle != null)
-                {
-                    ControllerEmulationEnabledToggle.IsOn = false;
-                }
-                Logger.Info("Controller Emulation (Legacy) cycled: -> Off");
-            }
-            else
-            {
-                int nextMode = cycle[nextIndex];
-                controllerEmulationMode?.SetValue(nextMode);
-                Logger.Info($"Controller Emulation (Legacy) cycled: mode {current} -> mode {nextMode}");
-            }
+            CycleControllerEmulationViiper(controllerEmulationEnabled.Value);
         }
 
         private void CycleControllerEmulationViiper(bool currentlyEnabled)
@@ -1502,22 +1483,6 @@ namespace XboxGamingBar
             UpdateCustomShortcutKeyTags();
 
             UpdateQuickSettingsTileStates();
-        }
-
-        /// <summary>
-        /// Handle tile visibility checkbox changes
-        /// </summary>
-        private void TileVisibility_Changed(object sender, RoutedEventArgs e)
-        {
-            if (sender is CheckBox checkBox && checkBox.Tag is string tileId)
-            {
-                bool isVisible = checkBox.IsChecked ?? true;
-
-                if (qsTileMap.TryGetValue(tileId, out var tile))
-                {
-                    tile.IsVisible = isVisible;
-                }
-            }
         }
 
     }

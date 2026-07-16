@@ -1,4 +1,4 @@
-using Microsoft.Gaming.XboxGameBar;
+﻿using Microsoft.Gaming.XboxGameBar;
 using Microsoft.Gaming.XboxGameBar.Input;
 using Microsoft.UI.Xaml.Controls;
 using NLog;
@@ -119,7 +119,6 @@ namespace XboxGamingBar
         private void ApplyHideAdvancedOptions()
         {
             var vis = hideAdvancedOptions ? Visibility.Collapsed : Visibility.Visible;
-            if (AdvancedCard != null) AdvancedCard.Visibility = vis;
             if (OSPowerModeCard != null) OSPowerModeCard.Visibility = vis;
         }
 

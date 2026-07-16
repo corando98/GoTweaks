@@ -25,18 +25,6 @@ namespace XboxGamingBarHelper.Settings
             get { return autoStartRTSS; }
         }
 
-        private readonly AutoHibernateEnabledProperty autoHibernateEnabled;
-        public AutoHibernateEnabledProperty AutoHibernateEnabled
-        {
-            get { return autoHibernateEnabled; }
-        }
-
-        private readonly AutoHibernateIdleMinutesProperty autoHibernateIdleMinutes;
-        public AutoHibernateIdleMinutesProperty AutoHibernateIdleMinutes
-        {
-            get { return autoHibernateIdleMinutes; }
-        }
-
         private readonly OnScreenDisplayProviderProperty onScreenDisplayProvider;
         public OnScreenDisplayProviderProperty OnScreenDisplayProvider
         {
@@ -250,8 +238,6 @@ namespace XboxGamingBarHelper.Settings
         protected SettingsManager() : base()
         {
             autoStartRTSS = new AutoStartRTSSProperty(this);
-            autoHibernateEnabled = new AutoHibernateEnabledProperty(this);
-            autoHibernateIdleMinutes = new AutoHibernateIdleMinutesProperty(this);
             onScreenDisplayProvider = new OnScreenDisplayProviderProperty(this);
             isForeground = new IsForegroundProperty(this);
             useManufacturerWMI = new UseManufacturerWMIProperty(this);

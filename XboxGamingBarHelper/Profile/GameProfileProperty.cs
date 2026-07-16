@@ -46,30 +46,6 @@ namespace XboxGamingBarHelper.Profile
             }
         }
 
-        public int MaxCPUState
-        {
-            get { return value.MaxCPUState; }
-            set
-            {
-                if (this.value.MaxCPUState != value)
-                {
-                    this.value.MaxCPUState = value;
-                }
-            }
-        }
-
-        public int MinCPUState
-        {
-            get { return value.MinCPUState; }
-            set
-            {
-                if (this.value.MinCPUState != value)
-                {
-                    this.value.MinCPUState = value;
-                }
-            }
-        }
-
         public bool TDPBoostEnabled
         {
             get { return value.TDPBoostEnabled; }

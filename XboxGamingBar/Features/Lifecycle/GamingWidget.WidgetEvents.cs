@@ -72,6 +72,18 @@ namespace XboxGamingBar
                 // user already interacting. Deferred so layout has settled first.
                 if (isVisible)
                 {
+                    // Re-paint the Legion controller battery/connection/VID:PID display on every
+                    // open. The underlying property values are usually already correct by now (the
+                    // real battery reading typically arrives 180ms-1s after the widget's first
+                    // BatchGet on a cold helper start), but the very first live-push repaint attempt
+                    // can lose the race against the widget's own startup/dispatcher churn and throw
+                    // RPC_E_WRONG_THREAD, which UpdateLegionControllerBatteryDisplay's catch block
+                    // silently swallows - leaving the UI stuck on stale/blank values even though the
+                    // data itself is fine. This gives the paint a guaranteed second chance on the
+                    // next open instead of requiring the user to notice and manually reopen.
+                    UpdateLegionControllerBatteryDisplay();
+                    UpdateLegionControllerVidPidDisplay();
+
                     var ignoreFocus = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Low, () =>
                     {
                         if (FocusManager.GetFocusedElement() == null)

@@ -1,8 +1,7 @@
-using NLog;
+﻿using NLog;
 using Shared.Enums;
 using System;
 using System.Collections.Generic;
-using XboxGamingBarHelper.Power;
 
 namespace XboxGamingBarHelper
 {
@@ -10,18 +9,14 @@ namespace XboxGamingBarHelper
     /// Helper-side AC/DC transition handling. The widget is UWP and stops receiving
     /// PowerManager.PowerSourceChanged callbacks while Game Bar is dismissed, so any
     /// AC↔DC transition that happens between Game Bar sessions used to be dropped
-    /// (issue #72). The helper mirrors the three widget settings that drive its power-plan
-    /// auto-switch decision, subscribes to SystemManager.PowerSourceChanged, and does the
-    /// same work the widget would have done — independent of widget lifecycle.
+    /// (issue #72). The helper caches the active profile's per-state values, subscribes
+    /// to SystemManager.PowerSourceChanged, and does the same work the widget would
+    /// have done — independent of widget lifecycle.
     /// </summary>
     internal partial class Program
     {
         private static class PowerSourceProfileState
         {
-            public static bool AutoSwitchEnabled = false;
-            public static Guid AcGuid = Guid.Empty;
-            public static Guid DcGuid = Guid.Empty;
-
             // Per-state TDP / TDPBoost values. Populated via PowerSourceProfileValues pipe
             // message from the widget. null = no override for that field (helper falls back
             // to whatever the active profile / current property already holds).
@@ -38,10 +33,6 @@ namespace XboxGamingBarHelper
             public static bool? DcCpuBoost = null;
             public static int? AcCpuEpp = null;
             public static int? DcCpuEpp = null;
-            public static int? AcMaxCpuState = null;
-            public static int? DcMaxCpuState = null;
-            public static int? AcMinCpuState = null;
-            public static int? DcMinCpuState = null;
             public static int? AcOsPowerMode = null;
             public static int? DcOsPowerMode = null;
             // FPSLimit: 0 means "disabled", non-zero is the cap. Widget's profile splits
@@ -64,37 +55,6 @@ namespace XboxGamingBarHelper
         // TDP on each is wasted work and could fight the hardware. null on first call so
         // the first real transition always fires (initial seeding is done in SystemManager).
         private static bool? _lastIsOnAC;
-
-        internal static void ApplyPowerSourceProfileConfig(string configJson)
-        {
-            try
-            {
-                var cfg = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, System.Text.Json.JsonElement>>(configJson);
-                if (cfg == null) return;
-
-                if (cfg.TryGetValue("AutoSwitchEnabled", out var autoEl) &&
-                    (autoEl.ValueKind == System.Text.Json.JsonValueKind.True || autoEl.ValueKind == System.Text.Json.JsonValueKind.False))
-                {
-                    PowerSourceProfileState.AutoSwitchEnabled = autoEl.GetBoolean();
-                }
-                if (cfg.TryGetValue("AcGuid", out var acEl) && acEl.ValueKind == System.Text.Json.JsonValueKind.String)
-                {
-                    Guid.TryParse(acEl.GetString(), out var ac);
-                    PowerSourceProfileState.AcGuid = ac;
-                }
-                if (cfg.TryGetValue("DcGuid", out var dcEl) && dcEl.ValueKind == System.Text.Json.JsonValueKind.String)
-                {
-                    Guid.TryParse(dcEl.GetString(), out var dc);
-                    PowerSourceProfileState.DcGuid = dc;
-                }
-
-                Logger.Info($"Applied PowerSourceProfileConfig (autoSwitch={PowerSourceProfileState.AutoSwitchEnabled}, ac={PowerSourceProfileState.AcGuid}, dc={PowerSourceProfileState.DcGuid})");
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"ApplyPowerSourceProfileConfig: {ex.Message}");
-            }
-        }
 
         /// <summary>
         /// Cache the per-state TDP / TDPBoost values for the active profile so the helper
@@ -133,10 +93,6 @@ namespace XboxGamingBarHelper
                 PowerSourceProfileState.DcCpuBoost = ParseBool("DcCpuBoost");
                 PowerSourceProfileState.AcCpuEpp = ParseInt("AcCpuEpp");
                 PowerSourceProfileState.DcCpuEpp = ParseInt("DcCpuEpp");
-                PowerSourceProfileState.AcMaxCpuState = ParseInt("AcMaxCpuState");
-                PowerSourceProfileState.DcMaxCpuState = ParseInt("DcMaxCpuState");
-                PowerSourceProfileState.AcMinCpuState = ParseInt("AcMinCpuState");
-                PowerSourceProfileState.DcMinCpuState = ParseInt("DcMinCpuState");
                 PowerSourceProfileState.AcOsPowerMode = ParseInt("AcOsPowerMode");
                 PowerSourceProfileState.DcOsPowerMode = ParseInt("DcOsPowerMode");
                 PowerSourceProfileState.AcFpsLimit = ParseInt("AcFpsLimit");
@@ -151,14 +107,12 @@ namespace XboxGamingBarHelper
                     + $"boost={PowerSourceProfileState.AcTdpBoost?.ToString() ?? "-"}, "
                     + $"cpuBoost={PowerSourceProfileState.AcCpuBoost?.ToString() ?? "-"}, "
                     + $"epp={PowerSourceProfileState.AcCpuEpp?.ToString() ?? "-"}, "
-                    + $"cpuState={PowerSourceProfileState.AcMinCpuState?.ToString() ?? "-"}–{PowerSourceProfileState.AcMaxCpuState?.ToString() ?? "-"}, "
                     + $"osMode={PowerSourceProfileState.AcOsPowerMode?.ToString() ?? "-"}, "
                     + $"fpsLimit={PowerSourceProfileState.AcFpsLimit?.ToString() ?? "-"}; "
                     + $"DC: tdp={PowerSourceProfileState.DcTdp?.ToString() ?? "-"}W, "
                     + $"boost={PowerSourceProfileState.DcTdpBoost?.ToString() ?? "-"}, "
                     + $"cpuBoost={PowerSourceProfileState.DcCpuBoost?.ToString() ?? "-"}, "
                     + $"epp={PowerSourceProfileState.DcCpuEpp?.ToString() ?? "-"}, "
-                    + $"cpuState={PowerSourceProfileState.DcMinCpuState?.ToString() ?? "-"}–{PowerSourceProfileState.DcMaxCpuState?.ToString() ?? "-"}, "
                     + $"osMode={PowerSourceProfileState.DcOsPowerMode?.ToString() ?? "-"}, "
                     + $"fpsLimit={PowerSourceProfileState.DcFpsLimit?.ToString() ?? "-"})");
             }
@@ -191,29 +145,7 @@ namespace XboxGamingBarHelper
             }
             _lastIsOnAC = isOnAC;
 
-            // 1) Apply the user's selected AC/DC power plan, if auto-switch is on.
-            if (PowerSourceProfileState.AutoSwitchEnabled)
-            {
-                Guid planToApply = isOnAC ? PowerSourceProfileState.AcGuid : PowerSourceProfileState.DcGuid;
-                if (planToApply != Guid.Empty)
-                {
-                    try
-                    {
-                        bool ok = PowerManager.SetActivePowerPlan(planToApply);
-                        Logger.Info($"Helper-side AC/DC handler: applied {(isOnAC ? "AC" : "DC")} power plan {planToApply} (success={ok})");
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Warn($"Helper-side AC/DC handler: SetActivePowerPlan threw: {ex.Message}");
-                    }
-                }
-                else
-                {
-                    Logger.Debug($"Helper-side AC/DC handler: no {(isOnAC ? "AC" : "DC")} plan configured, skipping plan switch");
-                }
-            }
-
-            // 2) Apply per-state values cached by the widget on AC/DC transitions.
+            // Apply per-state values cached by the widget on AC/DC transitions.
             //
             // Layered gating, in order of how much they should restrict the work:
             //   - performanceManager null / AutoTDP active → skip everything (no manager
@@ -290,13 +222,12 @@ namespace XboxGamingBarHelper
                 }
 
                 bool isLegionCustomMode = legionManager != null && legionManager.CurrentPerformanceMode == 255;
-                bool powerSourceProfileEnabled = PowerSourceProfileState.AutoSwitchEnabled;
-                bool tdpGateAllowed = isLegionCustomMode || powerSourceProfileEnabled;
 
-                // 2a) TDP / TDPBoost — gated by Legion Custom or Power-Source-Profile.
-                if (!tdpGateAllowed)
+                // TDP / TDPBoost — gated by Legion Custom mode; in Legion preset modes the
+                // system manages TDP itself, so pushing our value would fight the preset.
+                if (!isLegionCustomMode)
                 {
-                    Logger.Debug("Helper-side AC/DC handler: skipping TDP/TDPBoost reapply — not in Legion Custom mode and Power-Source Profile auto-switch is off (extended fields below still apply)");
+                    Logger.Debug("Helper-side AC/DC handler: skipping TDP/TDPBoost reapply — not in Legion Custom mode (extended fields below still apply)");
                 }
                 else
                 {
@@ -309,7 +240,7 @@ namespace XboxGamingBarHelper
                     if (targetTdp > 0)
                     {
                         string source = perStateTdp.HasValue ? $"per-state {(isOnAC ? "AC" : "DC")} profile" : "current cached value";
-                        Logger.Info($"Helper-side AC/DC handler: applying TDP {targetTdp}W from {source} (legionCustom={isLegionCustomMode}, powerSourceProfile={powerSourceProfileEnabled})");
+                        Logger.Info($"Helper-side AC/DC handler: applying TDP {targetTdp}W from {source} (legionCustom={isLegionCustomMode})");
                         // Update the helper's TDP property so the widget's slider stays
                         // in sync (the property change pipes back to the widget). Use
                         // SetValue rather than just calling SetTDP so the widget UI
@@ -335,8 +266,8 @@ namespace XboxGamingBarHelper
                     }
                 }
 
-                // 2b) Extended fields (build 2080+): CPUBoost / CPUEPP / CPUState (Min+Max)
-                // / OSPowerMode / FPSLimit. Apply unconditionally — these settings aren't
+                // Extended fields (build 2080+): CPUBoost / CPUEPP / OSPowerMode /
+                // FPSLimit. Apply unconditionally — these settings aren't
                 // managed by Legion preset modes, so they're safe to reapply anytime the
                 // cached value differs from current. Skip silently when the cache has no
                 // override (legacy widget that didn't pipe extended fields, or first
@@ -358,22 +289,6 @@ namespace XboxGamingBarHelper
                 {
                     Logger.Info($"Helper-side AC/DC handler: applying CPUEPP={perStateCpuEpp.Value} from per-state {state} profile");
                     powerManager.CPUEPP.SetValue(perStateCpuEpp.Value);
-                }
-
-                int? perStateMaxCpuState = isOnAC ? PowerSourceProfileState.AcMaxCpuState : PowerSourceProfileState.DcMaxCpuState;
-                if (perStateMaxCpuState.HasValue && powerManager?.MaxCPUState != null
-                    && perStateMaxCpuState.Value != powerManager.MaxCPUState.Value)
-                {
-                    Logger.Info($"Helper-side AC/DC handler: applying MaxCPUState={perStateMaxCpuState.Value}% from per-state {state} profile");
-                    powerManager.MaxCPUState.SetValue(perStateMaxCpuState.Value);
-                }
-
-                int? perStateMinCpuState = isOnAC ? PowerSourceProfileState.AcMinCpuState : PowerSourceProfileState.DcMinCpuState;
-                if (perStateMinCpuState.HasValue && powerManager?.MinCPUState != null
-                    && perStateMinCpuState.Value != powerManager.MinCPUState.Value)
-                {
-                    Logger.Info($"Helper-side AC/DC handler: applying MinCPUState={perStateMinCpuState.Value}% from per-state {state} profile");
-                    powerManager.MinCPUState.SetValue(perStateMinCpuState.Value);
                 }
 
                 int? perStateOsMode = isOnAC ? PowerSourceProfileState.AcOsPowerMode : PowerSourceProfileState.DcOsPowerMode;

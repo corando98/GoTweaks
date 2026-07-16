@@ -1,4 +1,4 @@
-using Microsoft.Gaming.XboxGameBar;
+﻿using Microsoft.Gaming.XboxGameBar;
 using Microsoft.Gaming.XboxGameBar.Input;
 using Microsoft.UI.Xaml.Controls;
 using NLog;
@@ -63,18 +63,6 @@ namespace XboxGamingBar
                 Logger.Info($"Power source event - Battery: {batteryStatus}, PowerSupply: {powerSupplyStatus}");
 
                 UpdateActiveProfileIndicator();
-
-                // Auto-switch power plan based on power source
-                if (powerPlanAutoSwitch)
-                {
-                    bool isOnAC = powerSupplyStatus != PowerSupplyStatus.NotPresent;
-                    Guid planToApply = isOnAC ? acPowerPlanGuid : dcPowerPlanGuid;
-                    if (planToApply != Guid.Empty)
-                    {
-                        ApplyPowerPlan(planToApply);
-                        Logger.Info($"Auto-switched power plan to {(isOnAC ? "AC" : "DC")}: {planToApply}");
-                    }
-                }
 
                 // Only reapply TDP after power source change if:
                 // 1. On Legion Go in Custom mode (255) - system changes TDP, need to restore

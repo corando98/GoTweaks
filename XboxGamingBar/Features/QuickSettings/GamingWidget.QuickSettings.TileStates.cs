@@ -1,4 +1,4 @@
-using Microsoft.Gaming.XboxGameBar;
+﻿using Microsoft.Gaming.XboxGameBar;
 using Microsoft.Gaming.XboxGameBar.Input;
 using Microsoft.UI.Xaml.Controls;
 using NLog;
@@ -280,6 +280,19 @@ namespace XboxGamingBar
         /// when off. No-op in classic themes (AccentBar is null). Call with the same
         /// boolean condition used for that tile's StateText.Foreground.
         /// </summary>
+        /// <summary>
+        /// Dims and disables an entire tile (not just its state text) when it's blocked by the
+        /// built-in-panel-only gate (only an external monitor is active). Used by Resolution
+        /// and Rotation - a dimmed-but-clickable tile with just an "N/A" label reads as a bug
+        /// to the user, so this makes the whole tile visibly non-interactive instead.
+        /// </summary>
+        private void ApplyPanelGateVisual(TileDefinition tile, bool internalActive)
+        {
+            if (tile?.TileButton == null) return;
+            tile.TileButton.IsEnabled = internalActive;
+            tile.TileButton.Opacity = internalActive ? 1.0 : 0.4;
+        }
+
         private void SetTileAccentBar(TileDefinition tile, bool isOn)
         {
             if (tile?.AccentBar == null) return;
@@ -640,25 +653,51 @@ namespace XboxGamingBar
                     fpsLimitTile.TileButton.Background = limit > 0 ? tileOnBrush : tileOffBrush;
                 }
 
-                // Resolution tile
+                // Resolution tile - blocked (whole tile dimmed + disabled) when only an external
+                // monitor is active, since the resolution override only applies to the built-in panel.
                 if (qsTileMap.TryGetValue("Resolution", out var resTile) && resTile.TileButton != null)
                 {
                     string currentRes = resolution?.Value ?? "1920x1080";
-                    resTile.StateText.Text = currentRes;
-                    resTile.StateText.Foreground = accentForeground;
-                    SetTileAccentBar(resTile, true);
+                    resTile.StateText.Text = _internalPanelActive ? currentRes : "Built-in Only";
+                    resTile.StateText.Foreground = _internalPanelActive ? accentForeground : offForeground;
+                    SetTileAccentBar(resTile, _internalPanelActive);
                     resTile.TileButton.Background = tileOffBrush;
+                    ApplyPanelGateVisual(resTile, _internalPanelActive);
                 }
 
-                // Rotation tile
+                // Refresh Rate tile - blocked (whole tile dimmed + disabled) when only an external
+                // monitor is active, same reasoning as the Resolution tile above.
+                if (qsTileMap.TryGetValue("RefreshRate", out var refreshRateTile) && refreshRateTile.TileButton != null)
+                {
+                    int currentRate = refreshRate?.Value ?? 60;
+                    refreshRateTile.StateText.Text = _internalPanelActive ? $"{currentRate} Hz" : "Built-in Only";
+                    refreshRateTile.StateText.Foreground = _internalPanelActive ? accentForeground : offForeground;
+                    SetTileAccentBar(refreshRateTile, _internalPanelActive);
+                    refreshRateTile.TileButton.Background = tileOffBrush;
+                    ApplyPanelGateVisual(refreshRateTile, _internalPanelActive);
+                }
+
+                // Rotation tile - blocked (whole tile dimmed + disabled) when only an external
+                // monitor is active, since display rotation only applies to the built-in panel.
                 if (qsTileMap.TryGetValue("Rotation", out var rotationTile) && rotationTile.TileButton != null)
                 {
-                    string orientationText = displayOrientation?.GetOrientationText() ?? "Landscape";
-                    bool isPortrait = (displayOrientation?.Value ?? 0) == 1 || (displayOrientation?.Value ?? 0) == 3;
-                    rotationTile.StateText.Text = orientationText;
-                    rotationTile.StateText.Foreground = isPortrait ? accentForeground : offForeground;
-                    SetTileAccentBar(rotationTile, isPortrait);
-                    rotationTile.TileButton.Background = isPortrait ? tileOnBrush : tileOffBrush;
+                    if (_internalPanelActive)
+                    {
+                        string orientationText = displayOrientation?.GetOrientationText() ?? "Landscape";
+                        bool isPortrait = (displayOrientation?.Value ?? 0) == 1 || (displayOrientation?.Value ?? 0) == 3;
+                        rotationTile.StateText.Text = orientationText;
+                        rotationTile.StateText.Foreground = isPortrait ? accentForeground : offForeground;
+                        SetTileAccentBar(rotationTile, isPortrait);
+                        rotationTile.TileButton.Background = isPortrait ? tileOnBrush : tileOffBrush;
+                    }
+                    else
+                    {
+                        rotationTile.StateText.Text = "Built-in Only";
+                        rotationTile.StateText.Foreground = offForeground;
+                        SetTileAccentBar(rotationTile, false);
+                        rotationTile.TileButton.Background = tileOffBrush;
+                    }
+                    ApplyPanelGateVisual(rotationTile, _internalPanelActive);
                 }
 
                 // HDR tile
@@ -688,8 +727,8 @@ namespace XboxGamingBar
                     bool supported = amdImageSharpeningSupported?.Value ?? false;
                     bool enabled = amdImageSharpeningEnabled?.Value ?? false;
                     risTile.StateText.Text = !supported ? "N/A" : (enabled ? "On" : "Off");
-                    risTile.StateText.Foreground = enabled ? accentForeground : offForeground;
-                    SetTileAccentBar(risTile, enabled);
+                    risTile.StateText.Foreground = enabled ? tileSeverityRedBrush : offForeground;
+                    if (risTile.AccentBar != null) risTile.AccentBar.Background = enabled ? tileSeverityRedBrush : tileBarOffBrush;
                     risTile.TileButton.Background = enabled ? tileOnBrush : tileOffBrush;
                 }
 
@@ -699,8 +738,8 @@ namespace XboxGamingBar
                     bool supported = amdFluidMotionFrameSupported?.Value ?? false;
                     bool enabled = amdFluidMotionFrameEnabled?.Value ?? false;
                     afmfTile.StateText.Text = !supported ? "N/A" : (enabled ? "On" : "Off");
-                    afmfTile.StateText.Foreground = enabled ? accentForeground : offForeground;
-                    SetTileAccentBar(afmfTile, enabled);
+                    afmfTile.StateText.Foreground = enabled ? tileSeverityRedBrush : offForeground;
+                    if (afmfTile.AccentBar != null) afmfTile.AccentBar.Background = enabled ? tileSeverityRedBrush : tileBarOffBrush;
                     afmfTile.TileButton.Background = enabled ? tileOnBrush : tileOffBrush;
                 }
 
@@ -710,8 +749,8 @@ namespace XboxGamingBar
                     bool supported = amdRadeonSuperResolutionSupported?.Value ?? false;
                     bool enabled = amdRadeonSuperResolutionEnabled?.Value ?? false;
                     rsrTile.StateText.Text = !supported ? "N/A" : (enabled ? "On" : "Off");
-                    rsrTile.StateText.Foreground = enabled ? accentForeground : offForeground;
-                    SetTileAccentBar(rsrTile, enabled);
+                    rsrTile.StateText.Foreground = enabled ? tileSeverityRedBrush : offForeground;
+                    if (rsrTile.AccentBar != null) rsrTile.AccentBar.Background = enabled ? tileSeverityRedBrush : tileBarOffBrush;
                     rsrTile.TileButton.Background = enabled ? tileOnBrush : tileOffBrush;
                 }
 
@@ -721,8 +760,8 @@ namespace XboxGamingBar
                     bool supported = amdRadeonAntiLagSupported?.Value ?? false;
                     bool enabled = amdRadeonAntiLagEnabled?.Value ?? false;
                     antiLagTile.StateText.Text = !supported ? "N/A" : (enabled ? "On" : "Off");
-                    antiLagTile.StateText.Foreground = enabled ? accentForeground : offForeground;
-                    SetTileAccentBar(antiLagTile, enabled);
+                    antiLagTile.StateText.Foreground = enabled ? tileSeverityRedBrush : offForeground;
+                    if (antiLagTile.AccentBar != null) antiLagTile.AccentBar.Background = enabled ? tileSeverityRedBrush : tileBarOffBrush;
                     antiLagTile.TileButton.Background = enabled ? tileOnBrush : tileOffBrush;
                 }
 
@@ -732,8 +771,8 @@ namespace XboxGamingBar
                     bool supported = amdRadeonChillSupported?.Value ?? false;
                     bool enabled = amdRadeonChillEnabled?.Value ?? false;
                     chillTile.StateText.Text = !supported ? "N/A" : (enabled ? "On" : "Off");
-                    chillTile.StateText.Foreground = enabled ? accentForeground : offForeground;
-                    SetTileAccentBar(chillTile, enabled);
+                    chillTile.StateText.Foreground = enabled ? tileSeverityRedBrush : offForeground;
+                    if (chillTile.AccentBar != null) chillTile.AccentBar.Background = enabled ? tileSeverityRedBrush : tileBarOffBrush;
                     chillTile.TileButton.Background = enabled ? tileOnBrush : tileOffBrush;
                 }
 
@@ -917,13 +956,9 @@ namespace XboxGamingBar
                     }
                 }
 
-                // Controller Emulation tile — label reflects whichever backend is
-                // currently selected (Legacy ViGEm vs VIIPER). For Legacy, show the
-                // mode index (Mouse / Xbox / DS4 / DS4 Stick). For VIIPER, show the
-                // active virtual-device tag (Xbox / DS4 / DS Edge / Elite 2 / Steam /
-                // Switch). Without this split the tile always read the legacy mode
-                // and was stuck on "Xbox" while VIIPER was actually presenting a
-                // different device — see issue #79 round-2 reply.
+                // Controller Emulation tile — label is the active VIIPER virtual-device
+                // tag (Xbox / DS4 / DS Edge / Elite 2 / Steam / Switch). VIIPER is the
+                // only emulation backend now (CLAUDE.md SS21).
                 if (qsTileMap.TryGetValue("ControllerEmulation", out var ceTile) && ceTile.TileButton != null)
                 {
                     bool available = controllerEmulationAvailable?.Value == true;
@@ -937,9 +972,8 @@ namespace XboxGamingBar
                     {
                         label = "Off";
                     }
-                    else if (emulationBackend?.Value == true)
+                    else
                     {
-                        // VIIPER backend — label is the active virtual device type.
                         string device = viiperDeviceType?.Value ?? "";
                         switch (device)
                         {
@@ -959,20 +993,6 @@ namespace XboxGamingBar
                             case "joycon-left": label = "JoyL"; break;
                             case "joycon-right": label = "JoyR"; break;
                             case "joycon-pair": label = "JoyPair"; break;
-                            default: label = "On"; break;
-                        }
-                    }
-                    else
-                    {
-                        // Legacy backend — label is the ControllerEmulationMode index
-                        // (0=Mouse, 1=Xbox, 2=DS4 Motion, 3=DS4 Stick).
-                        int mode = controllerEmulationMode?.Value ?? 1;
-                        switch (mode)
-                        {
-                            case 0: label = "Mouse"; break;
-                            case 1: label = "Xbox"; break;
-                            case 2: label = "DS4"; break;
-                            case 3: label = "DS4 Stick"; break;
                             default: label = "On"; break;
                         }
                     }

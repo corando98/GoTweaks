@@ -1,4 +1,4 @@
-using Microsoft.Gaming.XboxGameBar;
+﻿using Microsoft.Gaming.XboxGameBar;
 using Microsoft.Gaming.XboxGameBar.Input;
 using Microsoft.UI.Xaml.Controls;
 using NLog;
@@ -67,13 +67,6 @@ namespace XboxGamingBar
             UpdateScrollRemapDescription();
         }
 
-        private void ScrollShortcutApplyButton_Click(object sender, RoutedEventArgs e)
-        {
-            SaveScrollRemapSettings();
-            ApplyScrollWheelConfig("Scroll");
-            UpdateScrollRemapDescription();
-        }
-
         private void ScrollCommandApplyButton_Click(object sender, RoutedEventArgs e)
         {
             SaveScrollRemapSettings();
@@ -100,13 +93,6 @@ namespace XboxGamingBar
             if (selection != 2 && selection != 3)
                 ApplyScrollWheelConfig("Click");
 
-            UpdateScrollRemapDescription();
-        }
-
-        private void ScrollClickShortcutApplyButton_Click(object sender, RoutedEventArgs e)
-        {
-            SaveScrollRemapSettings();
-            ApplyScrollWheelConfig("Click");
             UpdateScrollRemapDescription();
         }
 

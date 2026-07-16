@@ -1,4 +1,4 @@
-using NLog;
+﻿using NLog;
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -69,6 +69,22 @@ namespace XboxGamingBarHelper.Services
             // OS Power Mode (power slider) original value
             public int? OriginalOsPowerMode { get; set; }
             public bool OsPowerModeSaved { get; set; } = false;
+
+            // Power Button action original values
+            public uint? OriginalPowerButtonActionAC { get; set; }
+            public uint? OriginalPowerButtonActionDC { get; set; }
+            public bool PowerButtonActionSaved { get; set; } = false;
+
+            // Display Timeout original values (seconds)
+            public uint? OriginalDisplayTimeoutAC { get; set; }
+            public uint? OriginalDisplayTimeoutDC { get; set; }
+            public bool DisplayTimeoutSaved { get; set; } = false;
+
+            // Sleep Timeout original values (seconds) - only touched by the "Disable Sleep
+            // Timer (AC+DC)" button, not by any synced property.
+            public uint? OriginalSleepTimeoutAC { get; set; }
+            public uint? OriginalSleepTimeoutDC { get; set; }
+            public bool SleepTimeoutSaved { get; set; } = false;
 
             // Scheduled task was created
             public bool ScheduledTaskCreated { get; set; } = false;
@@ -199,47 +215,126 @@ namespace XboxGamingBarHelper.Services
         }
 
         /// <summary>
-        /// Saves the original Maximum CPU State values before first modification.
-        /// Call this BEFORE changing Max CPU State for the first time.
+        /// One-time cleanup for the power-plan features retired in issue #103 ("don't touch
+        /// the user's power plan"). Older builds wrote Max/Min processor state into the
+        /// active scheme and could leave aggressive core-parking powercfg values behind.
+        /// Runs at every startup, but only acts when a pre-#103 build left something to
+        /// undo, then clears its markers so it never fires again.
         /// </summary>
-        public static void SaveOriginalMaxCpuState(uint currentAC, uint currentDC)
+        public static void RestoreRetiredSettings(SystemManager systemManager)
         {
             Initialize();
 
-            if (_restoreData.MaxCpuStateSaved)
+            // Max/Min processor state: write the snapshotted originals back. Old builds
+            // wrote the E-core class-1 setting alongside the primary with the same value,
+            // so the restore mirrors that.
+            if (_restoreData.MaxCpuStateSaved || _restoreData.MinCpuStateSaved)
             {
-                Logger.Debug("Max CPU State original values already saved, skipping");
-                return;
+                try
+                {
+                    if (_restoreData.MaxCpuStateSaved && _restoreData.OriginalMaxCpuStateAC.HasValue)
+                    {
+                        WriteProcessorStateValue(Windows.PowerGuids.GUID_PROCESSOR_THROTTLE_MAX, Windows.PowerGuids.GUID_PROCESSOR_THROTTLE_MAX1, true, _restoreData.OriginalMaxCpuStateAC.Value);
+                        if (_restoreData.OriginalMaxCpuStateDC.HasValue)
+                        {
+                            WriteProcessorStateValue(Windows.PowerGuids.GUID_PROCESSOR_THROTTLE_MAX, Windows.PowerGuids.GUID_PROCESSOR_THROTTLE_MAX1, false, _restoreData.OriginalMaxCpuStateDC.Value);
+                        }
+                        Logger.Info($"Restored Max CPU State to original values (AC={_restoreData.OriginalMaxCpuStateAC}, DC={_restoreData.OriginalMaxCpuStateDC}) — feature retired");
+                    }
+
+                    if (_restoreData.MinCpuStateSaved && _restoreData.OriginalMinCpuStateAC.HasValue)
+                    {
+                        WriteProcessorStateValue(Windows.PowerGuids.GUID_PROCESSOR_THROTTLE_MIN, Windows.PowerGuids.GUID_PROCESSOR_THROTTLE_MIN1, true, _restoreData.OriginalMinCpuStateAC.Value);
+                        if (_restoreData.OriginalMinCpuStateDC.HasValue)
+                        {
+                            WriteProcessorStateValue(Windows.PowerGuids.GUID_PROCESSOR_THROTTLE_MIN, Windows.PowerGuids.GUID_PROCESSOR_THROTTLE_MIN1, false, _restoreData.OriginalMinCpuStateDC.Value);
+                        }
+                        Logger.Info($"Restored Min CPU State to original values (AC={_restoreData.OriginalMinCpuStateAC}, DC={_restoreData.OriginalMinCpuStateDC}) — feature retired");
+                    }
+
+                    var scheme = PowerManager.GetActiveScheme();
+                    Windows.PowrProf.PowerSetActiveScheme(IntPtr.Zero, ref scheme);
+
+                    _restoreData.MaxCpuStateSaved = false;
+                    _restoreData.MinCpuStateSaved = false;
+                    _restoreData.OriginalMaxCpuStateAC = null;
+                    _restoreData.OriginalMaxCpuStateDC = null;
+                    _restoreData.OriginalMinCpuStateAC = null;
+                    _restoreData.OriginalMinCpuStateDC = null;
+                    Save();
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"Failed to restore retired Max/Min CPU State values: {ex.Message}");
+                }
             }
 
-            _restoreData.OriginalMaxCpuStateAC = currentAC;
-            _restoreData.OriginalMaxCpuStateDC = currentDC;
-            _restoreData.MaxCpuStateSaved = true;
-            Save();
+            // Core parking: the retired slider left aggressive CP* powercfg values in the
+            // active scheme whenever the persisted selection implied parked cores. There
+            // was never a snapshot for these, so the best we can do is a one-time reset to
+            // the Windows defaults the old percent>=100 path used.
+            try
+            {
+                if (!Settings.LocalSettingsHelper.TryGetValue("CoreParkingResetDone", out bool resetDone) || !resetDone)
+                {
+                    bool hadParking = false;
+                    if (Settings.LocalSettingsHelper.TryGetValue("CoreParkingActiveCores", out int activeCores)
+                        && activeCores < Environment.ProcessorCount)
+                    {
+                        hadParking = true;
+                    }
+                    // Hybrid CPUs derived the parking percent from the affinity selection
+                    // (P-cores × 2 threads + E-cores, matching the widget's calculation).
+                    if (Settings.LocalSettingsHelper.TryGetValue("ActivePCores", out int pCores)
+                        && Settings.LocalSettingsHelper.TryGetValue("ActiveECores", out int eCores)
+                        && (pCores * 2) + eCores < Environment.ProcessorCount)
+                    {
+                        hadParking = true;
+                    }
 
-            Logger.Info($"Saved original Max CPU State values: AC={currentAC}, DC={currentDC}");
+                    if (hadParking && systemManager != null)
+                    {
+                        Logger.Info("Resetting core-parking powercfg values left by the retired Core Parking feature");
+                        systemManager.ResetCoreParkingToDefaults();
+                    }
+
+                    Settings.LocalSettingsHelper.Remove("CoreParkingActiveCores");
+                    Settings.LocalSettingsHelper.Remove("ActivePCores");
+                    Settings.LocalSettingsHelper.Remove("ActiveECores");
+                    Settings.LocalSettingsHelper.Remove("ForceParkMode");
+                    Settings.LocalSettingsHelper.SetValue("CoreParkingResetDone", true);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Failed to reset retired core-parking values: {ex.Message}");
+            }
         }
 
         /// <summary>
-        /// Saves the original Minimum CPU State values before first modification.
-        /// Call this BEFORE changing Min CPU State for the first time.
+        /// Writes a processor-state percentage into the active scheme for the given
+        /// primary + efficiency-class-1 setting pair. Restore-path only.
         /// </summary>
-        public static void SaveOriginalMinCpuState(uint currentAC, uint currentDC)
+        private static void WriteProcessorStateValue(Guid setting, Guid settingECore, bool isAC, uint percentage)
         {
-            Initialize();
+            var scheme = PowerManager.GetActiveScheme();
+            var subgroup = Windows.PowerGuids.GUID_PROCESSOR_SETTINGS_SUBGROUP;
 
-            if (_restoreData.MinCpuStateSaved)
+            uint status = isAC
+                ? Windows.PowrProf.PowerWriteACValueIndex(IntPtr.Zero, ref scheme, ref subgroup, ref setting, percentage)
+                : Windows.PowrProf.PowerWriteDCValueIndex(IntPtr.Zero, ref scheme, ref subgroup, ref setting, percentage);
+            if (status != 0)
             {
-                Logger.Debug("Min CPU State original values already saved, skipping");
-                return;
+                Logger.Warn($"Failed to write processor state {(isAC ? "AC" : "DC")} value {percentage}% (status {status})");
             }
 
-            _restoreData.OriginalMinCpuStateAC = currentAC;
-            _restoreData.OriginalMinCpuStateDC = currentDC;
-            _restoreData.MinCpuStateSaved = true;
-            Save();
-
-            Logger.Info($"Saved original Min CPU State values: AC={currentAC}, DC={currentDC}");
+            uint statusECore = isAC
+                ? Windows.PowrProf.PowerWriteACValueIndex(IntPtr.Zero, ref scheme, ref subgroup, ref settingECore, percentage)
+                : Windows.PowrProf.PowerWriteDCValueIndex(IntPtr.Zero, ref scheme, ref subgroup, ref settingECore, percentage);
+            if (statusECore != 0)
+            {
+                Logger.Debug($"Processor state E-core write skipped (status {statusECore}, may not have E-cores)");
+            }
         }
 
         /// <summary>
@@ -263,6 +358,71 @@ namespace XboxGamingBarHelper.Services
             Logger.Info($"Saved original OS Power Mode value: {currentMode}");
         }
 
+        /// <summary>
+        /// Saves the original Power Button action values before first modification.
+        /// Call this BEFORE changing the Power Button action for the first time.
+        /// </summary>
+        public static void SaveOriginalPowerButtonAction(uint currentAC, uint currentDC)
+        {
+            Initialize();
+
+            if (_restoreData.PowerButtonActionSaved)
+            {
+                Logger.Debug("Power Button action original values already saved, skipping");
+                return;
+            }
+
+            _restoreData.OriginalPowerButtonActionAC = currentAC;
+            _restoreData.OriginalPowerButtonActionDC = currentDC;
+            _restoreData.PowerButtonActionSaved = true;
+            Save();
+
+            Logger.Info($"Saved original Power Button action values: AC={currentAC}, DC={currentDC}");
+        }
+
+        /// <summary>
+        /// Saves the original Display Timeout values before first modification.
+        /// Call this BEFORE changing the Display Timeout for the first time.
+        /// </summary>
+        public static void SaveOriginalDisplayTimeout(uint currentAC, uint currentDC)
+        {
+            Initialize();
+
+            if (_restoreData.DisplayTimeoutSaved)
+            {
+                Logger.Debug("Display Timeout original values already saved, skipping");
+                return;
+            }
+
+            _restoreData.OriginalDisplayTimeoutAC = currentAC;
+            _restoreData.OriginalDisplayTimeoutDC = currentDC;
+            _restoreData.DisplayTimeoutSaved = true;
+            Save();
+
+            Logger.Info($"Saved original Display Timeout values: AC={currentAC}s, DC={currentDC}s");
+        }
+
+        /// <summary>
+        /// Saves the original Sleep Timeout values before first modification.
+        /// Call this BEFORE changing the Sleep Timeout for the first time.
+        /// </summary>
+        public static void SaveOriginalSleepTimeout(uint currentAC, uint currentDC)
+        {
+            Initialize();
+
+            if (_restoreData.SleepTimeoutSaved)
+            {
+                Logger.Debug("Sleep Timeout original values already saved, skipping");
+                return;
+            }
+
+            _restoreData.OriginalSleepTimeoutAC = currentAC;
+            _restoreData.OriginalSleepTimeoutDC = currentDC;
+            _restoreData.SleepTimeoutSaved = true;
+            Save();
+
+            Logger.Info($"Saved original Sleep Timeout values: AC={currentAC}s, DC={currentDC}s");
+        }
         /// <summary>
         /// Marks that a scheduled task was created.
         /// </summary>
@@ -408,55 +568,10 @@ namespace XboxGamingBarHelper.Services
                 results.AppendLine("- DAService: No original state saved (was not modified)");
             }
 
-            // 5. Restore Maximum CPU State %
-            if (_restoreData.MaxCpuStateSaved && _restoreData.OriginalMaxCpuStateAC.HasValue)
-            {
-                try
-                {
-                    Logger.Info($"Uninstall: Restoring Max CPU State to AC={_restoreData.OriginalMaxCpuStateAC}, DC={_restoreData.OriginalMaxCpuStateDC}");
-                    PowerManager.SetMaxCPUState(true, _restoreData.OriginalMaxCpuStateAC.Value);
-                    if (_restoreData.OriginalMaxCpuStateDC.HasValue)
-                    {
-                        PowerManager.SetMaxCPUState(false, _restoreData.OriginalMaxCpuStateDC.Value);
-                    }
-                    results.AppendLine($"✓ Max CPU State restored to: AC={_restoreData.OriginalMaxCpuStateAC}%, DC={_restoreData.OriginalMaxCpuStateDC}%");
-                }
-                catch (Exception ex)
-                {
-                    Logger.Error($"Uninstall: Failed to restore Max CPU State: {ex.Message}");
-                    results.AppendLine($"✗ Failed to restore Max CPU State: {ex.Message}");
-                }
-            }
-            else
-            {
-                results.AppendLine("- Max CPU State: No original value saved (was not modified)");
-            }
+            // Max/Min CPU State and core parking are retired features (#103); any values an
+            // older build wrote were already restored by RestoreRetiredSettings at startup.
 
-            // 6. Restore Minimum CPU State %
-            if (_restoreData.MinCpuStateSaved && _restoreData.OriginalMinCpuStateAC.HasValue)
-            {
-                try
-                {
-                    Logger.Info($"Uninstall: Restoring Min CPU State to AC={_restoreData.OriginalMinCpuStateAC}, DC={_restoreData.OriginalMinCpuStateDC}");
-                    PowerManager.SetMinCPUState(true, _restoreData.OriginalMinCpuStateAC.Value);
-                    if (_restoreData.OriginalMinCpuStateDC.HasValue)
-                    {
-                        PowerManager.SetMinCPUState(false, _restoreData.OriginalMinCpuStateDC.Value);
-                    }
-                    results.AppendLine($"✓ Min CPU State restored to: AC={_restoreData.OriginalMinCpuStateAC}%, DC={_restoreData.OriginalMinCpuStateDC}%");
-                }
-                catch (Exception ex)
-                {
-                    Logger.Error($"Uninstall: Failed to restore Min CPU State: {ex.Message}");
-                    results.AppendLine($"✗ Failed to restore Min CPU State: {ex.Message}");
-                }
-            }
-            else
-            {
-                results.AppendLine("- Min CPU State: No original value saved (was not modified)");
-            }
-
-            // 7. Restore OS Power Mode (power slider)
+            // 5. Restore OS Power Mode (power slider)
             if (_restoreData.OsPowerModeSaved && _restoreData.OriginalOsPowerMode.HasValue)
             {
                 try
@@ -476,7 +591,79 @@ namespace XboxGamingBarHelper.Services
                 results.AppendLine("- OS Power Mode: No original value saved (was not modified)");
             }
 
-            // 8. Re-enable the touchscreen if GoTweaks disabled it (SetupAPI device state
+            // 6. Restore Power Button action
+            if (_restoreData.PowerButtonActionSaved && _restoreData.OriginalPowerButtonActionAC.HasValue)
+            {
+                try
+                {
+                    Logger.Info($"Uninstall: Restoring Power Button action to AC={_restoreData.OriginalPowerButtonActionAC}, DC={_restoreData.OriginalPowerButtonActionDC}");
+                    PowerManager.SetPowerButtonAction(true, _restoreData.OriginalPowerButtonActionAC.Value);
+                    if (_restoreData.OriginalPowerButtonActionDC.HasValue)
+                    {
+                        PowerManager.SetPowerButtonAction(false, _restoreData.OriginalPowerButtonActionDC.Value);
+                    }
+                    results.AppendLine($"✓ Power Button action restored to: AC={_restoreData.OriginalPowerButtonActionAC}, DC={_restoreData.OriginalPowerButtonActionDC}");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"Uninstall: Failed to restore Power Button action: {ex.Message}");
+                    results.AppendLine($"✗ Failed to restore Power Button action: {ex.Message}");
+                }
+            }
+            else
+            {
+                results.AppendLine("- Power Button action: No original value saved (was not modified)");
+            }
+
+            // 7. Restore Display Timeout
+            if (_restoreData.DisplayTimeoutSaved && _restoreData.OriginalDisplayTimeoutAC.HasValue)
+            {
+                try
+                {
+                    Logger.Info($"Uninstall: Restoring Display Timeout to AC={_restoreData.OriginalDisplayTimeoutAC}s, DC={_restoreData.OriginalDisplayTimeoutDC}s");
+                    PowerManager.SetDisplayTimeoutSeconds(true, _restoreData.OriginalDisplayTimeoutAC.Value);
+                    if (_restoreData.OriginalDisplayTimeoutDC.HasValue)
+                    {
+                        PowerManager.SetDisplayTimeoutSeconds(false, _restoreData.OriginalDisplayTimeoutDC.Value);
+                    }
+                    results.AppendLine($"✓ Display Timeout restored to: AC={_restoreData.OriginalDisplayTimeoutAC}s, DC={_restoreData.OriginalDisplayTimeoutDC}s");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"Uninstall: Failed to restore Display Timeout: {ex.Message}");
+                    results.AppendLine($"✗ Failed to restore Display Timeout: {ex.Message}");
+                }
+            }
+            else
+            {
+                results.AppendLine("- Display Timeout: No original value saved (was not modified)");
+            }
+
+            // 8. Restore Sleep Timeout
+            if (_restoreData.SleepTimeoutSaved && _restoreData.OriginalSleepTimeoutAC.HasValue)
+            {
+                try
+                {
+                    Logger.Info($"Uninstall: Restoring Sleep Timeout to AC={_restoreData.OriginalSleepTimeoutAC}s, DC={_restoreData.OriginalSleepTimeoutDC}s");
+                    PowerManager.SetSleepTimeoutSeconds(true, _restoreData.OriginalSleepTimeoutAC.Value);
+                    if (_restoreData.OriginalSleepTimeoutDC.HasValue)
+                    {
+                        PowerManager.SetSleepTimeoutSeconds(false, _restoreData.OriginalSleepTimeoutDC.Value);
+                    }
+                    results.AppendLine($"✓ Sleep Timeout restored to: AC={_restoreData.OriginalSleepTimeoutAC}s, DC={_restoreData.OriginalSleepTimeoutDC}s");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"Uninstall: Failed to restore Sleep Timeout: {ex.Message}");
+                    results.AppendLine($"✗ Failed to restore Sleep Timeout: {ex.Message}");
+                }
+            }
+            else
+            {
+                results.AppendLine("- Sleep Timeout: No original value saved (was not modified)");
+            }
+
+            // 9. Re-enable the touchscreen if GoTweaks disabled it (SetupAPI device state
             // persists across reboots and survives an uninstall until manually reverted).
             if (systemManager != null)
             {
@@ -500,7 +687,7 @@ namespace XboxGamingBarHelper.Services
                 }
             }
 
-            // 9. Release the EC fan override (register 0xC6C8) if a custom fan curve is
+            // 10. Release the EC fan override (register 0xC6C8) if a custom fan curve is
             // active, handing fan control back to Lenovo firmware. Otherwise a stuck RPM
             // survives helper shutdown - the crash-safety hooks only cover process exit,
             // not this in-app "prepare for uninstall" flow.
@@ -519,7 +706,7 @@ namespace XboxGamingBarHelper.Services
                 }
             }
 
-            // 10. Stop any live VIIPER emulation session (usbip detach, HidHide suppression,
+            // 11. Stop any live VIIPER emulation session (usbip detach, HidHide suppression,
             // virtual pad teardown) before the controller-related cleanup below.
             if (viiperManager != null)
             {
@@ -536,7 +723,7 @@ namespace XboxGamingBarHelper.Services
                 }
             }
 
-            // 11. Clear our HidHide cloaking rules (blocked device IDs + registered app
+            // 12. Clear our HidHide cloaking rules (blocked device IDs + registered app
             // paths) so no controller stays hidden from other apps after uninstall.
             try
             {
@@ -550,7 +737,7 @@ namespace XboxGamingBarHelper.Services
                 results.AppendLine($"✗ Failed to restore HidHide state: {ex.Message}");
             }
 
-            // 12. Sweep any orphaned VIIPER/ViGEm phantom virtual pads left behind by a
+            // 13. Sweep any orphaned VIIPER/ViGEm phantom virtual pads left behind by a
             // prior crash or ungraceful shutdown.
             try
             {
@@ -613,7 +800,7 @@ namespace XboxGamingBarHelper.Services
         public static bool HasSavedValues()
         {
             Initialize();
-            return _restoreData.CpuBoostSaved || _restoreData.EppSaved || _restoreData.DAServiceSaved;
+            return _restoreData.CpuBoostSaved || _restoreData.EppSaved || _restoreData.DAServiceSaved || _restoreData.PowerButtonActionSaved || _restoreData.DisplayTimeoutSaved || _restoreData.SleepTimeoutSaved;
         }
     }
 }

@@ -1,4 +1,4 @@
-using Microsoft.Gaming.XboxGameBar;
+﻿using Microsoft.Gaming.XboxGameBar;
 using Microsoft.Gaming.XboxGameBar.Input;
 using Microsoft.UI.Xaml.Controls;
 using NLog;
@@ -644,7 +644,7 @@ namespace XboxGamingBar
                             }
                         }
 
-                        UpdateStatusText.Foreground = new SolidColorBrush(Windows.UI.Colors.LimeGreen);
+                        UpdateStatusText.Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x6C, 0xCB, 0x5F));
                         UpdateStatusText.Text = $"New version available: {latestVersion}\nCurrent: {currentVersion}";
 
                         if (!string.IsNullOrEmpty(zipUrl))
@@ -709,7 +709,7 @@ namespace XboxGamingBar
                             var statusStr = status?.ToString() ?? "";
                             if (statusStr == "Installing")
                             {
-                                UpdateStatusText.Foreground = new SolidColorBrush(Windows.UI.Colors.LimeGreen);
+                                UpdateStatusText.Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x6C, 0xCB, 0x5F));
                                 UpdateStatusText.Text = "Installing update... Please follow the installer prompts.";
                                 UpdateButton.Content = "Installing...";
                             }
@@ -1078,7 +1078,7 @@ namespace XboxGamingBar
                         var currentVer = new Version(packageVersion.Major, packageVersion.Minor, packageVersion.Build, packageVersion.Revision);
                         if (Version.TryParse(foundVersionStr, out var latestVersion) && latestVersion > currentVer)
                         {
-                            UpdateStatusText.Foreground = new SolidColorBrush(Windows.UI.Colors.LimeGreen);
+                            UpdateStatusText.Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x6C, 0xCB, 0x5F));
                             UpdateStatusText.Text = $"[DEBUG] New version found: {foundVersion}\nCurrent: {currentVersion}\n{folderName}";
                             _pendingUpdateZipUrl = msixbundlePath; // Local path to msixbundle
                             _pendingUpdateVersion = foundVersion;
