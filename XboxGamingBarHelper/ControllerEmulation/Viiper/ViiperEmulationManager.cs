@@ -978,6 +978,18 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             forwarder.SetPaused(true);
             try
             {
+                // Deliberately detach our vhci import BEFORE removing the device. If the
+                // import instead drops out from under the driver (device removed while
+                // attached), usbip2_ude's auto-reattach (ReattachMaxAttempts=20 by default)
+                // schedules its own re-import of the busid — which races the attach pass we
+                // run on device-added and lands a SECOND import of the same virtual pad
+                // (field-confirmed 2026-07-16: "1-1 is imported 2 times" on roughly every
+                // other swap, with the duplicate sweeper winning it back each time). A
+                // user-initiated detach is not auto-reattached, so detaching first leaves
+                // exactly one import path: ours, after the new device appears.
+                try { UsbipCli.DetachAll(); }
+                catch (Exception ex) { Logger.Warn($"VIIPER hot-swap pre-detach threw: {ex.Message}"); }
+
                 var swap = service.SwitchDeviceType(activeBusId, activeDeviceId, newType, vid, pid);
                 if (!swap.Success)
                 {

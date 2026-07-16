@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 
 namespace XboxGamingBarHelper.ControllerEmulation.Viiper
 {
@@ -49,6 +50,14 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             return null;
         }
 
+        // Serializes attach passes. Two passes racing (e.g. two hot-swaps a few
+        // seconds apart) each saw an empty port list — `usbip port` only reflects an
+        // import after Windows finishes enumerating it (1-2s) — and both attached the
+        // same exported busid, giving two live imports of one virtual pad (identical
+        // duplicate controllers in every tester). Field-confirmed 2026-07-16:
+        // two "usbip attach -b 1-1 succeeded" 3s apart, both "newly attached=1".
+        private static readonly object AttachSync = new object();
+
         /// <summary>
         /// Attaches every device libviiper is exporting on its loopback USBIP server that
         /// isn't already imported into the local UDE bus. Best-effort: logs and returns
@@ -63,35 +72,105 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
                 return;
             }
 
-            // The server registers the device synchronously inside viiper_device_add, but
-            // allow a couple of short retries in case the export list lags right after add.
-            for (int attempt = 0; attempt < 3; attempt++)
+            lock (AttachSync)
             {
-                var exported = ListExportedBusIds(exe);
-                if (exported.Count == 0)
+                // The server registers the device synchronously inside viiper_device_add, but
+                // allow a couple of short retries in case the export list lags right after add.
+                for (int attempt = 0; attempt < 3; attempt++)
                 {
-                    System.Threading.Thread.Sleep(200);
-                    continue;
-                }
-
-                var attached = ListAttachedBusIds(exe);
-                int attachedNow = 0;
-                foreach (var busId in exported)
-                {
-                    if (attached.Contains(busId))
+                    var exported = ListExportedBusIds(exe);
+                    if (exported.Count == 0)
                     {
-                        Logger.Debug($"usbip: {busId} already attached, skipping.");
+                        System.Threading.Thread.Sleep(200);
                         continue;
                     }
-                    if (Attach(exe, busId)) attachedNow++;
+
+                    var attachedPorts = ListAttachedPortsByBusId(exe);
+                    int attachedNow = 0;
+                    foreach (var busId in exported)
+                    {
+                        if (attachedPorts.TryGetValue(busId, out var ports) && ports.Count > 0)
+                        {
+                            // Already imported. If it's imported MORE than once (a past race,
+                            // or a stale localhost-spelled import from an older build / the
+                            // usbip GUI), detach the extras — each duplicate import is a
+                            // fully functional clone pad producing identical input.
+                            DetachDuplicatePorts(exe, busId, ports);
+                            continue;
+                        }
+                        if (Attach(exe, busId))
+                        {
+                            attachedNow++;
+                            WaitForPortListing(exe, busId);
+                        }
+                    }
+                    Logger.Info($"usbip: exported={exported.Count}, newly attached={attachedNow}.");
+                    return;
                 }
-                Logger.Info($"usbip: exported={exported.Count}, newly attached={attachedNow}.");
+                Logger.Warn("usbip: libviiper exported no devices after add (attach skipped).");
+            }
+        }
+
+        /// <summary>
+        /// Blocks (bounded) until `usbip port` reflects the import we just created, so a
+        /// subsequent attach pass can't mistake the enumeration window for "not attached"
+        /// and import the same busid a second time.
+        /// </summary>
+        private static void WaitForPortListing(string exe, string busId)
+        {
+            for (int i = 0; i < 10; i++)
+            {
+                var ports = ListAttachedPortsByBusId(exe);
+                if (ports.TryGetValue(busId, out var list) && list.Count > 0) return;
+                System.Threading.Thread.Sleep(300);
+            }
+            Logger.Warn($"usbip: {busId} attach succeeded but never appeared in the port listing (3s).");
+        }
+
+        private static void DetachDuplicatePorts(string exe, string busId, List<string> ports)
+        {
+            if (ports.Count <= 1)
+            {
+                Logger.Debug($"usbip: {busId} already attached, skipping.");
                 return;
             }
-            Logger.Warn("usbip: libviiper exported no devices after add (attach skipped).");
+
+            Logger.Warn($"usbip: {busId} is imported {ports.Count} times (duplicate virtual pads) — detaching extras.");
+            for (int i = 1; i < ports.Count; i++)
+            {
+                string o = Run(exe, $"detach -p {ports[i]}");
+                Logger.Info($"usbip detach duplicate -p {ports[i]} -> {(o ?? string.Empty).Trim()}");
+            }
         }
 
         /// <summary>Detaches every UDE port imported from libviiper's loopback server. Best-effort.</summary>
+        // A line references OUR server when it names our port on any loopback spelling.
+        // usbip-win2 renders the remote exactly as it was attached, so an import created
+        // with "-r localhost" (older builds, the usbip GUI, manual attach) shows as
+        // "localhost:3241" while ours show "127.0.0.1:3241" — matching only the literal
+        // 127.0.0.1 made those imports invisible to both the attach dedupe and DetachAll,
+        // leaving a permanent duplicate pad no restart could clear (field report
+        // 2026-07-16: usbip GUI showing localhost:3241 AND 127.0.0.1:3241, each with its
+        // own Sony device, three pads in the gamepad tester).
+        private static bool IsOurServerLine(string line)
+        {
+            if (string.IsNullOrEmpty(line)) return false;
+            if (line.IndexOf(":" + Port, StringComparison.Ordinal) < 0
+                && line.IndexOf("port=" + Port, StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                // Some usbip-win2 builds print host and port on separate detail lines;
+                // fall back to host-only matching for those.
+                return line.IndexOf(Host, StringComparison.OrdinalIgnoreCase) >= 0
+                    || line.IndexOf("localhost", StringComparison.OrdinalIgnoreCase) >= 0
+                    || line.IndexOf("::1", StringComparison.Ordinal) >= 0;
+            }
+            return line.IndexOf(Host, StringComparison.OrdinalIgnoreCase) >= 0
+                || line.IndexOf("localhost", StringComparison.OrdinalIgnoreCase) >= 0
+                || line.IndexOf("::1", StringComparison.Ordinal) >= 0;
+        }
+
+        /// <summary>Detaches every UDE port imported from libviiper's loopback server (any
+        /// loopback spelling), including duplicates. Best-effort.</summary>
         public static void DetachAll()
         {
             string exe = ResolveExe();
@@ -114,7 +193,7 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
                     currentPort = pm.Groups[1].Value;
                     currentIsOurs = false;
                 }
-                if (raw.IndexOf(Host, StringComparison.OrdinalIgnoreCase) >= 0) currentIsOurs = true;
+                if (IsOurServerLine(raw)) currentIsOurs = true;
             }
             if (currentPort != null && currentIsOurs) ports.Add(currentPort);
 
@@ -139,22 +218,43 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             return result;
         }
 
-        private static HashSet<string> ListAttachedBusIds(string exe)
+        /// <summary>
+        /// Maps each of our exported busids to the vhci port numbers currently importing
+        /// it. More than one port for the same busid means duplicate imports of the same
+        /// virtual pad (see AttachSync / IsOurServerLine) — the caller detaches extras.
+        /// </summary>
+        private static Dictionary<string, List<string>> ListAttachedPortsByBusId(string exe)
         {
-            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var map = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
             string output = Run(exe, $"-t {Port} port");
-            if (string.IsNullOrEmpty(output)) return set;
-            // usbip-win2 port output references the remote busid, e.g.
-            //   "1-1 -> usbip://127.0.0.1:3241/1-1"
-            // Only trust busids on lines that mention our loopback server, so an unrelated
-            // usbip import is never mistaken for one of ours (which would skip a real attach).
-            foreach (var line in output.Split('\n'))
+            if (string.IsNullOrEmpty(output)) return map;
+
+            // usbip-win2 port output groups details under "Port NN:" headers, with the
+            // remote reference on a line like "1-1 -> usbip://127.0.0.1:3241/1-1". Only
+            // trust busids on lines that reference our loopback server, so an unrelated
+            // usbip import is never mistaken for one of ours (which would skip a real
+            // attach) — but accept any loopback spelling (127.0.0.1/localhost/::1).
+            string currentPort = null;
+            foreach (var raw in output.Split('\n'))
             {
-                if (line.IndexOf(Host, StringComparison.OrdinalIgnoreCase) < 0) continue;
-                var m = Regex.Match(line, @"(\d+-\d+)");
-                if (m.Success) set.Add(m.Groups[1].Value);
+                var pm = Regex.Match(raw, @"Port\s+(\d+)\s*:");
+                if (pm.Success)
+                {
+                    currentPort = pm.Groups[1].Value;
+                }
+                if (!IsOurServerLine(raw)) continue;
+                var m = Regex.Match(raw, @"(\d+-\d+)");
+                if (!m.Success) continue;
+                string busId = m.Groups[1].Value;
+                if (!map.TryGetValue(busId, out var list))
+                {
+                    list = new List<string>();
+                    map[busId] = list;
+                }
+                string port = currentPort ?? $"line{list.Count}";
+                if (!list.Contains(port)) list.Add(port);
             }
-            return set;
+            return map;
         }
 
         private static bool Attach(string exe, string busId)
@@ -187,9 +287,36 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
                 using (var proc = Process.Start(psi))
                 {
                     if (proc == null) return string.Empty;
-                    string stdout = proc.StandardOutput.ReadToEnd();
-                    string stderr = proc.StandardError.ReadToEnd();
-                    proc.WaitForExit(15000);
+
+                    // Read both streams concurrently, not sequentially - reading stdout to
+                    // completion before even starting to drain stderr is the classic .NET
+                    // Process deadlock: if usbip.exe writes enough to the unread stream to
+                    // fill its OS pipe buffer, it blocks on that write forever, so it never
+                    // closes stdout, so ReadToEnd() here never returns either. That hung this
+                    // call indefinitely on a misbehaving usbip.exe, which meant the helper's
+                    // ProcessExit handler (Environment.Exit -> viiperEmulationManager.Stop() ->
+                    // DetachAll() -> here) never completed - the helper process became a
+                    // permanent zombie still holding the single-instance mutex and the
+                    // scheduled task's "running" state (MultipleInstances=IgnoreNew), so every
+                    // later RunTaskNow() silently no-opped until a full reboot or reinstall
+                    // reset that state. Reading both streams via Task avoids the deadlock, and
+                    // killing the process on timeout stops it becoming a zombie in the first
+                    // place.
+                    var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+                    var stderrTask = proc.StandardError.ReadToEndAsync();
+                    bool exited = proc.WaitForExit(15000);
+
+                    if (!exited)
+                    {
+                        Logger.Warn($"usbip {args} did not exit within 15s - killing it.");
+                        try { proc.Kill(); } catch (Exception killEx) { Logger.Debug($"usbip kill failed: {killEx.Message}"); }
+                    }
+
+                    // Killing (or a normal exit) closes the pipes, so these resolve promptly;
+                    // still bound the wait so a pathological case can't hang the caller.
+                    Task.WaitAll(new Task[] { stdoutTask, stderrTask }, 3000);
+                    string stdout = stdoutTask.Status == TaskStatus.RanToCompletion ? stdoutTask.Result : string.Empty;
+                    string stderr = stderrTask.Status == TaskStatus.RanToCompletion ? stderrTask.Result : string.Empty;
                     return (stdout ?? string.Empty) + "\n" + (stderr ?? string.Empty);
                 }
             }
