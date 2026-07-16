@@ -477,9 +477,31 @@ namespace XboxGamingBarHelper
                     return;
                 }
 
-                // Toggle the state
+                // Single state owner: when the widget is connected, route the toggle through
+                // it (same path as the Quick tile) so ONLY the widget's Desktop-profile
+                // overlay logic runs. Previously this method applied its own hardcoded
+                // mappings/joystick-mode AND the property push flipped the widget toggle,
+                // firing the widget's overlay apply as well — two appliers per press. When
+                // the widget swallowed one of those Toggled events, its isDesktopModeActive
+                // inverted against the toggle and every later press applied the OPPOSITE
+                // state: Desktop Mode and Joystick-as-Mouse "synced but alternating", with
+                // the underlying profile's default 50% sensitivity applied while the UI
+                // showed the user's Desktop-profile value (field report, 0.3.2637).
+                if (IsPipeConnected)
+                {
+                    Logger.Info("ToggleDesktopControls: Hotkey pressed, routing to widget (tile path)");
+                    FireTileHotkeyToWidget("LegionDesktopControls", "Desktop Controls (Ctrl+Shift+D)");
+                    return;
+                }
+
+                // Widget not connected (Game Bar closed): minimal helper-side fallback so the
+                // hotkey still works on the desktop. Applies the built-in preset only — the
+                // user's customized Desktop profile lives widget-side and reconciles when the
+                // widget reconnects (the LegionDesktopControls property sync flips its toggle
+                // and runs the real overlay apply). Deliberately does NOT touch
+                // LegionJoystickMouseSens so the user's sensitivity survives the fallback.
                 bool newState = !legionManager.LegionDesktopControls.Value;
-                Logger.Info($"ToggleDesktopControls: Hotkey pressed, toggling from {!newState} to {newState}");
+                Logger.Info($"ToggleDesktopControls: Hotkey pressed (widget offline), toggling from {!newState} to {newState}");
 
                 if (newState)
                 {

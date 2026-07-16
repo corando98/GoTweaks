@@ -152,11 +152,27 @@ namespace XboxGamingBar.Data
                     return;
                 }
 
-                if (hasPendingValue && pendingValue != Value)
+                if (hasPendingValue)
                 {
-                    Logger.Info($"{Function} Debounce timer elapsed, applying pending value {pendingValue}.");
+                    // Send where the slider ACTUALLY settled, not the value latched when the
+                    // timer was (re)started. A programmatic slider change can land between
+                    // latch and fire without restarting the timer — Slider_ValueChanged
+                    // compares against the property cache, so moving the slider BACK to the
+                    // cached value looks like "no change" and leaves a stale pending armed.
+                    // Field case (Desktop Mode, 0.3.2677): off-toggle set the slider 30→50
+                    // (pending=50), on-toggle set it 50→30 (== cache, timer untouched), then
+                    // the timer fired 50 — helper/profile stuck at 50 while the UI showed 30.
                     hasPendingValue = false;
-                    SetValue(pendingValue);
+                    int settled = UI != null ? (int)UI.Value : pendingValue;
+                    if (settled != Value)
+                    {
+                        Logger.Info($"{Function} Debounce timer elapsed, applying settled value {settled} (latched {pendingValue}).");
+                        SetValue(settled);
+                    }
+                    else if (settled != pendingValue)
+                    {
+                        Logger.Info($"{Function} Debounce timer elapsed, discarding stale pending {pendingValue} (slider settled back at {settled}).");
+                    }
                 }
             }
             catch (Exception ex)

@@ -64,13 +64,13 @@ namespace XboxGamingBar
             if (isLoadingControllerProfile || isSwitchingControllerProfile)
                 return;
 
-            // Skip if a profile was just applied (prevents duplicate sends from queued UI events)
-            if ((DateTime.Now - lastProfileApplyTime).TotalMilliseconds < 2000)
-            {
-                Logger.Info("Desktop Mode toggle skipped - profile was just applied");
-                return;
-            }
-
+            // No time-based guard here. The old "skip if a profile was just applied"
+            // 2-second window silently dropped REAL toggles while leaving the ToggleSwitch
+            // visually flipped, desyncing isDesktopModeActive from the UI — after which
+            // every toggle applied the OPPOSITE state (Desktop Mode / Joystick-as-Mouse
+            // "synced but alternating", field report on 0.3.2637). Duplicate queued events
+            // are already harmless: ApplyDesktopModeState no-ops when the requested state
+            // matches isDesktopModeActive.
             bool enabled = LegionDesktopControlsToggle?.IsOn ?? false;
             ApplyDesktopModeState(enabled, persistActive: true);
         }

@@ -1366,6 +1366,12 @@ namespace XboxGamingBar
                     if (LegionJoystickMouseSensValue != null)
                         LegionJoystickMouseSensValue.Text = profile.JoystickMouseSens.ToString();
                 }
+                // Send the sensitivity explicitly, like the mode above. Nothing else sends it
+                // on a profile apply — the only sender used to be the bound slider property's
+                // debounced echo of the programmatic assignment, which could latch a stale
+                // intermediate value across rapid Desktop Mode toggles and stomp the profile
+                // with it (helper at 50 while the slider showed the user's value).
+                legionJoystickMouseSens?.SetValue(profile.JoystickMouseSens);
 
                 // Apply gamepad button mappings
                 gamepadButtonMappings = profile.GamepadButtonMappings?.ToDictionary(
