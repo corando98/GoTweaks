@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Windows.Foundation.Collections;
 using Windows.UI;
 using Windows.UI.Xaml;
@@ -323,7 +323,8 @@ namespace XboxGamingBar
             // Only the reactive modes live in our combo; static modes belong to the existing
             // Light Mode combo and are not echoed here.
             if (mode != "flash" && mode != "cycle" && mode != "perbutton"
-                && mode != "hue" && mode != "trigger" && mode != "battery") mode = "disabled";
+                && mode != "hue" && mode != "trigger" && mode != "battery"
+                && mode != "cputemp") mode = "disabled";
             SelectComboByTag(GoTweaksReactiveModeComboBox, mode);
 
             if (p.Length > 2)

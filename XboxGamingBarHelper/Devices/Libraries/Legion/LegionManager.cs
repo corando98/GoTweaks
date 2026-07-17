@@ -1094,7 +1094,19 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                         if (success)
                         {
                             lightMode = mode;
-                            Logger.Info($"Light mode set to {rgbMode}");
+
+                            // Make the slot we just wrote (3) the firmware's ACTIVE profile.
+                            // SetRgbProfile applies the values live but does not change which
+                            // profile slot the firmware restores after sleep/power-cycle — if
+                            // Legion Space (or the factory default) left a different slot
+                            // active, every resume "reverted" the pads to that slot's stored
+                            // settings (typically the pale-blue default). Field report:
+                            // "gamepads were set to profile 3" while colors kept resetting.
+                            // The Go S path already loads the profile as part of its flow.
+                            controllerService.LoadRgbProfile(Controller.Left);
+                            controllerService.LoadRgbProfile(Controller.Right);
+
+                            Logger.Info($"Light mode set to {rgbMode} (profile slot activated)");
                         }
                         else
                         {

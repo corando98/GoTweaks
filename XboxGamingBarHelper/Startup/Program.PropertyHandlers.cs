@@ -59,6 +59,20 @@ namespace XboxGamingBarHelper
             // until three tick-level write failures trigger the self-heal.
             legionManager?.RecoverEcFanOverrideAfterResume();
 
+            // Re-apply the user's controller lighting after the controllers finish
+            // re-enumerating. The firmware wakes with whatever its active RGB profile
+            // slot holds — Legion Space leftovers or a mid-reactive-flash frame — so
+            // without this the pads "revert to pale blue" (or show the UI's mode while
+            // physically off) after every sleep/hibernate cycle. RestoreLightSettings
+            // is gated on _lightStateKnown, so a resume before any real light sync is
+            // a safe no-op; it also restores the OFF state via SetLightMode(0).
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(5000);
+                try { legionManager?.RestoreLightSettings(); }
+                catch (Exception ex) { Logger.Warn($"Post-resume light restore failed: {ex.Message}"); }
+            });
+
             // Re-apply current profile settings (TDP, CPU boost, EPP)
             CurrentProfile_PropertyChanged(sender, null);
         }

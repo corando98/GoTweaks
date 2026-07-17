@@ -7167,6 +7167,7 @@
                                             <ComboBoxItem Content="Hue advance on press" Tag="hue"/>
                                             <ComboBoxItem Content="Trigger pressure" Tag="trigger"/>
                                             <ComboBoxItem Content="Battery indicator" Tag="battery"/>
+                                            <ComboBoxItem Content="CPU temperature" Tag="cputemp"/>
                                         </ComboBox>
                                     </StackPanel>
 

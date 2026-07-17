@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Threading;
 using NLog;
 using XboxGamingBarHelper.Devices.Libraries.Legion;
@@ -14,6 +14,7 @@ namespace XboxGamingBarHelper.Labs
         HueAdvance = 4,     // each press rotates the flash hue smoothly around the wheel
         TriggerGradient = 5,// continuous: LT/RT analog pull ramps static color -> flash color
         BatteryIndicator = 6,// continuous (ambient): color reflects controller charge
+        CpuTempIndicator = 7,// continuous (ambient): color reflects CPU temperature
     }
 
     /// <summary>
@@ -30,7 +31,17 @@ namespace XboxGamingBarHelper.Labs
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
         private const int EffectTickMs = 16;       // ~60Hz
-        private const int WriteMinIntervalMs = 16; // never write RGB faster than this
+        // Below the tick period on purpose: with the two equal (16/16), scheduler jitter made
+        // roughly every other tick land just inside the window and get DROPPED by the rate
+        // limiter — which is why flash decays sometimes eased back smoothly and sometimes
+        // snapped (half the fade frames were missing, luck of the timing).
+        private const int WriteMinIntervalMs = 8;
+        // Re-assert an unchanged color periodically. The firmware can drop a write under the
+        // effect-loop's sustained HID traffic; with pure change-detection the engine then
+        // believes the light shows X while the hardware stuck at an older frame — the
+        // "trigger effect stuck on the flash color" report. A periodic keepalive rewrite
+        // self-heals within a second.
+        private const int KeepaliveMs = 750;
 
         private readonly object _stateLock = new object();
         private readonly LegionManager _legion;
@@ -51,6 +62,12 @@ namespace XboxGamingBarHelper.Labs
         // Number of reactive buttons currently held. While > 0 the flash is held at full
         // (hold-aware, like the haptic release option); decay only runs once all are released.
         private int _heldCount;
+        // TriggerGradient: true while the trigger is meaningfully pulled. On the pulled->rest
+        // transition the engine RELEASES the RGB back to the static lighting (full profile
+        // restore) instead of painting solid idle frames forever — that both lets animated
+        // static modes (pulse/rainbow/spiral) run at rest and makes the return authoritative
+        // rather than dependent on a single dedupe-able solid write.
+        private bool _triggerEngaged;
 
         private Thread _effectThread;
         private volatile bool _running;
@@ -143,6 +160,7 @@ namespace XboxGamingBarHelper.Labs
                 case "hue": return LegionReactiveMode.HueAdvance;
                 case "trigger": return LegionReactiveMode.TriggerGradient;
                 case "battery": return LegionReactiveMode.BatteryIndicator;
+                case "cputemp": return LegionReactiveMode.CpuTempIndicator;
                 default: return LegionReactiveMode.Disabled;
             }
         }
@@ -199,6 +217,7 @@ namespace XboxGamingBarHelper.Labs
             // default mode=Solid/brightness=100 = a white 100% flash before the widget synced the
             // user's real values (#81 brightness flash, confirmed via SDBright capture).
             lock (_stateLock) { _flashLevel = 0; _heldCount = 0; _releasedSinceFlash = true; }
+            _triggerEngaged = false;
         }
 
         // Press-driven: flash level set on button edges and decays. Continuous: color computed
@@ -211,7 +230,8 @@ namespace XboxGamingBarHelper.Labs
 
         private static bool IsContinuous(LegionReactiveMode m) =>
             m == LegionReactiveMode.TriggerGradient
-            || m == LegionReactiveMode.BatteryIndicator;
+            || m == LegionReactiveMode.BatteryIndicator
+            || m == LegionReactiveMode.CpuTempIndicator;
 
         private void EnsureEdgeHooked()
         {
@@ -291,8 +311,20 @@ namespace XboxGamingBarHelper.Labs
                 return (r, g, b);
             }
 
+            if (mode == LegionReactiveMode.CpuTempIndicator)
+            {
+                // CPU temperature -> blue (cold) .. cyan .. green .. amber .. red (hot).
+                // 45C and below is fully blue, 90C and above fully red — the range where
+                // the APU actually lives under load, so mid-session color movement is
+                // visible. Hue 240 (blue) sweeps down to 0 (red).
+                int temp = _legion.LegionCPUCurrentTemp?.Value ?? 0;
+                float norm = Math.Max(0f, Math.Min(1f, (temp - 45f) / 45f));
+                return HsvToRgb(240f * (1f - norm), 1f, 1f);
+            }
+
             // BatteryIndicator: controller charge normally, system battery when controllers are
-            // charging/attached (LegionManager decides). 0% -> red, 100% -> green via amber.
+            // charging/attached (LegionManager decides). 0% -> red, 100% -> green via amber
+            // (hue 0 red .. 60 amber .. 120 green, continuous by percent).
             int pct = _legion.GetIndicatorBatteryPercent();
             float hue = pct * 1.2f; // 0 -> hue 0 (red), 100 -> hue 120 (green)
             return HsvToRgb(hue, 1f, 1f);
@@ -387,7 +419,34 @@ namespace XboxGamingBarHelper.Labs
 
                 if (IsContinuous(mode))
                 {
-                    WriteColor(ComputeContinuousColor(mode));
+                    if (mode == LegionReactiveMode.TriggerGradient)
+                    {
+                        byte lt = 0, rt = 0;
+                        if (LegionButtonMonitor.TryGetLatestGamepadSample(out var sample))
+                        {
+                            lt = sample.LeftTrigger;
+                            rt = sample.RightTrigger;
+                        }
+                        float pull = Math.Max(lt, rt) / 255f;
+                        if (pull > 0.03f)
+                        {
+                            _triggerEngaged = true;
+                            WriteColor(ComputeContinuousColor(mode));
+                        }
+                        else if (_triggerEngaged)
+                        {
+                            // Trigger returned to rest: hand the RGB back to the static
+                            // lighting with a full authoritative profile restore instead of
+                            // trusting one more solid write to land.
+                            _triggerEngaged = false;
+                            try { _legion.ReleaseReactiveLighting(); } catch { }
+                            _lastSent = (1, 2, 3); // force the next engage to write
+                        }
+                    }
+                    else
+                    {
+                        WriteColor(ComputeContinuousColor(mode));
+                    }
                     Thread.Sleep(EffectTickMs);
                     continue;
                 }
@@ -442,8 +501,13 @@ namespace XboxGamingBarHelper.Labs
 
         private void WriteColor((byte r, byte g, byte b) color)
         {
-            if (color.r == _lastSent.r && color.g == _lastSent.g && color.b == _lastSent.b) return;
             long now = DateTime.UtcNow.Ticks;
+            bool unchanged = color.r == _lastSent.r && color.g == _lastSent.g && color.b == _lastSent.b;
+            if (unchanged && _lastWriteTicks != 0
+                && (now - _lastWriteTicks) < KeepaliveMs * TimeSpan.TicksPerMillisecond)
+            {
+                return;
+            }
             if (_lastWriteTicks != 0 && (now - _lastWriteTicks) < WriteMinIntervalMs * TimeSpan.TicksPerMillisecond)
             {
                 return;
