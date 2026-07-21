@@ -1,4 +1,4 @@
-using NLog;
+﻿using NLog;
 using Shared.Data;
 using Shared.Enums;
 using System;
@@ -357,6 +357,22 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         /// are charging/attached (in that state the controllers report ~100/charging, which isn't
         /// a useful indicator). Returns 100 if no battery info is available.
         /// </summary>
+        /// <summary>
+        /// True when either controller half is currently DETACHED (wireless link to the
+        /// receiver instead of docked USB). Read by the HidHide suppression manager to
+        /// skip its post-cloak-change device restart: port-cycling the receiver while a
+        /// half is wireless drops the radio link and hard-disconnects (powers off) the
+        /// pad — field report "enabling/disabling controller emu turns off the detached
+        /// left controller". Based on the DOCKED flags (conn code 0x02), not the linked
+        /// flags: a detached half is linked (streams input/battery, so the UI keeps its
+        /// details) but not docked (port cycle would kill it). A half that is fully off
+        /// is neither, and conservatively counts as detached here.
+        /// </summary>
+        public bool AnyControllerDetached => !leftControllerDocked || !rightControllerDocked;
+
+        private bool leftControllerDocked = true;
+        private bool rightControllerDocked = true;
+
         public int GetIndicatorBatteryPercent()
         {
             bool controllersCharging = leftControllerCharging || rightControllerCharging;
@@ -383,7 +399,8 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         /// that contain battery data (same interface as button data).
         /// </summary>
         public void UpdateControllerBatteryFromButtonMonitor(int leftBattery, bool leftCharging, bool leftConnected,
-                                                              int rightBattery, bool rightCharging, bool rightConnected)
+                                                              int rightBattery, bool rightCharging, bool rightConnected,
+                                                              bool leftDocked, bool rightDocked)
         {
             try
             {
@@ -394,6 +411,10 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
 
                 bool connectionChanged = leftControllerConnected != leftConnected ||
                                         rightControllerConnected != rightConnected;
+                bool anyHalfReconnected = (!leftControllerConnected && leftConnected) ||
+                                          (!rightControllerConnected && rightConnected);
+                bool dockStateChanged = leftControllerDocked != leftDocked ||
+                                        rightControllerDocked != rightDocked;
 
                 leftControllerBattery = leftBattery;
                 leftControllerCharging = leftCharging;
@@ -401,6 +422,8 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                 rightControllerBattery = rightBattery;
                 rightControllerCharging = rightCharging;
                 rightControllerConnected = rightConnected;
+                leftControllerDocked = leftDocked;
+                rightControllerDocked = rightDocked;
 
                 if (batteryChanged)
                 {
@@ -418,6 +441,11 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                     }
                 }
 
+                if (dockStateChanged)
+                {
+                    Logger.Info($"Controller dock state changed: L={(leftDocked ? "docked" : "detached")} R={(rightDocked ? "docked" : "detached")} (AnyControllerDetached={AnyControllerDetached})");
+                }
+
                 if (connectionChanged)
                 {
                     Logger.Info($"Controller connection changed: L={leftConnected} R={rightConnected}");
@@ -429,6 +457,19 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                     catch (Exception ex)
                     {
                         Logger.Warn($"Failed to sync connection status from button monitor: {ex.Message}");
+                    }
+
+                    if (anyHalfReconnected)
+                    {
+                        // A write sent while the half was offline never reached its
+                        // firmware - replay joystick-as-mouse so the physical state
+                        // matches the UI. Delayed so the pad finishes re-enumerating.
+                        _ = Task.Run(async () =>
+                        {
+                            await Task.Delay(2000);
+                            try { ReapplyJoystickAsMouseState(); }
+                            catch (Exception ex) { Logger.Warn($"Joystick-as-mouse reapply after reconnect failed: {ex.Message}"); }
+                        });
                     }
                 }
             }

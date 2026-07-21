@@ -215,6 +215,8 @@ namespace XboxGamingBarHelper.Labs
         private bool _lastRightCharging = false;
         private bool _lastLeftConnected = false;
         private bool _lastRightConnected = false;
+        private bool _lastLeftDocked = false;
+        private bool _lastRightDocked = false;
         private byte _lastLeftChargingByte = 0;
         private byte _lastRightChargingByte = 0;
         private DateTime _lastBatteryUpdateTime = DateTime.MinValue;
@@ -2170,8 +2172,21 @@ namespace XboxGamingBarHelper.Labs
             lock (_hidLock)
             {
                 bool ok = SendOutputReport(handle, new byte[] { 0x05, 0x00, 0x04, 0x09, min, 0x01 }, $"auto-sleep set {minutes}min");
-                Logger.Info($"LegionButtonMonitor.SetAutoSleepTime minutes={minutes} ok={ok}");
-                return ok;
+
+                // The 04:09 write above is receiver-scoped (no controller byte) and only
+                // reliably reaches halves that are awake and linked when it lands - the
+                // sleep timer is stored PER HALF in firmware, so a half that misses the
+                // write keeps its old value and powers off on a different schedule than
+                // its twin (field report: one half dies first, flipping the receiver to
+                // dual-dinput mid-session). Follow with the per-half 06:33 sleep-timer
+                // command to each half explicitly, mirroring the per-half gyro config
+                // pattern. 06:33 documented range is 0-60 minutes.
+                byte minPerHalf = min > 60 ? (byte)60 : min;
+                bool okLeft = SendOutputReport(handle, new byte[] { 0x05, 0x06, 0x33, 0x01, LEGION_CONTROLLER_LEFT_ID, minPerHalf, 0x01 }, "auto-sleep set left");
+                bool okRight = SendOutputReport(handle, new byte[] { 0x05, 0x06, 0x33, 0x01, LEGION_CONTROLLER_RIGHT_ID, minPerHalf, 0x01 }, "auto-sleep set right");
+
+                Logger.Info($"LegionButtonMonitor.SetAutoSleepTime minutes={minutes} receiver={ok} left={okLeft} right={okRight}");
+                return ok && okLeft && okRight;
             }
         }
 
@@ -2851,12 +2866,22 @@ namespace XboxGamingBarHelper.Labs
                                     int batteryOffset = isDetachedMode ? 5 : 3;
                                     int connOffset = isDetachedMode ? 12 : 10;
 
-                                    // Connection status: 0x01=Off, 0x02=Attached, 0x03=Detached
-                                    // Only 0x02 means the controller is actually connected
-                                    bool leftConnected = buffer[connOffset] == 0x02;
-                                    bool rightConnected = buffer[connOffset + 1] == 0x02;
+                                    // Connection status: 0x01=Off, 0x02=Attached, 0x03=Detached.
+                                    // 0x03 is detached-but-wirelessly-linked: the half still
+                                    // streams input and battery. Treating only 0x02 as connected
+                                    // blanked the controller details in the UI the moment a half
+                                    // was undocked (battery forced to -1 while the b0:01 frames
+                                    // carried valid percentages). Connected = linked (02 or 03);
+                                    // Docked (02 only) is reported separately and drives the
+                                    // radio-safety gating (AnyControllerDetached).
+                                    byte leftConnCode = buffer[connOffset];
+                                    byte rightConnCode = buffer[connOffset + 1];
+                                    bool leftConnected = leftConnCode == 0x02 || leftConnCode == 0x03;
+                                    bool rightConnected = rightConnCode == 0x02 || rightConnCode == 0x03;
+                                    bool leftDocked = leftConnCode == 0x02;
+                                    bool rightDocked = rightConnCode == 0x02;
 
-                                    // Battery value (1-100), or -1 if not connected
+                                    // Battery value (1-100), or -1 if not linked
                                     int leftBattery = leftConnected ? buffer[batteryOffset] : -1;
                                     int rightBattery = rightConnected ? buffer[batteryOffset + 2] : -1;
 
@@ -2879,7 +2904,8 @@ namespace XboxGamingBarHelper.Labs
                                     // Fire event if values changed AND throttle time has passed
                                     bool valuesChanged = leftBattery != _lastLeftBattery || rightBattery != _lastRightBattery ||
                                         leftCharging != _lastLeftCharging || rightCharging != _lastRightCharging ||
-                                        leftConnected != _lastLeftConnected || rightConnected != _lastRightConnected;
+                                        leftConnected != _lastLeftConnected || rightConnected != _lastRightConnected ||
+                                        leftDocked != _lastLeftDocked || rightDocked != _lastRightDocked;
                                     bool throttleExpired = (DateTime.Now - _lastBatteryUpdateTime).TotalMilliseconds >= BATTERY_UPDATE_THROTTLE_MS;
 
                                     if (valuesChanged && throttleExpired)
@@ -2890,14 +2916,17 @@ namespace XboxGamingBarHelper.Labs
                                         _lastRightCharging = rightCharging;
                                         _lastLeftConnected = leftConnected;
                                         _lastRightConnected = rightConnected;
+                                        _lastLeftDocked = leftDocked;
+                                        _lastRightDocked = rightDocked;
                                         _lastBatteryUpdateTime = DateTime.Now;
 
-                                        Logger.Debug($"LegionButtonMonitor: Battery update L={leftBattery}% (conn={leftConnected}) R={rightBattery}% (conn={rightConnected})");
+                                        Logger.Debug($"LegionButtonMonitor: Battery update L={leftBattery}% (conn={leftConnected}, docked={leftDocked}) R={rightBattery}% (conn={rightConnected}, docked={rightDocked})");
                                         try
                                         {
                                             BatteryUpdated?.Invoke(this, new LegionButtonBatteryEventArgs(
                                                 leftBattery, leftCharging, leftConnected,
-                                                rightBattery, rightCharging, rightConnected));
+                                                rightBattery, rightCharging, rightConnected,
+                                                leftDocked, rightDocked));
                                         }
                                         catch (Exception eventEx)
                                         {
@@ -3895,9 +3924,15 @@ namespace XboxGamingBarHelper.Labs
         public int RightBattery { get; }
         public bool RightCharging { get; }
         public bool RightConnected { get; }
+        // Connected = linked (docked OR wireless); Docked = physically attached to the
+        // tablet. A detached-but-linked half is Connected=true, Docked=false - it still
+        // reports battery and input, but port-cycling the receiver would drop it.
+        public bool LeftDocked { get; }
+        public bool RightDocked { get; }
 
         public LegionButtonBatteryEventArgs(int leftBattery, bool leftCharging, bool leftConnected,
-                                            int rightBattery, bool rightCharging, bool rightConnected)
+                                            int rightBattery, bool rightCharging, bool rightConnected,
+                                            bool leftDocked, bool rightDocked)
         {
             LeftBattery = leftBattery;
             LeftCharging = leftCharging;
@@ -3905,6 +3940,8 @@ namespace XboxGamingBarHelper.Labs
             RightBattery = rightBattery;
             RightCharging = rightCharging;
             RightConnected = rightConnected;
+            LeftDocked = leftDocked;
+            RightDocked = rightDocked;
         }
     }
 

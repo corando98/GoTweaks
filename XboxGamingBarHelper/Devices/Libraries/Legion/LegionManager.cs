@@ -28,6 +28,14 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         // Device detection
         private DeviceInfo deviceInfo;
         private bool isLegionGoDetected = false;
+
+        /// <summary>
+        /// Fired when the controller service reconnects after a drop - including the
+        /// Go 2 receiver re-presenting under a different USB PID (half sleep/wake or
+        /// dock state change). Wired in Program.cs to re-assert HidHide suppression
+        /// and replay joystick-as-mouse firmware state.
+        /// </summary>
+        public event Action ControllerReconnected;
         private bool isControllerConnected = false;
         private bool isGoSControllerConnected = false;  // Tracks Go S RGB controller connection
 
@@ -3132,6 +3140,13 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
 
                         // Restart battery monitoring on reconnection
                         StartBatteryMonitoring();
+
+                        // The Go 2 receiver re-presents under a different USB PID when a
+                        // half sleeps/wakes or docks (61EB xinput <-> 61ED dual-dinput,
+                        // 61EE seen too) - every flip creates fresh devnodes, orphaning
+                        // any HidHide cloak applied earlier. Let listeners re-assert.
+                        try { ControllerReconnected?.Invoke(); }
+                        catch (Exception ex) { Logger.Warn($"ControllerReconnected handler threw: {ex.Message}"); }
                     }
                 }
                 catch (Exception ex)

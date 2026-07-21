@@ -1698,6 +1698,43 @@ namespace XboxGamingBarHelper
             systemManager.RunningGame.PropertyChanged += RunningGame_PropertyChanged;
             systemManager.ResumeFromSleep += SystemManager_ResumeFromSleep;
             systemManager.PowerSourceChanged += SystemManager_PowerSourceChanged;
+
+            // Gate the HidHide post-cloak device restart on controller attach state:
+            // cycling the receiver's USB port while a half is undocked drops its wireless
+            // link and powers the pad off (field report: emu toggle killing the detached
+            // left controller).
+            if (controllerEmulationManager?.SuppressionManager != null)
+            {
+                controllerEmulationManager.SuppressionManager.SkipDeviceRestartWhen =
+                    () => legionManager?.AnyControllerDetached ?? false;
+            }
+
+            // The Go 2 receiver re-presents under a different USB PID when a half
+            // sleeps/wakes or docks (61EB xinput <-> 61ED dual-dinput) - fresh devnodes
+            // orphan the enable-time HidHide cloak, so the stock pad reappears next to
+            // the emulated one mid-session. Re-assert the cloak (and replay the
+            // joystick-as-mouse firmware state, which the flip can also drop) once the
+            // re-presented tree finishes enumerating.
+            if (legionManager != null)
+            {
+                legionManager.ControllerReconnected += () =>
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        await Task.Delay(3000);
+                        try { controllerEmulationManager?.SuppressionManager?.ReassertSuppressionIfEnabled(); }
+                        catch (Exception ex) { Logger.Warn($"Suppression re-assert after controller reconnect failed: {ex.Message}"); }
+                        try { legionManager?.ReapplyJoystickAsMouseState(); }
+                        catch (Exception ex) { Logger.Warn($"Joystick-as-mouse reapply after controller reconnect failed: {ex.Message}"); }
+                        // Sleep timer is stored per half; a half that was asleep or
+                        // detached when the setting was written kept its old value and
+                        // sleeps on a different schedule than its twin. Re-send on every
+                        // re-presentation so both halves converge.
+                        try { legionButtonMonitor?.SetAutoSleepTime(settingsManager?.LegionControllerSleepMinutes?.Value ?? LegionControllerSleepMinutesProperty.Default); }
+                        catch (Exception ex) { Logger.Warn($"Controller sleep-timer reapply after reconnect failed: {ex.Message}"); }
+                    });
+                };
+            }
             profileManager.PerGameProfile.PropertyChanged += PerGameProfile_PropertyChanged;
             performanceManager.TDP.PropertyChanged += TDP_PropertyChanged;
             performanceManager.TDPBoostEnabled.PropertyChanged += TDPBoostEnabled_PropertyChanged;

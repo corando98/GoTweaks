@@ -1,4 +1,4 @@
-using Microsoft.Win32;
+﻿using Microsoft.Win32;
 using Nefarius.Drivers.HidHide;
 using Nefarius.Utilities.DeviceManagement.Extensions;
 using Nefarius.Utilities.DeviceManagement.PnP;
@@ -28,7 +28,17 @@ namespace XboxGamingBarHelper.ControllerEmulation
         private bool cloakingEnabled;
         private bool apiMissingLogged;
         private bool cliMissingLogged;
-        private const int DeviceRestartTimeoutMs = 5000;
+        // Query-remove sends a notification round to every open-handle owner (XInput in
+        // game processes, GameInput, our own forwarder) and legitimately takes 10-30s
+        // when any of them is slow to respond. The old 5s value killed pnputil
+        // mid-operation on every detached-state restart/remove attempt (log: exit=-1
+        // "timeout" at exactly 5.0s, three builds in a row) - we never saw a real result.
+        private const int DeviceRestartTimeoutMs = 30000;
+        private readonly object reenumerationLock = new object();
+        private DeviceType lastEnableDeviceType;
+        private int lastEnableHideTargetMode;
+        private IReadOnlyCollection<string> lastEnableExcludedDeviceIds;
+        private DateTime lastRestartCompletedUtc = DateTime.MinValue;
         private const string XboxGamingOverlayPackageName = "Microsoft.XboxGamingOverlay";
         private const string XboxGamingOverlayPackageFamilySuffix = "_8wekyb3d8bbwe";
         private const string XboxGamingAppPackageName = "Microsoft.GamingApp";
@@ -168,6 +178,31 @@ namespace XboxGamingBarHelper.ControllerEmulation
         {
             lock (syncRoot)
             {
+                lastEnableDeviceType = deviceType;
+                lastEnableHideTargetMode = hideTargetMode;
+                lastEnableExcludedDeviceIds = excludedDeviceIds;
+
+                // With a half detached, the pad's visible XInput presence is the
+                // 045E:028E bridge devnode that xusb22 publishes under the Legion's USB
+                // parent - the native-only mode 1 never cloaks it, so games keep seeing
+                // the stock pad no matter what happens to the 17EF nodes
+                // (log-confirmed: detached candidate enumeration can contain no 17EF
+                // gamepad node at all while the pad stays fully usable). Escalate to
+                // mode 3 (native + bridge). Attached keeps mode 1: hiding the bridge
+                // there broke rumble on Go 1-era xinputhid stacks (see
+                // ComputeHideTargetForViiper).
+                if (hideTargetMode == 1)
+                {
+                    bool detached = false;
+                    try { detached = SkipDeviceRestartWhen != null && SkipDeviceRestartWhen(); }
+                    catch (Exception ex) { Logger.Debug($"Detached probe failed during Enable: {ex.Message}"); }
+                    if (detached)
+                    {
+                        hideTargetMode = 3;
+                        Logger.Info("HidHide suppression: half detached - escalating hide mode 1 -> 3 (Xbox bridge devnode is the visible pad while detached).");
+                    }
+                }
+
                 Logger.Info($"HidHide suppression enable requested: deviceType={deviceType}, hideTargetMode={hideTargetMode}, excludedCount={(excludedDeviceIds?.Count ?? 0)}");
 
                 if (TryEnableWithApi(deviceType, hideTargetMode, excludedDeviceIds, out bool apiResult))
@@ -345,6 +380,45 @@ namespace XboxGamingBarHelper.ControllerEmulation
             }
         }
 
+        /// <summary>
+        /// Re-runs the last Enable pass if suppression is currently active. Called when
+        /// the Go 2 receiver re-presents under a different USB PID (half sleep/wake or
+        /// dock change): the flip creates fresh devnodes the enable-time cloak doesn't
+        /// cover, so without this the stock pad reappears next to the emulated one
+        /// mid-session. Passes the originally requested hide mode - Enable re-applies
+        /// the detached escalation against the current attach state.
+        /// </summary>
+        public void ReassertSuppressionIfEnabled()
+        {
+            DeviceType deviceType;
+            int hideTargetMode;
+            IReadOnlyCollection<string> excluded;
+            lock (syncRoot)
+            {
+                if (!cloakingEnabled)
+                {
+                    return;
+                }
+
+                // Our own post-cloak restarts (cycle-port drops every interface of the
+                // receiver) trigger the same reconnect event that calls this - without
+                // this guard, re-assert -> restart -> reconnect -> re-assert loops
+                // forever. A genuine firmware mode flip lands well outside this window.
+                if ((DateTime.UtcNow - lastRestartCompletedUtc) < TimeSpan.FromSeconds(15))
+                {
+                    Logger.Info("HidHide suppression re-assert skipped: reconnect follows our own device restart.");
+                    return;
+                }
+
+                deviceType = lastEnableDeviceType;
+                hideTargetMode = lastEnableHideTargetMode;
+                excluded = lastEnableExcludedDeviceIds;
+            }
+
+            Logger.Info("HidHide suppression re-assert: controller re-presented while suppression active - re-running enable pass.");
+            Enable(deviceType, hideTargetMode, excluded);
+        }
+
         public void Disable()
         {
             lock (syncRoot)
@@ -449,6 +523,18 @@ namespace XboxGamingBarHelper.ControllerEmulation
             }
         }
 
+        /// <summary>
+        /// When set and returning true, USB port cycles in the post-cloak-change restart
+        /// are skipped (HID devnode restarts still run). Wired to
+        /// LegionManager.AnyControllerDetached: cycling the controller receiver's USB port
+        /// while a half is undocked drops the wireless link and powers the pad off
+        /// (log-confirmed: every cycle-port on VID_17EF&PID_61EB&MI_00 followed by
+        /// "Controller disconnected" within 1s). Detached nodes instead get a devnode
+        /// remove + rescan - a software re-plug that leaves the radio untouched and,
+        /// unlike restart-device, can't be vetoed by open handles on the stack.
+        /// </summary>
+        public Func<bool> SkipDeviceRestartWhen { get; set; }
+
         private void RestartDevices(IEnumerable<string> deviceInstanceIds)
         {
             if (deviceInstanceIds == null)
@@ -456,27 +542,79 @@ namespace XboxGamingBarHelper.ControllerEmulation
                 return;
             }
 
+            bool skipUsbPortCycle = false;
+            try
+            {
+                skipUsbPortCycle = SkipDeviceRestartWhen != null && SkipDeviceRestartWhen();
+            }
+            catch (Exception ex)
+            {
+                Logger.Debug($"SkipDeviceRestartWhen probe failed: {ex.Message}");
+            }
+
+            // USB parents first: restarting the USB interface node restarts its HID
+            // children with it, letting the loop skip redundant child restarts.
+            List<string> targets = deviceInstanceIds
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Where(id => ShouldRestartDevice(id, skipUsbPortCycle))
+                .OrderBy(id => id.Trim().StartsWith("USB\\", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                .ToList();
+            if (targets.Count == 0)
+            {
+                Logger.Info("HidHide re-enumeration: no eligible device nodes to restart - apps may not re-read cloak state until the device re-enumerates.");
+                return;
+            }
+
+            if (skipUsbPortCycle)
+            {
+                // Deliberately synchronous. On emu-enable this runs BEFORE the VIIPER
+                // forwarder starts polling the physical pad via XInput - active polling
+                // re-opens XInput's cached device handle continuously, which resurrects
+                // the handle the query-remove is draining and gets the operation vetoed
+                // (log-confirmed: backgrounded pnputil during forwarder startup = exit
+                // 3010, while the forwarder-stopped disable pass completed in 40ms). An
+                // idle cached handle releases cleanly on the query-remove notification;
+                // only concurrent polling fights it.
+                Logger.Info("HidHide re-enumeration: a controller half is detached - USB port cycles skipped (would drop the wireless link), using pnputil devnode restarts.");
+            }
+
+            lock (reenumerationLock)
+            {
+                RestartDevicesCore(targets, skipUsbPortCycle);
+            }
+        }
+
+        private void RestartDevicesCore(List<string> targets, bool skipUsbPortCycle)
+        {
             int successCount = 0;
             int cyclePortSuccessCount = 0;
             int pnputilSuccessCount = 0;
             int failureCount = 0;
             int totalCount = 0;
-            foreach (string deviceInstanceId in deviceInstanceIds.Distinct(StringComparer.OrdinalIgnoreCase))
+            bool usbNodeRestarted = false;
+            foreach (string deviceInstanceId in targets)
             {
-                if (string.IsNullOrWhiteSpace(deviceInstanceId))
-                {
-                    continue;
-                }
+                // When a half is detached, only the electrical port cycle is dangerous
+                // (drops the wireless link, powers the pad off). pnputil restart-device
+                // is the safe substitute: it preserves the device instance path, so the
+                // HidHide cloak registration made against it stays valid across the
+                // restart. Devnode remove + rescan was tried and retired: the re-created
+                // node comes back with a NEW instance path (IG number bumps), orphaning
+                // the cloak and leaving the pad visible again.
+                bool isUsbNode = deviceInstanceId.Trim().StartsWith("USB\\", StringComparison.OrdinalIgnoreCase);
+                bool portCycleAllowed = isUsbNode && !skipUsbPortCycle;
 
-                if (!ShouldRestartDevice(deviceInstanceId))
+                if (!isUsbNode && usbNodeRestarted)
                 {
+                    Logger.Info($"HidHide re-enumeration: skipping HID child (already restarted with its USB parent): '{deviceInstanceId}'");
                     continue;
                 }
 
                 totalCount++;
                 string method = "none";
                 bool succeeded = false;
-                if (TryCyclePort(deviceInstanceId))
+                if (portCycleAllowed && TryCyclePort(deviceInstanceId))
                 {
                     succeeded = true;
                     method = "cycle-port";
@@ -498,6 +636,10 @@ namespace XboxGamingBarHelper.ControllerEmulation
                 if (succeeded)
                 {
                     successCount++;
+                    if (isUsbNode)
+                    {
+                        usbNodeRestarted = true;
+                    }
                 }
             }
 
@@ -514,9 +656,11 @@ namespace XboxGamingBarHelper.ControllerEmulation
             {
                 Logger.Warn($"HidHide re-enumeration failed for all {totalCount} device(s). Device visibility may require manual reconnect/restart.");
             }
+
+            lastRestartCompletedUtc = DateTime.UtcNow;
         }
 
-        private static bool ShouldRestartDevice(string deviceInstanceId)
+        private static bool ShouldRestartDevice(string deviceInstanceId, bool includeIgNodes)
         {
             if (string.IsNullOrWhiteSpace(deviceInstanceId))
             {
@@ -534,8 +678,27 @@ namespace XboxGamingBarHelper.ControllerEmulation
             // Restarting IG_* interfaces has shown unstable behavior (including devices
             // ending in disabled state on some systems) while MI_00 is the meaningful
             // XInput interface to refresh for stock-controller visibility changes.
-            return normalized.StartsWith("USB\\", StringComparison.OrdinalIgnoreCase) &&
-                   normalized.IndexOf("&MI_00\\", StringComparison.OrdinalIgnoreCase) >= 0;
+            // EXCEPT when a half is detached (includeIgNodes): after re-enumeration the
+            // gamepad can exist ONLY as USB/HID IG_xx nodes (log-confirmed tree with no
+            // MI_00 at all), and with the port cycle off the table an IG restart is the
+            // only remaining way to fire the device-change event apps need to re-read
+            // cloak state. restart-device preserves the instance path so the cloak
+            // registration survives.
+            bool isIgNode = normalized.IndexOf("&IG_", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (normalized.StartsWith("USB\\", StringComparison.OrdinalIgnoreCase))
+            {
+                return normalized.IndexOf("&MI_00\\", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       (includeIgNodes && isIgNode);
+            }
+
+            // HID branch: the plain MI_00 gamepad collection (one observed detached
+            // shape), plus IG collections when detached.
+            if (isIgNode)
+            {
+                return includeIgNodes;
+            }
+
+            return normalized.IndexOf("&MI_00", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private bool TryCyclePort(string deviceInstanceId)
@@ -613,9 +776,10 @@ namespace XboxGamingBarHelper.ControllerEmulation
                 return true;
             }
 
-            Logger.Debug($"PnP restart-device failed for '{deviceInstanceId}' (exit={restartExitCode}): {restartStdErr}");
+            Logger.Info($"PnP restart-device failed for '{deviceInstanceId}' (exit={restartExitCode}): {restartStdErr}");
             return false;
         }
+
 
         private static bool RunPnpUtil(string arguments, out int exitCode, out string stdErr)
         {
@@ -1468,11 +1632,16 @@ namespace XboxGamingBarHelper.ControllerEmulation
             // device that xusb22.sys publishes underneath the Legion's USB endpoint.
             // Walking each candidate's PnP parent chain and matching VID_17EF identifies
             // it unambiguously, regardless of how the user has the controller attached.
-            return QueryPnpDeviceIds(0x045E, 0x028E)
+            string[] bridgeIds = QueryPnpDeviceIds(0x045E, 0x028E)
                 .Concat(QueryUsbDeviceIds(0x045E, 0x028E))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Where(IsLegionParentedXboxBridge)
                 .ToArray();
+            foreach (string id in bridgeIds)
+            {
+                Logger.Info($"HidHide Xbox-bridge candidate (Legion-parented 045E:028E): '{id}'");
+            }
+            return bridgeIds;
         }
 
         /// <summary>
@@ -1523,9 +1692,19 @@ namespace XboxGamingBarHelper.ControllerEmulation
             // which can break helper probing and button monitor reads.
             if (deviceType == DeviceType.LegionGo || deviceType == DeviceType.LegionGo2)
             {
-                List<string> filtered = deviceInstanceIds
+                // Diagnostic: list every candidate with its filter verdict. The
+                // attached/detached states enumerate DIFFERENT device shapes (attached:
+                // USB MI_00 + IG_xx children; detached: fewer nodes, plain HID MI_00) and
+                // detached-state hiding gaps are invisible without this — the summary line
+                // only shows the hidden COUNT.
+                List<string> allCandidates = deviceInstanceIds.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                foreach (string id in allCandidates)
+                {
+                    Logger.Info($"HidHide Legion candidate: '{id}' -> {(IsLegionSuppressibleGamepadId(id) ? "HIDE" : "keep visible")}");
+                }
+
+                List<string> filtered = allCandidates
                     .Where(IsLegionSuppressibleGamepadId)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
 
                 if (filtered.Count == 0)
@@ -1594,9 +1773,17 @@ namespace XboxGamingBarHelper.ControllerEmulation
             // hidden, because Windows enumerates them as separate HID-class
             // nodes. Hide them too — VIIPER's ViGEm Xbox-360 pad keeps games on
             // a working XInput slot, so this is what gets joy.cpl clean.
+            //
+            // Also accept plain HID MI_00 nodes: with the controllers DETACHED the
+            // receiver exposes the gamepad as HID\VID_17EF..&MI_00 with no IG_xx
+            // child at all — the IG-only rule left it visible (field log: hidden=1
+            // while detached vs hidden=3 attached, Steam still listing the stock
+            // pad). MI_00 is only ever the gamepad collection; the control/report
+            // endpoints the helper needs stay on MI_01/MI_02/MI_03.
             if (normalized.StartsWith("HID\\", StringComparison.OrdinalIgnoreCase))
             {
-                return normalized.IndexOf("&IG_", StringComparison.OrdinalIgnoreCase) >= 0;
+                return normalized.IndexOf("&IG_", StringComparison.OrdinalIgnoreCase) >= 0
+                    || normalized.IndexOf("&MI_00", StringComparison.OrdinalIgnoreCase) >= 0;
             }
 
             return false;

@@ -21,15 +21,19 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         /// </summary>
         public void SetJoystickAsMouseMode(int mode)
         {
-            int previousMode = joystickAsMouseMode;
             joystickAsMouseMode = mode;
 
-            // Disable previous stick if it was enabled
-            if (previousMode == 1)
+            // Always disable every stick that should be off instead of trusting the
+            // tracked previous mode: the firmware keeps mouse mode across helper
+            // restarts and dropped writes (pad disconnected mid-apply), so a stale
+            // previousMode leaves a stick stuck as mouse with no way for "off" to
+            // clear it (field report: right stick moving the cursor while the UI
+            // showed joystick-as-mouse off).
+            if (mode != 1)
             {
                 ApplyJoystickAsMouse(true, false, joystickMouseSens);
             }
-            else if (previousMode == 2)
+            if (mode != 2)
             {
                 ApplyJoystickAsMouse(false, false, joystickMouseSens);
             }
@@ -43,6 +47,19 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             {
                 ApplyJoystickAsMouse(false, true, joystickMouseSens);
             }
+        }
+
+        /// <summary>
+        /// Re-sends the current joystick-as-mouse state to both halves. Called when a
+        /// half reconnects: a disable/enable written while it was offline never reached
+        /// its firmware, leaving the physical state diverged from the UI.
+        /// </summary>
+        public void ReapplyJoystickAsMouseState()
+        {
+            int mode = joystickAsMouseMode;
+            Logger.Info($"Reapplying joystick-as-mouse state after controller reconnect: mode={mode}");
+            ApplyJoystickAsMouse(true, mode == 1, joystickMouseSens);
+            ApplyJoystickAsMouse(false, mode == 2, joystickMouseSens);
         }
 
         /// <summary>

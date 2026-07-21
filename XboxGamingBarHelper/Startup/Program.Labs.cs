@@ -804,7 +804,8 @@ namespace XboxGamingBarHelper
             {
                 legionManager?.UpdateControllerBatteryFromButtonMonitor(
                     e.LeftBattery, e.LeftCharging, e.LeftConnected,
-                    e.RightBattery, e.RightCharging, e.RightConnected);
+                    e.RightBattery, e.RightCharging, e.RightConnected,
+                    e.LeftDocked, e.RightDocked);
 
                 LegionButtonMonitor monitor = sender as LegionButtonMonitor;
                 string vidPid = monitor?.DetectedVidPid ?? legionButtonMonitor?.DetectedVidPid;
