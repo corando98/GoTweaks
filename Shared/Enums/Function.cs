@@ -578,5 +578,13 @@
         // Replaces the old AutoHibernate feature (its enum slots below stay reserved).
         SystemHibernateTimeoutAC,   // int minutes, 0 = disabled
         SystemHibernateTimeoutDC,   // int minutes, 0 = disabled
+
+        // Physical dock state per half, distinct from ControllerConnectedLeft/Right
+        // (which since the linked/docked split means "linked" - true for a
+        // detached-but-wirelessly-active half so its battery keeps showing).
+        // Docked = conn code 0x02 only. The widget renders: docked = "Attached",
+        // linked-but-undocked = "Detached", not linked = "Disconnected".
+        ControllerDockedLeft,       // bool - left half physically docked
+        ControllerDockedRight,      // bool - right half physically docked
     }
 }

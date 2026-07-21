@@ -473,6 +473,21 @@ namespace XboxGamingBarHelper.Labs
                     released = _releasedSinceFlash;
                 }
 
+                // Flash on press also tracks analog input continuously: trigger pull and
+                // stick deflection blend static -> flash color by how far the input is
+                // pushed (full pull/deflection = full flash color, halfway = half blend),
+                // on top of the button-flash decay. The strongest source wins, so a
+                // button flash still decays normally once sticks/triggers are at rest.
+                if (mode == LegionReactiveMode.FlashOnPress)
+                {
+                    float analog = ReadAnalogInputLevel();
+                    if (analog > level)
+                    {
+                        level = analog;
+                        lock (_stateLock) { flash = _flashColor; }
+                    }
+                }
+
                 if (level > 0.001f)
                 {
                     // Blend flash color -> the user's STATIC color by the decaying level, so the
@@ -497,6 +512,34 @@ namespace XboxGamingBarHelper.Labs
 
                 Thread.Sleep(EffectTickMs);
             }
+        }
+
+        /// <summary>
+        /// Strongest current analog input, 0..1: trigger pull (0-255) vs stick deflection
+        /// magnitude (XInput short range). A small deadzone keeps resting sticks from
+        /// holding the reactive takeover (and its keepalive writes) forever; the range
+        /// above the deadzone is rescaled so a full pull/deflection still reaches 1.0.
+        /// </summary>
+        private static float ReadAnalogInputLevel()
+        {
+            if (!LegionButtonMonitor.TryGetLatestGamepadSample(out var s)) return 0f;
+            float trigger = Math.Max(s.LeftTrigger, s.RightTrigger) / 255f;
+            float sticks = Math.Max(
+                StickMagnitude(s.LeftStickX, s.LeftStickY),
+                StickMagnitude(s.RightStickX, s.RightStickY));
+            float analog = Math.Max(trigger, sticks);
+
+            const float Deadzone = 0.10f;
+            if (analog <= Deadzone) return 0f;
+            return (analog - Deadzone) / (1f - Deadzone);
+        }
+
+        private static float StickMagnitude(short x, short y)
+        {
+            float fx = x / 32768f;
+            float fy = y / 32768f;
+            float mag = (float)Math.Sqrt(fx * fx + fy * fy);
+            return mag > 1f ? 1f : mag;
         }
 
         private void WriteColor((byte r, byte g, byte b) color)

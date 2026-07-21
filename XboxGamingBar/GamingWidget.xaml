@@ -7452,6 +7452,7 @@
                                             <x:String>Gamepad</x:String>
                                             <x:String>Keyboard</x:String>
                                             <x:String>Mouse</x:String>
+                                            <x:String>System</x:String>
                                         </ComboBox>
                                         <ComboBox x:Name="LegionButtonY1ComboBox" Grid.Column="1"
                                                   Style="{StaticResource ModernComboBoxStyle}" SelectedIndex="0">
@@ -7492,6 +7493,7 @@
                                         <ComboBox x:Name="LegionButtonY2TypeComboBox" Grid.Column="0" Margin="0,0,8,0"
                                                   Style="{StaticResource ModernComboBoxStyle}" SelectedIndex="0">
                                             <x:String>Gamepad</x:String><x:String>Keyboard</x:String><x:String>Mouse</x:String>
+                                            <x:String>Gamepad</x:String><x:String>Keyboard</x:String><x:String>System</x:String>
                                         </ComboBox>
                                         <ComboBox x:Name="LegionButtonY2ComboBox" Grid.Column="1"
                                                   Style="{StaticResource ModernComboBoxStyle}" SelectedIndex="0">
@@ -7526,6 +7528,7 @@
                                         <ComboBox x:Name="LegionButtonY3TypeComboBox" Grid.Column="0" Margin="0,0,8,0"
                                                   Style="{StaticResource ModernComboBoxStyle}" SelectedIndex="0">
                                             <x:String>Gamepad</x:String><x:String>Keyboard</x:String><x:String>Mouse</x:String>
+                                            <x:String>Gamepad</x:String><x:String>Keyboard</x:String><x:String>System</x:String>
                                         </ComboBox>
                                         <ComboBox x:Name="LegionButtonY3ComboBox" Grid.Column="1"
                                                   Style="{StaticResource ModernComboBoxStyle}" SelectedIndex="0">
@@ -7560,6 +7563,7 @@
                                         <ComboBox x:Name="LegionButtonM1TypeComboBox" Grid.Column="0" Margin="0,0,8,0"
                                                   Style="{StaticResource ModernComboBoxStyle}" SelectedIndex="0">
                                             <x:String>Gamepad</x:String><x:String>Keyboard</x:String><x:String>Mouse</x:String>
+                                            <x:String>Gamepad</x:String><x:String>Keyboard</x:String><x:String>System</x:String>
                                         </ComboBox>
                                         <ComboBox x:Name="LegionButtonM1ComboBox" Grid.Column="1"
                                                   Style="{StaticResource ModernComboBoxStyle}" SelectedIndex="0">
@@ -7594,6 +7598,7 @@
                                         <ComboBox x:Name="LegionButtonM2TypeComboBox" Grid.Column="0" Margin="0,0,8,0"
                                                   Style="{StaticResource ModernComboBoxStyle}" SelectedIndex="0">
                                             <x:String>Gamepad</x:String><x:String>Keyboard</x:String><x:String>Mouse</x:String>
+                                            <x:String>Gamepad</x:String><x:String>Keyboard</x:String><x:String>System</x:String>
                                         </ComboBox>
                                         <ComboBox x:Name="LegionButtonM2ComboBox" Grid.Column="1"
                                                   Style="{StaticResource ModernComboBoxStyle}" SelectedIndex="0">
@@ -7628,6 +7633,7 @@
                                         <ComboBox x:Name="LegionButtonM3TypeComboBox" Grid.Column="0" Margin="0,0,8,0"
                                                   Style="{StaticResource ModernComboBoxStyle}" SelectedIndex="0">
                                             <x:String>Gamepad</x:String><x:String>Keyboard</x:String><x:String>Mouse</x:String>
+                                            <x:String>Gamepad</x:String><x:String>Keyboard</x:String><x:String>System</x:String>
                                         </ComboBox>
                                         <ComboBox x:Name="LegionButtonM3ComboBox" Grid.Column="1"
                                                   Style="{StaticResource ModernComboBoxStyle}" SelectedIndex="0">
@@ -7662,6 +7668,7 @@
                                         <ComboBox x:Name="LegionButtonDesktopTypeComboBox" Grid.Column="0" Margin="0,0,8,0"
                                                   Style="{StaticResource ModernComboBoxStyle}" SelectedIndex="0">
                                             <x:String>Gamepad</x:String><x:String>Keyboard</x:String><x:String>Mouse</x:String>
+                                            <x:String>Gamepad</x:String><x:String>Keyboard</x:String><x:String>System</x:String>
                                         </ComboBox>
                                         <ComboBox x:Name="LegionButtonDesktopComboBox" Grid.Column="1"
                                                   Style="{StaticResource ModernComboBoxStyle}" SelectedIndex="0">
@@ -7696,6 +7703,7 @@
                                         <ComboBox x:Name="LegionButtonPageTypeComboBox" Grid.Column="0" Margin="0,0,8,0"
                                                   Style="{StaticResource ModernComboBoxStyle}" SelectedIndex="0">
                                             <x:String>Gamepad</x:String><x:String>Keyboard</x:String><x:String>Mouse</x:String>
+                                            <x:String>Gamepad</x:String><x:String>Keyboard</x:String><x:String>System</x:String>
                                         </ComboBox>
                                         <ComboBox x:Name="LegionButtonPageComboBox" Grid.Column="1"
                                                   Style="{StaticResource ModernComboBoxStyle}" SelectedIndex="0">

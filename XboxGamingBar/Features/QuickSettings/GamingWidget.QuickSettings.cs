@@ -358,7 +358,11 @@ namespace XboxGamingBar
             AddTileDefinition("LegionDesktopControls", "Desktop", "\uE7F4", order: order++);
             // Quick toggle for the legacy controller emulation backend; state text shows
             // the active backend mode (Xbox / DS4 / Mouse) when on, "Off" otherwise.
-            AddTileDefinition("ControllerEmulation", "Controller", "\uE7FC", order: order++);
+            // Single on/off switch for controller emulation (replaces the old
+            // "ControllerEmulation" cycle tile - field request: cycling through device
+            // variants just to turn emulation off was clumsy). On re-enables whatever
+            // device type the user last had selected; the state label still shows it.
+            AddTileDefinition("ControllerEmuPower", "Controller", "\uE7FC", order: order++);
 
             // Row 7 - System/Device
             AddTileDefinition("LegionLightMode", "Light Mode", "\uEA80", order: order++);
@@ -984,6 +988,19 @@ namespace XboxGamingBar
                         status.Text = "Pick at least 2 buttons.";
                         return;
                     }
+
+                    // A combo already bound to a different tile would silently overwrite it at
+                    // the helper (RegisterTileHotkey keys by mask) - block it here instead.
+                    foreach (var other in qsTileDefinitions)
+                    {
+                        if (other.Id == tile.Id || string.IsNullOrEmpty(other.ControllerHotkey)) continue;
+                        if (uint.TryParse(other.ControllerHotkey, out uint otherMask) && otherMask == mask)
+                        {
+                            status.Text = $"Already used by \"{other.Name}\".";
+                            return;
+                        }
+                    }
+
                     tile.ControllerHotkey = mask.ToString();
                     SaveQuickSettingsConfig();   // persists + SendTileHotkeysToHelper
                     flyout.Hide();

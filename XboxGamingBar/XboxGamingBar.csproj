@@ -239,6 +239,8 @@
     <Compile Include="Data\Controller\ControllerChargingRightProperty.cs" />
     <Compile Include="Data\Controller\ControllerConnectedLeftProperty.cs" />
     <Compile Include="Data\Controller\ControllerConnectedRightProperty.cs" />
+    <Compile Include="Data\Controller\ControllerDockedLeftProperty.cs" />
+    <Compile Include="Data\Controller\ControllerDockedRightProperty.cs" />
     <Compile Include="Data\Controller\ControllerVidPidProperty.cs" />
     <Compile Include="Data\Controller\ControllerDeviceStatusProperty.cs" />
     <Compile Include="Data\Device\DeviceDisplayNameProperty.cs" />

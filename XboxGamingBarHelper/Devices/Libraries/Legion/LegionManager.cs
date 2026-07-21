@@ -295,6 +295,8 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         public readonly ControllerBatteryRightProperty ControllerBatteryRight;
         public readonly ControllerChargingLeftProperty ControllerChargingLeft;
         public readonly ControllerChargingRightProperty ControllerChargingRight;
+        public readonly ControllerDockedLeftProperty ControllerDockedLeft;
+        public readonly ControllerDockedRightProperty ControllerDockedRight;
         public readonly ControllerConnectedLeftProperty ControllerConnectedLeft;
         public readonly ControllerConnectedRightProperty ControllerConnectedRight;
         public readonly ControllerVidPidProperty ControllerVidPid;
@@ -600,6 +602,8 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             ControllerBatteryRight = new ControllerBatteryRightProperty(-1, this);
             ControllerChargingLeft = new ControllerChargingLeftProperty(false, this);
             ControllerChargingRight = new ControllerChargingRightProperty(false, this);
+            ControllerDockedLeft = new ControllerDockedLeftProperty(false, this);
+            ControllerDockedRight = new ControllerDockedRightProperty(false, this);
             ControllerConnectedLeft = new ControllerConnectedLeftProperty(false, this);
             ControllerConnectedRight = new ControllerConnectedRightProperty(false, this);
             ControllerVidPid = new ControllerVidPidProperty("", this);
@@ -2929,6 +2933,19 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         {
             try
             {
+                // Helper-side kinds (System actions; scroll directions repeat while held)
+                // register/deregister BEFORE the firmware ops so the dispatch table stays
+                // correct even if the controller is briefly unreachable.
+                var edgeButton = EdgeButtonForSlot(buttonIndex);
+                bool isSystem = mappingType == 3;
+                bool isScrollRepeat = mappingType == 2 && values != null && values.Length > 0 && values[0] >= 4 && values[0] <= 7;
+                if (edgeButton != Labs.LegionInputButton.None)
+                {
+                    SetHelperSideButtonMapping(edgeButton,
+                        isSystem && values != null && values.Length > 0 ? values[0] : (int?)null,
+                        isScrollRepeat ? values[0] : (int?)null);
+                }
+
                 using var controller = new LegionGoController();
                 if (!controller.Connect())
                 {
@@ -2947,6 +2964,15 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                     5 => RemappableButton.M3,
                     _ => throw new ArgumentException($"Invalid button index: {buttonIndex}")
                 };
+
+                // System / scroll-repeat: the helper drives the behavior; clear the
+                // firmware mapping so the button emits nothing OS-visible on its own.
+                if (isSystem || isScrollRepeat)
+                {
+                    bool cleared = controller.ClearButtonMapping(remapButton);
+                    Logger.Info($"Button {remapButton} firmware mapping cleared for helper-side {(isSystem ? "system action" : "scroll repeat")} (cleared={cleared})");
+                    return;
+                }
 
                 // Log the button details for debugging
                 var ctrl = LegionGoController.GetControllerForButton(remapButton);
@@ -3006,10 +3032,30 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         {
             try
             {
+                // Desktop/Page front buttons arrive on the edge stream as Mode/Share.
+                var edgeButton = button == GamepadButton.DesktopButton ? Labs.LegionInputButton.Mode
+                               : button == GamepadButton.PageButton ? Labs.LegionInputButton.Share
+                               : Labs.LegionInputButton.None;
+                bool isSystem = mappingType == 3;
+                bool isScrollRepeat = mappingType == 2 && values != null && values.Length > 0 && values[0] >= 4 && values[0] <= 7;
+                if (edgeButton != Labs.LegionInputButton.None)
+                {
+                    SetHelperSideButtonMapping(edgeButton,
+                        isSystem && values != null && values.Length > 0 ? values[0] : (int?)null,
+                        isScrollRepeat ? values[0] : (int?)null);
+                }
+
                 using var controller = new LegionGoController();
                 if (!controller.Connect())
                 {
                     Logger.Warn($"Cannot set {button} mapping: controller not connected");
+                    return;
+                }
+
+                if (isSystem || isScrollRepeat)
+                {
+                    controller.ClearGamepadButtonMapping(button);
+                    Logger.Info($"{button} firmware mapping cleared for helper-side {(isSystem ? "system action" : "scroll repeat")}");
                     return;
                 }
 

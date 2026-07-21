@@ -903,6 +903,8 @@ namespace XboxGamingBar
         private readonly ControllerChargingRightProperty controllerChargingRight;
         private readonly ControllerConnectedLeftProperty controllerConnectedLeft;
         private readonly ControllerConnectedRightProperty controllerConnectedRight;
+        private readonly ControllerDockedLeftProperty controllerDockedLeft;
+        private readonly ControllerDockedRightProperty controllerDockedRight;
         private readonly ControllerVidPidProperty controllerVidPid;
         private readonly ControllerDeviceStatusProperty controllerDeviceStatus;
 
@@ -1597,6 +1599,8 @@ namespace XboxGamingBar
             controllerChargingRight = new ControllerChargingRightProperty();
             controllerConnectedLeft = new ControllerConnectedLeftProperty();
             controllerConnectedRight = new ControllerConnectedRightProperty();
+            controllerDockedLeft = new ControllerDockedLeftProperty();
+            controllerDockedRight = new ControllerDockedRightProperty();
             controllerVidPid = new ControllerVidPidProperty();
             controllerDeviceStatus = new ControllerDeviceStatusProperty();
 
@@ -2003,6 +2007,8 @@ namespace XboxGamingBar
                 controllerChargingRight,
                 controllerConnectedLeft,
                 controllerConnectedRight,
+                controllerDockedLeft,
+                controllerDockedRight,
                 controllerVidPid,
                 controllerDeviceStatus,
                 // Device capability properties (for UI visibility)
@@ -2314,9 +2320,47 @@ namespace XboxGamingBar
                 amdRadeonBoostEnabled.PropertyChanged += AMDFeatureProperty_ChangedResyncProfile;
             }
             if (amdImageSharpeningEnabled != null)
+            {
+                amdImageSharpeningEnabled.PropertyChanged += QuickSettingsProperty_Changed;
                 amdImageSharpeningEnabled.PropertyChanged += AMDFeatureProperty_ChangedResyncProfile;
+            }
             if (autoTDPEnabled != null)
                 autoTDPEnabled.PropertyChanged += QuickSettingsProperty_Changed;
+
+            // These tile-backing properties had no subscription here at all, so a
+            // tile-triggered change (combo hotkey or tap) only reflected in its label
+            // after something else called UpdateQuickSettingsTileStates (e.g. tab
+            // navigation) - the tile ACTION always worked, only the label lagged.
+            if (cpuBoost != null)
+                cpuBoost.PropertyChanged += QuickSettingsProperty_Changed;
+            if (cpuEPP != null)
+                cpuEPP.PropertyChanged += QuickSettingsProperty_Changed;
+            if (refreshRate != null)
+                refreshRate.PropertyChanged += QuickSettingsProperty_Changed;
+            if (legionTouchpadEnabled != null)
+                legionTouchpadEnabled.PropertyChanged += QuickSettingsProperty_Changed;
+            if (touchscreenEnabled != null)
+                touchscreenEnabled.PropertyChanged += QuickSettingsProperty_Changed;
+            if (legionLightMode != null)
+                legionLightMode.PropertyChanged += QuickSettingsProperty_Changed;
+            if (legionChargeLimit != null)
+                legionChargeLimit.PropertyChanged += QuickSettingsProperty_Changed;
+            if (legionPowerLight != null)
+                legionPowerLight.PropertyChanged += QuickSettingsProperty_Changed;
+            if (legionDesktopControls != null)
+                legionDesktopControls.PropertyChanged += QuickSettingsProperty_Changed;
+            if (legionControllerProfile != null)
+                legionControllerProfile.PropertyChanged += QuickSettingsProperty_Changed;
+            if (legionFanFullSpeed != null)
+                legionFanFullSpeed.PropertyChanged += QuickSettingsProperty_Changed;
+            if (controllerEmulationAvailable != null)
+                controllerEmulationAvailable.PropertyChanged += QuickSettingsProperty_Changed;
+            if (controllerEmulationEnabled != null)
+                controllerEmulationEnabled.PropertyChanged += QuickSettingsProperty_Changed;
+            if (legionVibration != null)
+                legionVibration.PropertyChanged += QuickSettingsProperty_Changed;
+            if (legionVibrationMode != null)
+                legionVibrationMode.PropertyChanged += QuickSettingsProperty_Changed;
 
             // Controller battery properties - update tile when battery status changes
             if (controllerBatteryLeft != null)
@@ -2338,6 +2382,14 @@ namespace XboxGamingBar
             {
                 controllerChargingRight.PropertyChanged += QuickSettingsProperty_Changed;
                 controllerChargingRight.PropertyChanged += LegionControllerBattery_PropertyChanged;
+            }
+            if (controllerDockedLeft != null)
+            {
+                controllerDockedLeft.PropertyChanged += LegionControllerBattery_PropertyChanged;
+            }
+            if (controllerDockedRight != null)
+            {
+                controllerDockedRight.PropertyChanged += LegionControllerBattery_PropertyChanged;
             }
             if (controllerConnectedLeft != null)
             {
@@ -2381,10 +2433,14 @@ namespace XboxGamingBar
         {
             try
             {
-                // Update left controller battery
+                // Update left controller battery. Connected = linked (docked or wireless,
+                // battery valid); Docked = physically attached. A detached-but-linked
+                // half shows "Detached" with live battery; only a fully-off half shows
+                // "Disconnected".
                 int leftBattery = controllerBatteryLeft?.Value ?? -1;
                 bool leftCharging = controllerChargingLeft?.Value ?? false;
                 bool leftConnected = controllerConnectedLeft?.Value ?? false;
+                bool leftDocked = controllerDockedLeft?.Value ?? false;
 
                 if (leftBattery >= 0)
                 {
@@ -2397,12 +2453,13 @@ namespace XboxGamingBar
                     LeftControllerBatteryText.Foreground = new Windows.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x88, 0x88, 0x88));
                 }
                 LeftControllerChargingIcon.Visibility = leftCharging ? Visibility.Visible : Visibility.Collapsed;
-                LeftControllerConnectionText.Text = leftConnected ? "Attached" : "Detached";
+                LeftControllerConnectionText.Text = leftDocked ? "Attached" : (leftConnected ? "Detached" : "Disconnected");
 
                 // Update right controller battery
                 int rightBattery = controllerBatteryRight?.Value ?? -1;
                 bool rightCharging = controllerChargingRight?.Value ?? false;
                 bool rightConnected = controllerConnectedRight?.Value ?? false;
+                bool rightDocked = controllerDockedRight?.Value ?? false;
 
                 if (rightBattery >= 0)
                 {
@@ -2415,10 +2472,17 @@ namespace XboxGamingBar
                     RightControllerBatteryText.Foreground = new Windows.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x88, 0x88, 0x88));
                 }
                 RightControllerChargingIcon.Visibility = rightCharging ? Visibility.Visible : Visibility.Collapsed;
-                RightControllerConnectionText.Text = rightConnected ? "Attached" : "Detached";
+                RightControllerConnectionText.Text = rightDocked ? "Attached" : (rightConnected ? "Detached" : "Disconnected");
 
-                UpdateLegionControllerOverallStatus(leftConnected, rightConnected, leftBattery, rightBattery);
-                UpdateLegionDeviceGlyph(leftConnected, rightConnected,
+                // Overall status keys off DOCKED for its "Attached" state; a
+                // detached-but-wireless half falls through to "Connected" via the
+                // battery/VidPid presence check, which is the accurate label for it.
+                UpdateLegionControllerOverallStatus(leftDocked, rightDocked, leftBattery, rightBattery);
+                // Glyph attach visual keys off DOCKED (physically on the screen), not the
+                // linked flag - since the linked/docked split, "connected" stays true for a
+                // detached-but-wireless half so its battery keeps showing, but the glyph
+                // must still render that half detached from the tablet.
+                UpdateLegionDeviceGlyph(leftDocked, rightDocked,
                     leftConnected || leftBattery >= 0, rightConnected || rightBattery >= 0);
             }
             catch (Exception ex)
@@ -3049,6 +3113,11 @@ namespace XboxGamingBar
                     {
                         desc = DescribeKeyboardKeys(GetStoredKeyboardKeys(name)) ?? "Keys";
                     }
+                    else if (type == 3)
+                    {
+                        desc = _buttonSystemCombos.TryGetValue(name, out var sysCombo)
+                            ? sysCombo?.SelectedItem as string : "System";
+                    }
                     else
                     {
                         var c = FindName($"LegionButton{name}MouseComboBox") as ComboBox;
@@ -3231,6 +3300,17 @@ namespace XboxGamingBar
             var root = new StackPanel();
             var placed = new System.Collections.Generic.HashSet<string>();
 
+            // Multi-select with OK/Cancel (field request): building a multi-key macro used
+            // to take one flyout round-trip PER KEY because a click committed and closed
+            // immediately. Now clicks toggle keys (in press order, shown highlighted) and
+            // OK commits them all - each SelectedIndex assignment fires the combo's
+            // SelectionChanged, which for chip-style macro combos appends the key and
+            // resets to the "+ Key" placeholder, so assigning sequentially builds the
+            // whole macro. For single-value combos the last toggled key wins.
+            var selectedOrder = new System.Collections.Generic.List<int>();
+            var normalBg = Windows.UI.Color.FromArgb(255, 0x2A, 0x2D, 0x32);
+            var selectedBg = Windows.UI.Color.FromArgb(255, 0x2A, 0x4A, 0x66);
+
             Button MakeKey(string label, int idx)
             {
                 var b = new Button
@@ -3240,11 +3320,23 @@ namespace XboxGamingBar
                     Padding = new Thickness(2, 5, 2, 5),
                     Margin = new Thickness(1),
                     HorizontalContentAlignment = HorizontalAlignment.Center,
-                    Background = new SolidColorBrush(idx == combo.SelectedIndex
-                        ? Windows.UI.Color.FromArgb(255, 0x2A, 0x4A, 0x66)
-                        : Windows.UI.Color.FromArgb(255, 0x2A, 0x2D, 0x32)),
+                    Background = new SolidColorBrush(idx == combo.SelectedIndex ? selectedBg : normalBg),
                 };
-                b.Click += (s, e) => { PreserveLegionScroll(); combo.SelectedIndex = idx; flyout.Hide(); };
+                b.Click += (s, e) =>
+                {
+                    // The "+ Key" placeholder is a no-op slot, not a key.
+                    if (label == "+ Key") return;
+                    if (selectedOrder.Contains(idx))
+                    {
+                        selectedOrder.Remove(idx);
+                        b.Background = new SolidColorBrush(normalBg);
+                    }
+                    else
+                    {
+                        selectedOrder.Add(idx);
+                        b.Background = new SolidColorBrush(selectedBg);
+                    }
+                };
                 return b;
             }
 
@@ -3270,7 +3362,40 @@ namespace XboxGamingBar
             }
             if (extras.Children.Count > 0) root.Children.Insert(0, extras);
 
-            flyout.Content = new ScrollViewer { Content = root, MaxHeight = 420,
+            var okButton = new Button
+            {
+                Content = "OK",
+                MinWidth = 84,
+                Margin = new Thickness(1, 6, 4, 1),
+                Background = new SolidColorBrush(selectedBg),
+            };
+            okButton.Click += (s, e) =>
+            {
+                try
+                {
+                    PreserveLegionScroll();
+                    foreach (int idx in selectedOrder)
+                    {
+                        combo.SelectedIndex = idx;
+                    }
+                }
+                catch (Exception ex) { Logger.Warn($"Keyboard picker OK failed: {ex.Message}"); }
+                flyout.Hide();
+            };
+            var cancelButton = new Button
+            {
+                Content = "Cancel",
+                MinWidth = 84,
+                Margin = new Thickness(1, 6, 1, 1),
+            };
+            cancelButton.Click += (s, e) => flyout.Hide();
+
+            var confirmRow = new StackPanel { Orientation = Orientation.Horizontal };
+            confirmRow.Children.Add(okButton);
+            confirmRow.Children.Add(cancelButton);
+            root.Children.Add(confirmRow);
+
+            flyout.Content = new ScrollViewer { Content = root, MaxHeight = 460,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Auto };
             flyout.ShowAt(anchor);
         }

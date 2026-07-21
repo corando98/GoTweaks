@@ -228,6 +228,31 @@ namespace XboxGamingBarHelper
         /// </summary>
         private static void OnLegionButtonEdgeForHotkeys(object sender, Labs.LegionButtonEdgeEventArgs e)
         {
+            // Helper-side button remaps (Type=System actions; scroll directions that
+            // repeat while held). Registered by LegionManager when a remap can't be
+            // expressed in firmware; the firmware mapping is cleared so this is the
+            // button's only behavior.
+            try
+            {
+                if (legionManager != null)
+                {
+                    if (e.Pressed && legionManager.TryGetSystemActionRemap(e.Button, out int sysAction))
+                    {
+                        Logger.Info($"Legion button {e.Button} -> system action {sysAction}");
+                        Task.Run(() => ExecuteSystemAction(sysAction, null, $"legion-button-{e.Button}"));
+                    }
+                    if (legionManager.TryGetScrollRepeatRemap(e.Button, out int scrollCode))
+                    {
+                        if (e.Pressed) StartScrollRepeat(e.Button, scrollCode);
+                        else StopScrollRepeat(e.Button);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"Helper-side button remap dispatch failed: {ex.Message}");
+            }
+
             uint bit = LegionButtonToComboBit(e.Button);
             if (bit == 0) return;
             if (e.Pressed) _legionExtraBits |= bit;
@@ -236,6 +261,65 @@ namespace XboxGamingBarHelper
             // Debug-level trace of paddle edges reaching the combo bridge (kept for future
             // diagnosis; not logged at INFO to avoid noise on every paddle press).
             Logger.Debug($"ControllerHotkey: paddle {e.Button} {(e.Pressed ? "down" : "up")} -> bit=0x{bit:X}, extraBits=0x{_legionExtraBits:X}");
+        }
+
+        // Hold-to-repeat scroll (field request: firmware scroll remaps are
+        // one-press-one-notch; holding the button now scrolls continuously).
+        // One tick fires immediately on press - a quick tap still scrolls exactly
+        // one notch - then repeats after a short initial delay, standard key-repeat
+        // feel. Codes are the 1-based firmware mouse enum: 4=Up, 5=Down, 6=Left, 7=Right.
+        private static readonly Dictionary<Labs.LegionInputButton, CancellationTokenSource> _scrollRepeats =
+            new Dictionary<Labs.LegionInputButton, CancellationTokenSource>();
+        private const int ScrollRepeatInitialDelayMs = 280;
+        private const int ScrollRepeatIntervalMs = 55;
+
+        private static void StartScrollRepeat(Labs.LegionInputButton button, int scrollCode)
+        {
+            StopScrollRepeat(button);
+            var cts = new CancellationTokenSource();
+            lock (_scrollRepeats) { _scrollRepeats[button] = cts; }
+            var token = cts.Token;
+            Task.Run(async () =>
+            {
+                try
+                {
+                    InjectScrollTick(scrollCode);
+                    await Task.Delay(ScrollRepeatInitialDelayMs, token);
+                    while (!token.IsCancellationRequested)
+                    {
+                        InjectScrollTick(scrollCode);
+                        await Task.Delay(ScrollRepeatIntervalMs, token);
+                    }
+                }
+                catch (OperationCanceledException) { }
+                catch (Exception ex) { Logger.Warn($"Scroll repeat loop failed: {ex.Message}"); }
+            });
+        }
+
+        private static void StopScrollRepeat(Labs.LegionInputButton button)
+        {
+            CancellationTokenSource cts = null;
+            lock (_scrollRepeats)
+            {
+                if (_scrollRepeats.TryGetValue(button, out cts)) _scrollRepeats.Remove(button);
+            }
+            try { cts?.Cancel(); cts?.Dispose(); } catch { }
+        }
+
+        private static void InjectScrollTick(int scrollCode)
+        {
+            var injector = inputInjector;
+            if (injector == null) return;
+
+            bool horizontal = scrollCode == 6 || scrollCode == 7;
+            int delta = (scrollCode == 4 || scrollCode == 7) ? 120 : -120;   // up/right positive
+            var info = new InjectedInputMouseInfo
+            {
+                MouseOptions = horizontal ? InjectedInputMouseOptions.HWheel : InjectedInputMouseOptions.Wheel,
+                MouseData = unchecked((uint)delta),
+            };
+            try { injector.InjectMouseInput(new[] { info }); }
+            catch (Exception ex) { Logger.Debug($"Scroll inject failed: {ex.Message}"); }
         }
 
         private static uint LegionButtonToComboBit(Labs.LegionInputButton b)
@@ -292,6 +376,23 @@ namespace XboxGamingBarHelper
 
                 Logger.Info($"ExecuteControllerHotkeyAction: {hotkeyName} action={action} key={keyParam}");
 
+                ExecuteSystemAction(action, keyParam, hotkeyName);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"ExecuteControllerHotkeyAction: Error executing {hotkeyName}: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Executes a HotkeyAction id. Shared by the System-tab controller hotkeys and
+        /// the Legion button remaps with Type=System (the remap JSON carries the same
+        /// action ids in its MouseButton field).
+        /// </summary>
+        internal static void ExecuteSystemAction(int action, string keyParam = null, string sourceName = "system-action")
+        {
+            try
+            {
                 // HotkeyAction enum from widget:
                 // 0=Disabled, 1=KeyboardKey, 2=KeyboardShortcut, 3=ToggleOSD, 4=Screenshot,
                 // 5=AltTab, 6=AltF4, 7=OpenKeyboard, 8=CtrlAltDel, 9=TaskManager, 10=FocusGoTweaks
@@ -336,13 +437,13 @@ namespace XboxGamingBarHelper
                         FocusGoTweaksWidget();
                         break;
                     default:
-                        Logger.Warn($"ExecuteControllerHotkeyAction: Unknown action {action} for {hotkeyName}");
+                        Logger.Warn($"ExecuteSystemAction: Unknown action {action} for {sourceName}");
                         break;
                 }
             }
             catch (Exception ex)
             {
-                Logger.Error($"ExecuteControllerHotkeyAction: Error executing {hotkeyName}: {ex.Message}");
+                Logger.Error($"ExecuteSystemAction: Error executing {sourceName}: {ex.Message}");
             }
         }
 

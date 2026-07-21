@@ -421,9 +421,9 @@ namespace XboxGamingBar
                 return true;
             }
 
-            // Skip Controller Emulation tile if helper has reported the backend as unavailable
+            // Skip the Controller tile if helper has reported the backend as unavailable
             // (handheld-agnostic emulation requires LegionGo / GPD / similar, gated by the helper).
-            if (tile.Id == "ControllerEmulation" && (controllerEmulationAvailable?.Value != true))
+            if (tile.Id == "ControllerEmuPower" && (controllerEmulationAvailable?.Value != true))
             {
                 return true;
             }

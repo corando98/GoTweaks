@@ -1656,6 +1656,8 @@ namespace XboxGamingBarHelper
                 legionManager.ControllerBatteryRight,
                 legionManager.ControllerChargingLeft,
                 legionManager.ControllerChargingRight,
+                legionManager.ControllerDockedLeft,
+                legionManager.ControllerDockedRight,
                 legionManager.ControllerConnectedLeft,
                 legionManager.ControllerConnectedRight,
                 legionManager.ControllerVidPid,

@@ -164,7 +164,7 @@ namespace XboxGamingBar
                 switch (mode)
                 {
                     case "flash":
-                        desc = "Sticks flash to the chosen color on any button press, then fade back.";
+                        desc = "Sticks flash to the chosen color on any button press, then fade back. Trigger pull and stick deflection also blend toward the color by how far they're pushed.";
                         break;
                     case "cycle":
                         desc = "Each button press flashes the next color from your palette.";

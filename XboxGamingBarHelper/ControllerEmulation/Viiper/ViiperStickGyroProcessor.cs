@@ -230,10 +230,10 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
         /// <summary>
         /// Targets without a native motion field in their wire format. Stick-gyro
         /// makes sense for these because games can't read gyro any other way.
-        /// DS4 / DualSense Edge are deliberately excluded — their wire format
-        /// already carries IMU bytes (see ViiperInputForwarder.BuildDualShock4Input
-        /// / BuildDualSenseEdgeInput) so synthesizing a stick override on top of
-        /// real gyro would double-feed motion to games.
+        /// DS4 / DualSense / DualSense Edge are deliberately excluded — their wire
+        /// formats already carry IMU bytes (see ViiperInputForwarder.BuildDualShock4Input
+        /// / BuildDualSenseInput / BuildDualSenseEdgeInput) so synthesizing a stick
+        /// override on top of real gyro would double-feed motion to games.
         /// </summary>
         public static bool IsApplicableForTarget(string targetType)
         {
@@ -258,9 +258,12 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
                 case "msi-claw":
                 case "rog-ally":
                 case "zotac-zone":
-                case "dualsense":
-                case "ds5":
-                case "dualsense-edge":
+                // "dualsense" / "ds5" / "dualsense-edge" were wrongly listed here:
+                // both DualSense builders carry native IMU bytes (wire offsets 21..32),
+                // so the synthesized stick override double-fed motion - field report
+                // "gyro assigned to right stick of DualSense, PS4 emulation unaffected"
+                // (dualshock4 was correctly absent). Removed to match the documented
+                // native-motion exclusion rule above.
                 case "switchpro":
                 case "joycon-left":
                 case "joycon-right":

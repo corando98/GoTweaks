@@ -150,7 +150,15 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                 case 1: // Keyboard
                     return keyboardKeys;
                 case 2: // Mouse
-                    return mouseButton > 0 ? new[] { mouseButton } : Array.Empty<int>();
+                    // The widget sends a 0-based mouse-combo index (0=Left, 1=Right, 2=Middle,
+                    // 3=ScrollUp, 4=ScrollDown, 5=ScrollLeft, 6=ScrollRight); the controller's
+                    // MouseButton enum is 1-based (LeftClick=0x01 .. ScrollRight=0x07), so shift
+                    // by one. Matches the joystick-as-mouse path (LegionManager.JoystickAsMouse.cs),
+                    // which already does mouseButton + 1. The old "mouseButton > 0 ? [mouseButton]"
+                    // was off-by-one for every entry AND silently dropped Left Click (index 0).
+                    return mouseButton >= 0 ? new[] { mouseButton + 1 } : Array.Empty<int>();
+                case 3: // System action - MouseButton field carries the HotkeyAction id verbatim
+                    return new[] { mouseButton };
                 default:
                     return Array.Empty<int>();
             }
@@ -1400,6 +1408,34 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
         public ControllerChargingRightProperty(bool initialValue, LegionManager inManager) : base(initialValue, null, Function.ControllerChargingRight, inManager)
+        {
+        }
+
+        public void SetValueAndSync(bool value)
+        {
+            SetValue((object)value);
+            SyncToRemote();
+        }
+    }
+
+    // Controller Docked Left/Right (read-only, true when the half is physically docked;
+    // a detached-but-wirelessly-linked half is Connected=true, Docked=false).
+    internal class ControllerDockedLeftProperty : HelperProperty<bool, LegionManager>
+    {
+        public ControllerDockedLeftProperty(bool initialValue, LegionManager inManager) : base(initialValue, null, Function.ControllerDockedLeft, inManager)
+        {
+        }
+
+        public void SetValueAndSync(bool value)
+        {
+            SetValue((object)value);
+            SyncToRemote();
+        }
+    }
+
+    internal class ControllerDockedRightProperty : HelperProperty<bool, LegionManager>
+    {
+        public ControllerDockedRightProperty(bool initialValue, LegionManager inManager) : base(initialValue, null, Function.ControllerDockedRight, inManager)
         {
         }
 

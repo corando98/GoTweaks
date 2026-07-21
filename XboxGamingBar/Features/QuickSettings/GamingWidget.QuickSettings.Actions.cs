@@ -194,8 +194,8 @@ namespace XboxGamingBar
                             case "LegionFanFullSpeed":
                                 ToggleLegionFanFullSpeed();
                                 break;
-                            case "ControllerEmulation":
-                                ToggleControllerEmulation();
+                            case "ControllerEmuPower":
+                                ToggleControllerEmulationPower();
                                 break;
                         }
                     }
@@ -1254,21 +1254,12 @@ namespace XboxGamingBar
             }
         }
 
-        // Cycle order for the Quick-tab Controller tile: every supported virtual-device
-        // tag from ViiperDeviceTypeComboBox. VIIPER is the only emulation backend (the
-        // helper clamps any persisted legacy backend selection forward - CLAUDE.md SS21),
-        // so this is the only cycle left. Ends at "Off" so the user can always get the
-        // tile back to disabled.
-        private static readonly string[] ControllerEmulationViiperCycle = new[]
-        {
-            // xboxelite2 dropped from the cycle alongside the UI option (the
-            // helper coerces persisted values forward). switchpro is reachable
-            // through the new "nintendo" family entry — switching backend to
-            // nintendo + picking a sub-device from the Debug-tab dropdown.
-            "xbox360", "dualshock4", "dualsenseedge", "steam-generic", "sony", "nintendo"
-        };
-
-        private void ToggleControllerEmulation()
+        /// <summary>
+        /// Plain enable/disable for controller emulation (the ControllerEmuPower tile).
+        /// It never touches the device type: On
+        /// re-enables whatever device the user last had selected.
+        /// </summary>
+        private void ToggleControllerEmulationPower()
         {
             if (controllerEmulationEnabled == null)
             {
@@ -1276,49 +1267,17 @@ namespace XboxGamingBar
             }
             if (controllerEmulationAvailable?.Value != true)
             {
-                Logger.Info("Controller Emulation tile click ignored — emulation not available on this device.");
+                Logger.Info("Emu Power tile click ignored — emulation not available on this device.");
                 return;
             }
 
-            CycleControllerEmulationViiper(controllerEmulationEnabled.Value);
-        }
-
-        private void CycleControllerEmulationViiper(bool currentlyEnabled)
-        {
-            string[] cycle = ControllerEmulationViiperCycle;
-
-            if (!currentlyEnabled)
+            bool newState = !controllerEmulationEnabled.Value;
+            controllerEmulationEnabled.SetValue(newState);
+            if (ControllerEmulationEnabledToggle != null)
             {
-                string firstDevice = cycle[0];
-                viiperDeviceType?.SetValue(firstDevice);
-                controllerEmulationEnabled.SetValue(true);
-                if (ControllerEmulationEnabledToggle != null)
-                {
-                    ControllerEmulationEnabledToggle.IsOn = true;
-                }
-                Logger.Info($"Controller Emulation (VIIPER) cycled: Off -> {firstDevice}");
-                return;
+                ControllerEmulationEnabledToggle.IsOn = newState;
             }
-
-            string current = viiperDeviceType?.Value ?? cycle[0];
-            int currentIndex = Array.IndexOf(cycle, current);
-            int nextIndex = currentIndex + 1;
-
-            if (currentIndex < 0 || nextIndex >= cycle.Length)
-            {
-                controllerEmulationEnabled.SetValue(false);
-                if (ControllerEmulationEnabledToggle != null)
-                {
-                    ControllerEmulationEnabledToggle.IsOn = false;
-                }
-                Logger.Info("Controller Emulation (VIIPER) cycled: -> Off");
-            }
-            else
-            {
-                string nextDevice = cycle[nextIndex];
-                viiperDeviceType?.SetValue(nextDevice);
-                Logger.Info($"Controller Emulation (VIIPER) cycled: {current} -> {nextDevice}");
-            }
+            Logger.Info($"Controller Emulation power toggled: {(newState ? "On" : "Off")} (device type unchanged: {viiperDeviceType?.Value ?? "?"})");
         }
 
         private void ToggleRemapControlsProfile()

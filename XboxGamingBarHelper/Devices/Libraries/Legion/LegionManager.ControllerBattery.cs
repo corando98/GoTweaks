@@ -187,11 +187,28 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
 
             try
             {
+                // The firmware's "off" sentinel (LightModeRaw == 0xFF) isn't always reliably
+                // reported after a successful SetRgbEnabled(false) - it sometimes still reports
+                // the last active mode byte even though the light is genuinely off, which made
+                // the Controller Information table flicker between "Off" and the previous
+                // mode/color every few seconds as passive polls came in (confirmed via the
+                // "Stick light drift" log). Prefer our own last successfully-written enabled
+                // state over a readback that disagrees with it; fall back to the raw readback
+                // when nothing has been written yet this session (e.g. right after a cold
+                // helper start, where the block below deliberately wants the true hardware
+                // state to avoid a default Solid/white flash - issue #81).
+                bool? expectedEnabled = controllerService?.ExpectedLightEnabled;
+                bool lightEnabled = expectedEnabled ?? status.LightEnabled;
+                if (expectedEnabled.HasValue && expectedEnabled.Value != status.LightEnabled)
+                {
+                    Logger.Debug($"b0:01 readback disagrees with last-written state (expected={expectedEnabled.Value}, got={status.LightEnabled}) - trusting last-written state for display");
+                }
+
                 // Cache the true hardware light brightness/color/speed from the readback so the
                 // reactive-lighting loop matches real state instead of the helper's stale defaults
                 // (brightness defaults to 100 after a restart, which made reactive effects blast
                 // full brightness until the widget reconnected — the "brightness peaked" bug).
-                if (status.LightEnabled)
+                if (lightEnabled)
                 {
                     _hwLightBrightness = status.Brightness;
                     _hwLightColorR = status.Red; _hwLightColorG = status.Green; _hwLightColorB = status.Blue;
@@ -203,7 +220,7 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                 // instead of the default Solid/white (#81 white stick flash on cold helper start).
                 // Map the firmware animation byte (Solid=0,Pulse=1,Dynamic=2,Spiral=3) to our internal
                 // convention (0=Off,1=Solid,2=Pulse,3=Dynamic,4=Spiral); off when the light is disabled.
-                _hwLightMode = !status.LightEnabled ? 0
+                _hwLightMode = !lightEnabled ? 0
                     : status.LightModeRaw == 0 ? 1
                     : status.LightModeRaw == 1 ? 2
                     : status.LightModeRaw == 2 ? 3
@@ -216,7 +233,7 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                 // and dominated user logs. Re-promote to Info during triage if
                 // we need to compare hardware state vs. widget state again.
                 Logger.Debug(
-                    $"b0:01 readback: fw={status.FirmwareVersion} lightEnabled={status.LightEnabled} " +
+                    $"b0:01 readback: fw={status.FirmwareVersion} lightEnabled={lightEnabled} " +
                     $"mode={status.LightModeRaw} R={status.Red} G={status.Green} B={status.Blue} " +
                     $"brightness={status.Brightness} speed={status.Speed} " +
                     $"vibration={status.VibrationRaw} touchpad={status.TouchpadEnabled} " +
@@ -225,7 +242,7 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                 string json = JsonSerializer.Serialize(new
                 {
                     fw = status.FirmwareVersion,
-                    le = status.LightEnabled,
+                    le = lightEnabled,
                     lm = status.LightModeRaw,
                     r = status.Red,
                     g = status.Green,
@@ -282,6 +299,8 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                 ControllerChargingRight.ForceSetValue(rightControllerCharging);
                 ControllerConnectedLeft.ForceSetValue(leftControllerConnected);
                 ControllerConnectedRight.ForceSetValue(rightControllerConnected);
+                ControllerDockedLeft.ForceSetValue(leftControllerDocked);
+                ControllerDockedRight.ForceSetValue(rightControllerDocked);
                 Logger.Info($"Controller status resynced to widget: L={leftControllerBattery}% (conn={leftControllerConnected}) R={rightControllerBattery}% (conn={rightControllerConnected})");
             }
             catch (Exception ex)
@@ -444,6 +463,15 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                 if (dockStateChanged)
                 {
                     Logger.Info($"Controller dock state changed: L={(leftDocked ? "docked" : "detached")} R={(rightDocked ? "docked" : "detached")} (AnyControllerDetached={AnyControllerDetached})");
+                    try
+                    {
+                        ControllerDockedLeft.SetValueAndSync(leftDocked);
+                        ControllerDockedRight.SetValueAndSync(rightDocked);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warn($"Failed to sync dock state from button monitor: {ex.Message}");
+                    }
                 }
 
                 if (connectionChanged)

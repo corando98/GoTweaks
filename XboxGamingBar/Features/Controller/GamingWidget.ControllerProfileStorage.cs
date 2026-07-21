@@ -353,6 +353,66 @@ namespace XboxGamingBar
             }
         }
 
+        // System-action remap support (field request: invoke Touch Keyboard / Task
+        // Manager / Screenshot etc. from a Legion button, like the System tab's
+        // hotkeys). The action id shares the HotkeyAction enum used by
+        // ExecuteControllerHotkeyAction on the helper (3=ToggleOSD, 4=Screenshot,
+        // 5=AltTab, 6=AltF4, 7=TouchKeyboard, 8=CtrlAltDel, 9=TaskManager,
+        // 10=FocusGoTweaks) and travels in the mapping JSON's MouseButton field
+        // with Type=3 - no schema change. The combo is created programmatically
+        // next to each button's mouse combo (same pattern as the gamepad combo
+        // controls) to avoid 8 more hand-written XAML rows.
+        private static readonly string[] SystemActionLabels =
+            { "Screenshot", "Alt+Tab", "Alt+F4", "Touch Keyboard", "Ctrl+Alt+Del", "Task Manager", "Toggle OSD", "Focus GoTweaks" };
+        private static readonly int[] SystemActionIds = { 4, 5, 6, 7, 8, 9, 3, 10 };
+        private readonly Dictionary<string, ComboBox> _buttonSystemCombos = new Dictionary<string, ComboBox>();
+
+        private ComboBox EnsureButtonSystemCombo(string buttonName)
+        {
+            if (_buttonSystemCombos.TryGetValue(buttonName, out var existing) && existing != null)
+                return existing;
+
+            var mouseCombo = FindName($"LegionButton{buttonName}MouseComboBox") as ComboBox;
+            if (mouseCombo == null || !(mouseCombo.Parent is Panel parent))
+                return null;
+
+            var combo = new ComboBox
+            {
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                Visibility = Visibility.Collapsed,
+                SelectedIndex = 0,
+            };
+            if (Resources["ModernComboBoxStyle"] is Style style) combo.Style = style;
+            foreach (var label in SystemActionLabels) combo.Items.Add(label);
+            Grid.SetColumn(combo, Grid.GetColumn(mouseCombo));
+            Grid.SetRow(combo, Grid.GetRow(mouseCombo));
+            combo.SelectionChanged += ControllerSettingChanged;
+            combo.SelectionChanged += (s, e) => RefreshLegionRemapSummary();
+
+            int insertAt = parent.Children.IndexOf(mouseCombo) + 1;
+            parent.Children.Insert(insertAt, combo);
+            _buttonSystemCombos[buttonName] = combo;
+            return combo;
+        }
+
+        private int SystemActionIdFromCombo(string buttonName)
+        {
+            if (_buttonSystemCombos.TryGetValue(buttonName, out var combo) && combo != null &&
+                combo.SelectedIndex >= 0 && combo.SelectedIndex < SystemActionIds.Length)
+            {
+                return SystemActionIds[combo.SelectedIndex];
+            }
+            return SystemActionIds[0];
+        }
+
+        private void SetSystemComboFromActionId(string buttonName, int actionId)
+        {
+            var combo = EnsureButtonSystemCombo(buttonName);
+            if (combo == null) return;
+            int idx = Array.IndexOf(SystemActionIds, actionId);
+            combo.SelectedIndex = idx >= 0 ? idx : 0;
+        }
+
         private void OnButtonTypeChanged(string buttonName)
         {
             PreserveLegionScroll();
@@ -371,6 +431,9 @@ namespace XboxGamingBar
                 mouseCombo.Visibility = type == 2 ? Visibility.Visible : Visibility.Collapsed;
             if (keyboardPanel != null)
                 keyboardPanel.Visibility = type == 1 ? Visibility.Visible : Visibility.Collapsed;
+            var systemCombo = EnsureButtonSystemCombo(buttonName);
+            if (systemCombo != null)
+                systemCombo.Visibility = type == 3 ? Visibility.Visible : Visibility.Collapsed;
 
             UpdateButtonGamepadComboControls(buttonName);
 
@@ -995,6 +1058,13 @@ namespace XboxGamingBar
                 if (mapping.Type == 1)
                     UpdateKeyboardKeyTags(buttonName, mapping.KeyboardKeys);
             }
+            var sysCombo = EnsureButtonSystemCombo(buttonName);
+            if (sysCombo != null)
+            {
+                sysCombo.Visibility = mapping.Type == 3 ? Visibility.Visible : Visibility.Collapsed;
+                if (mapping.Type == 3)
+                    SetSystemComboFromActionId(buttonName, mapping.MouseButton);
+            }
 
             if (_buttonGamepadModeCombos.TryGetValue(buttonName, out ComboBox modeCombo) && modeCombo != null)
             {
@@ -1116,6 +1186,10 @@ namespace XboxGamingBar
 
             mapping.Type = typeCombo?.SelectedIndex ?? 0;
             mapping.MouseButton = mouseCombo?.SelectedIndex ?? 0;
+            // Type=3 (System): the MouseButton field carries the HotkeyAction id
+            // instead of a mouse code (see SystemActionIds).
+            if (mapping.Type == 3)
+                mapping.MouseButton = SystemActionIdFromCombo(buttonName);
             mapping.GamepadMode = GetStoredButtonGamepadMode(buttonName);
             mapping.Turbo = GetStoredButtonTurbo(buttonName);
 

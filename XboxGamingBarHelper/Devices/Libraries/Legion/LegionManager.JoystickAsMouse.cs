@@ -110,6 +110,64 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             }
         }
 
+        // Helper-side button behaviors the firmware can't express, keyed by the
+        // LegionButtonMonitor edge button. Two kinds:
+        //  - System actions (Touch Keyboard, Task Manager, ... - HotkeyAction ids):
+        //    fired on press by Program.HotkeyHandlers' ButtonEdge dispatch.
+        //  - Scroll repeat: buttons mapped to a mouse scroll direction scroll
+        //    continuously while held (field request: firmware scroll mappings are
+        //    one-press-one-notch). Value is the 1-based mouse code (4=Up, 5=Down,
+        //    6=Left, 7=Right).
+        // Registered by SetButtonMappingAdvanced / SetLegionButtonMapping, which
+        // firmware-CLEAR the button so it emits nothing OS-visible while the
+        // helper drives the behavior.
+        private readonly object helperSideMappingLock = new object();
+        private readonly System.Collections.Generic.Dictionary<Labs.LegionInputButton, int> systemActionRemaps =
+            new System.Collections.Generic.Dictionary<Labs.LegionInputButton, int>();
+        private readonly System.Collections.Generic.Dictionary<Labs.LegionInputButton, int> scrollRepeatRemaps =
+            new System.Collections.Generic.Dictionary<Labs.LegionInputButton, int>();
+
+        internal void SetHelperSideButtonMapping(Labs.LegionInputButton button, int? systemAction, int? scrollCode)
+        {
+            lock (helperSideMappingLock)
+            {
+                if (systemAction.HasValue) systemActionRemaps[button] = systemAction.Value;
+                else systemActionRemaps.Remove(button);
+                if (scrollCode.HasValue) scrollRepeatRemaps[button] = scrollCode.Value;
+                else scrollRepeatRemaps.Remove(button);
+            }
+            Logger.Info($"Helper-side button mapping for {button}: system={(systemAction.HasValue ? systemAction.Value.ToString() : "-")}, scrollRepeat={(scrollCode.HasValue ? scrollCode.Value.ToString() : "-")}");
+        }
+
+        internal bool TryGetSystemActionRemap(Labs.LegionInputButton button, out int action)
+        {
+            lock (helperSideMappingLock) { return systemActionRemaps.TryGetValue(button, out action); }
+        }
+
+        internal bool TryGetScrollRepeatRemap(Labs.LegionInputButton button, out int scrollCode)
+        {
+            lock (helperSideMappingLock) { return scrollRepeatRemaps.TryGetValue(button, out scrollCode); }
+        }
+
+        /// <summary>
+        /// Edge-stream identity of each remappable button. Physical mapping verified on
+        /// hardware 2026-07-13 (Y1=ExtraL1, Y2=ExtraL2, Y3=ExtraR1, M1=ExtraRM1,
+        /// M2=ExtraR3, M3=ExtraR2); Desktop/Page arrive as Mode/Share aux bits.
+        /// </summary>
+        internal static Labs.LegionInputButton EdgeButtonForSlot(int buttonIndex)
+        {
+            switch (buttonIndex)
+            {
+                case 0: return Labs.LegionInputButton.ExtraL1;   // Y1
+                case 1: return Labs.LegionInputButton.ExtraL2;   // Y2
+                case 2: return Labs.LegionInputButton.ExtraR1;   // Y3
+                case 3: return Labs.LegionInputButton.ExtraRM1;  // M1
+                case 4: return Labs.LegionInputButton.ExtraR3;   // M2
+                case 5: return Labs.LegionInputButton.ExtraR2;   // M3
+                default: return Labs.LegionInputButton.None;
+            }
+        }
+
         /// <summary>
         /// Applies gamepad button mappings from JSON.
         /// JSON format: {"LSClick":{"Type":1,"GamepadAction":3,"KeyboardKeys":[],"MouseButton":0},...}

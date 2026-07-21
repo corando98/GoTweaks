@@ -956,10 +956,10 @@ namespace XboxGamingBar
                     }
                 }
 
-                // Controller Emulation tile — label is the active VIIPER virtual-device
-                // tag (Xbox / DS4 / DS Edge / Elite 2 / Steam / Switch). VIIPER is the
-                // only emulation backend now (CLAUDE.md SS21).
-                if (qsTileMap.TryGetValue("ControllerEmulation", out var ceTile) && ceTile.TileButton != null)
+                // Controller tile (ControllerEmuPower) — single on/off action; the state
+                // label still shows the active VIIPER virtual-device tag when enabled
+                // (Xbox / DS4 / DS Edge / Steam / Switch), "Off"/"N/A" otherwise.
+                if (qsTileMap.TryGetValue("ControllerEmuPower", out var cepTile) && cepTile.TileButton != null)
                 {
                     bool available = controllerEmulationAvailable?.Value == true;
                     bool enabled = available && (controllerEmulationEnabled?.Value == true);
@@ -980,15 +980,10 @@ namespace XboxGamingBar
                             case "xbox360": label = "Xbox"; break;
                             case "dualshock4": label = "DS4"; break;
                             case "dualsenseedge": label = "DS Edge"; break;
-                            // xboxelite2 removed from UI but kept here so legacy
-                            // persisted settings still render a sane label until
-                            // the helper coerces them forward on next launch.
                             case "xboxelite2": label = "Xbox"; break;
                             case "steam-generic": label = "Steam"; break;
                             case "sony": label = "Sony"; break;
                             case "nintendo": label = "Switch"; break;
-                            // Helper resolves nintendo+sub → joycon-left/right/pair;
-                            // keep direct labels for those when they arrive.
                             case "switchpro": label = "Switch"; break;
                             case "joycon-left": label = "JoyL"; break;
                             case "joycon-right": label = "JoyR"; break;
@@ -996,15 +991,13 @@ namespace XboxGamingBar
                             default: label = "On"; break;
                         }
                     }
-                    // StateText can be null if the tile was rebuilt mid-update during a
-                    // foreground-window-change cascade — null-check before assigning.
-                    if (ceTile.StateText != null)
+                    if (cepTile.StateText != null)
                     {
-                        ceTile.StateText.Text = label;
-                        ceTile.StateText.Foreground = enabled ? accentForeground : offForeground;
+                        cepTile.StateText.Text = label;
+                        cepTile.StateText.Foreground = enabled ? accentForeground : offForeground;
                     }
-                    SetTileAccentBar(ceTile, enabled);
-                    ceTile.TileButton.Background = enabled ? tileOnBrush : tileOffBrush;
+                    SetTileAccentBar(cepTile, enabled);
+                    cepTile.TileButton.Background = enabled ? tileOnBrush : tileOffBrush;
                 }
 
                 // Fan Full Speed tile (Legion or GPD)
