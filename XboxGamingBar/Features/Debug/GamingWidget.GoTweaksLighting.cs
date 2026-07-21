@@ -154,6 +154,50 @@ namespace XboxGamingBar
             {
                 GoTweaksReactiveDecayValue.Text = $"{(int)GoTweaksReactiveDecaySlider.Value} ms";
             }
+
+            // Plain-language summary of what the selected effect does, plus a note when the
+            // static Light Mode is Off — a reactive effect still lights the sticks then,
+            // which otherwise reads as a contradiction ("Light Mode: Off" while glowing).
+            if (GoTweaksReactiveDescription != null)
+            {
+                string desc;
+                switch (mode)
+                {
+                    case "flash":
+                        desc = "Sticks flash to the chosen color on any button press, then fade back.";
+                        break;
+                    case "cycle":
+                        desc = "Each button press flashes the next color from your palette.";
+                        break;
+                    case "perbutton":
+                        desc = "Each button has its own flash color (Xbox face-button colors, cyan D-pad, purple paddles).";
+                        break;
+                    case "hue":
+                        desc = "Each press rotates the flash color a step around the color wheel.";
+                        break;
+                    case "trigger":
+                        desc = "Trigger pull blends the stick color toward the flash color — the harder the pull, the closer to it. Releases back to your Light Mode at rest.";
+                        break;
+                    case "battery":
+                        desc = "Sticks show charge as a color: green when full, through amber, red when empty.";
+                        break;
+                    case "cputemp":
+                        desc = "Sticks show CPU temperature as a color: blue when cool (45°C and below) sweeping to red when hot (90°C and up).";
+                        break;
+                    default:
+                        desc = null;
+                        break;
+                }
+
+                bool staticOff = LegionLightModeComboBox != null && LegionLightModeComboBox.SelectedIndex == 0;
+                if (desc != null && staticOff)
+                {
+                    desc += " Runs even while Light Mode is Off.";
+                }
+
+                GoTweaksReactiveDescription.Text = desc ?? "";
+                GoTweaksReactiveDescription.Visibility = desc != null ? Visibility.Visible : Visibility.Collapsed;
+            }
         }
 
         /// <summary>

@@ -7049,7 +7049,7 @@
                                         <FontIcon x:Name="LightingExpandIcon" Glyph="&#xE70D;" FontSize="12"/>
                                     </ToggleButton>
                                 </Grid>
-                                <StackPanel x:Name="LightingContent" Spacing="12" Margin="0,12,0,0" Visibility="Collapsed">
+                                <StackPanel x:Name="LightingContent" Margin="0,12,0,0" Visibility="Collapsed">
                                     <!-- Light Mode -->
                                     <StackPanel>
                                         <TextBlock Text="Light Mode" FontSize="13" Foreground="#AAAAAA" Margin="0,0,0,4"/>
@@ -7067,7 +7067,7 @@
                                     </StackPanel>
 
                                     <!-- Light Color (Solid, Pulse only) -->
-                                    <StackPanel x:Name="LegionColorCard">
+                                    <StackPanel x:Name="LegionColorCard" Margin="0,12,0,0">
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*"/>
@@ -7109,7 +7109,7 @@
                                     </StackPanel>
 
                                     <!-- Brightness (all modes except Off) -->
-                                    <StackPanel x:Name="LegionBrightnessCard">
+                                    <StackPanel x:Name="LegionBrightnessCard" Margin="0,12,0,0">
                                         <Grid>
                                             <TextBlock Text="Brightness" FontSize="13" Foreground="#AAAAAA"/>
                                             <TextBlock x:Name="LegionBrightnessValue"
@@ -7124,7 +7124,7 @@
                                     </StackPanel>
 
                                     <!-- Speed (Pulse, Dynamic, Spiral only) -->
-                                    <StackPanel x:Name="LegionSpeedCard" Visibility="Collapsed">
+                                    <StackPanel x:Name="LegionSpeedCard" Visibility="Collapsed" Margin="0,12,0,0">
                                         <Grid>
                                             <TextBlock Text="Speed" FontSize="13" Foreground="#AAAAAA"/>
                                             <TextBlock x:Name="LegionSpeedValue"
@@ -7139,7 +7139,7 @@
                                     </StackPanel>
 
                                     <!-- Power Light Toggle -->
-                                    <Grid>
+                                    <Grid Margin="0,12,0,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
@@ -7152,8 +7152,8 @@
                                     </Grid>
 
                                     <!-- GoTweaks reactive lighting (input-driven; layers on top of the static mode above) -->
-                                    <Border Height="1" Background="#22FFFFFF" Margin="0,4,0,4"/>
-                                    <StackPanel>
+                                    <Border Height="1" Background="#22FFFFFF" Margin="0,16,0,4"/>
+                                    <StackPanel Margin="0,12,0,0">
                                         <TextBlock Text="Reactive Effect" FontSize="13" Foreground="#AAAAAA" Margin="0,0,0,4"/>
                                         <ComboBox x:Name="GoTweaksReactiveModeComboBox"
                                                   Style="{StaticResource ModernComboBoxStyle}"
@@ -7169,10 +7169,16 @@
                                             <ComboBoxItem Content="Battery indicator" Tag="battery"/>
                                             <ComboBoxItem Content="CPU temperature" Tag="cputemp"/>
                                         </ComboBox>
+                                        <TextBlock x:Name="GoTweaksReactiveDescription"
+                                                   FontSize="11"
+                                                   Foreground="#888888"
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,6,0,0"
+                                                   Visibility="Collapsed"/>
                                     </StackPanel>
 
                                     <!-- Flash color (Flash on press only) -->
-                                    <StackPanel x:Name="GoTweaksReactiveFlashColorCard">
+                                    <StackPanel x:Name="GoTweaksReactiveFlashColorCard" Margin="0,12,0,0">
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*"/>
@@ -7205,7 +7211,7 @@
                                     </StackPanel>
 
                                     <!-- Palette editor (Cycle palette only) -->
-                                    <StackPanel x:Name="GoTweaksPaletteCard" Visibility="Collapsed">
+                                    <StackPanel x:Name="GoTweaksPaletteCard" Visibility="Collapsed" Margin="0,12,0,0">
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*"/>
@@ -7245,7 +7251,7 @@
                                     </StackPanel>
 
                                     <!-- Flash decay -->
-                                    <StackPanel x:Name="GoTweaksReactiveDecayCard">
+                                    <StackPanel x:Name="GoTweaksReactiveDecayCard" Margin="0,12,0,0">
                                         <Grid>
                                             <TextBlock Text="Flash Decay" FontSize="13" Foreground="#AAAAAA"/>
                                             <TextBlock x:Name="GoTweaksReactiveDecayValue" Text="500 ms" Style="{StaticResource CardValueStyle}"/>

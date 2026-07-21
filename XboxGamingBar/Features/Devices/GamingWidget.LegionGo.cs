@@ -1882,6 +1882,10 @@ namespace XboxGamingBar
             {
                 UpdateLegionLightControlsVisibility();
 
+                // The reactive-effect description appends "Runs even while Light Mode is
+                // Off" based on this combo — keep it in sync with mode changes.
+                UpdateReactiveCardVisibility();
+
                 // Save to controller profile (handler is detached during profile loading)
                 ControllerSettingChanged(sender, null);
             }
