@@ -1221,6 +1221,26 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             ScheduleLightVerify();
         }
 
+        /// <summary>
+        /// The last successfully-written stick-light enabled state, if a SetRgbEnabled
+        /// call has succeeded yet this session; null before the first write (nothing
+        /// known to trust over a fresh hardware readback). Lets callers prefer this
+        /// known-good state over a b0:01 readback that disagrees with it - the
+        /// firmware's "off" sentinel (LightModeRaw == 0xFF) isn't always reliably
+        /// reported after a disable, so a lone contradicting readback is more likely
+        /// firmware noise than a real state change.
+        /// </summary>
+        public bool? ExpectedLightEnabled
+        {
+            get
+            {
+                lock (_expectedLock)
+                {
+                    return _hasLightEnabledExpectation ? (bool?)_expectedLightEnabled : null;
+                }
+            }
+        }
+
         private void ScheduleLightVerify()
         {
             try

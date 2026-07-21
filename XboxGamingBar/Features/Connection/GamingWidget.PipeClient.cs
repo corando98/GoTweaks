@@ -91,7 +91,14 @@ namespace XboxGamingBar
                     Convert.ToInt32(funcObj) == (int)Shared.Enums.Function.Labs_FocusWidget)
                 {
                     Logger.Info("Focus widget request received from helper via pipe");
-                    await FocusThisWidgetAsync();
+                    // This handler runs on the pipe read thread, not the UI thread (unlike the
+                    // native Game Bar hotkey path, which already dispatches before calling
+                    // FocusThisWidgetAsync). XboxGameBarWidgetControl.ActivateAsync needs the UI
+                    // thread like any other widget-context call - dispatch explicitly here.
+                    if (Dispatcher != null)
+                    {
+                        _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => { _ = FocusThisWidgetAsync(); });
+                    }
                     return;
                 }
 
@@ -99,10 +106,14 @@ namespace XboxGamingBar
                 if (message.TryGetValue("Function", out object thFuncObj) &&
                     Convert.ToInt32(thFuncObj) == (int)Shared.Enums.Function.TileHotkeyFired)
                 {
-                    if (message.TryGetValue("Content", out object thContent) && thContent is string tileId
+                    // Runs on the pipe read thread; SimulateTileHotkeyFired touches XAML, so
+                    // dispatch to the UI thread (guard Dispatcher like the FocusWidget branch
+                    // above - it can be null if the widget is being torn down).
+                    if (Dispatcher != null &&
+                        message.TryGetValue("Content", out object thContent) && thContent is string tileId
                         && !string.IsNullOrEmpty(tileId))
                     {
-                        await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal,
+                        _ = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal,
                             () => SimulateTileHotkeyFired(tileId));
                     }
                     return;

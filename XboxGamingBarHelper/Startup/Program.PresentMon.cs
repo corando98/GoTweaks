@@ -55,9 +55,12 @@ namespace XboxGamingBarHelper
 
                 // Win32 ground-truth panel Hz, sampled every 500 ms. Useful as a
                 // ground-truth refresh-rate reference compared to PresentMon's
-                // event-derived metrics.
+                // event-derived metrics. Not started here - it rides the same
+                // per-game lifecycle as _presentMonRunner (see
+                // OnRunningGameChangedForPresentMon) instead of running unconditionally
+                // for the whole helper lifetime; it's only meaningful while a game
+                // (and PresentMon) is actually being tracked.
                 _vrrProbe = new VrrProbe();
-                _vrrProbe.Start();
             }
             catch (Exception ex)
             {
@@ -168,11 +171,13 @@ namespace XboxGamingBarHelper
                     if (pid > 0)
                     {
                         _presentMonRunner.Start(pid, exeName);
+                        _vrrProbe?.Start();
                     }
                 }
                 else
                 {
                     _presentMonRunner.Stop("game stopped");
+                    _vrrProbe?.Stop();
                 }
             }
             catch (Exception ex)

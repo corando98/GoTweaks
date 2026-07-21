@@ -926,7 +926,16 @@ namespace XboxGamingBar
                 }
 
                 // Overlay Level
-                if (SaveOverlayLevel && PerformanceOverlayComboBox != null)
+                // [bug fix] Unlike TDP/CPUBoost/CPUEPP/CPUState above, this block had no
+                // isApplyingHelperUpdate/isInitialSync guard - PerformanceOverlayComboBox is bound
+                // to PerformanceOverlaySlider, which the "osd" property sends to the helper on
+                // change (OSDProperty ctor: new OSDProperty(0, PerformanceOverlaySlider, this)).
+                // So a helper-driven switch or cold start could push this profile's stale
+                // LocalSettings OverlayLevel over the helper's authoritative (global, per slice 1)
+                // OSD level. OverlayLevel itself is out of scope for a full RouteProfileSave
+                // migration (see win32-2.0-migration.md - no clean per-game helper schema for the
+                // AMD-overlay-cycling half of this feature), so just add the same guard TDP uses.
+                if (SaveOverlayLevel && PerformanceOverlayComboBox != null && !isApplyingHelperUpdate && !isInitialSync)
                 {
                     int level = profile.OverlayLevel;
                     if (level >= 0 && level < PerformanceOverlayComboBox.Items.Count)

@@ -350,6 +350,21 @@ namespace XboxGamingBarHelper.LosslessScaling
                     return cachedIsRunning;
                 }
             }
+
+            // Not installed -> can never be running. Skip the process-table scan (the
+            // actually expensive part, done every tick otherwise) entirely; installation
+            // state itself is already re-checked periodically by Update() so this stays
+            // fresh enough without a separate poll here.
+            if (losslessScalingInstalled != null && !losslessScalingInstalled.Value)
+            {
+                lock (stateLock)
+                {
+                    cachedIsRunning = false;
+                    lastRunningCheck = DateTime.UtcNow;
+                }
+                return false;
+            }
+
             return IsRunning();
         }
 

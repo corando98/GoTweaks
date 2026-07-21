@@ -14,6 +14,18 @@ namespace XboxGamingBarHelper.AMD
         private DateTime lastAFMFChange = DateTime.MinValue;
         private DateTime lastRSRChange = DateTime.MinValue;
         private DateTime lastRISChange = DateTime.MinValue;
+        // Anti-Lag/Chill/Boost never had this same cooldown protection - found on-device: any of
+        // our OWN writes to these (from ApplyAMDFeaturesFromProfile, AFMF-forces-Anti-Lag, or the
+        // Chill/Anti-Lag/Boost mutual-exclusion handlers below) also flips the driver's ADLX state,
+        // which fires this SAME native callback. Reading IsEnabled() back immediately can observe a
+        // stale pre-commit value (a real driver/hardware timing race, not just an ordering bug in
+        // our own code) and re-apply it, undoing our own write moments after we made it - this is
+        // why "disabling AFMF" only restored Anti-Lag ~3/4 of the time, and why the widget's
+        // Anti-Lag toggle sometimes never visibly flipped to on despite the value being genuinely
+        // forced on underneath.
+        private DateTime lastAntiLagChange = DateTime.MinValue;
+        private DateTime lastChillChange = DateTime.MinValue;
+        private DateTime lastBoostChange = DateTime.MinValue;
         private const int CHANGE_COOLDOWN_MS = 2000; // 2 second cooldown
 
         internal AMD3DSettingsChangedListener(AMDManager inAMDManager) : base()
@@ -37,6 +49,24 @@ namespace XboxGamingBarHelper.AMD
         {
             lastRISChange = DateTime.Now;
             Logger.Debug("RIS change notified - cooldown started");
+        }
+
+        public void NotifyAntiLagChanged()
+        {
+            lastAntiLagChange = DateTime.Now;
+            Logger.Debug("Anti-Lag change notified - cooldown started");
+        }
+
+        public void NotifyChillChanged()
+        {
+            lastChillChange = DateTime.Now;
+            Logger.Debug("Chill change notified - cooldown started");
+        }
+
+        public void NotifyBoostChanged()
+        {
+            lastBoostChange = DateTime.Now;
+            Logger.Debug("Boost change notified - cooldown started");
         }
 
         public override bool On3DSettingsChanged(IADLX3DSettingsChangedEvent p3DSettingsChangedEvent)
@@ -63,19 +93,35 @@ namespace XboxGamingBarHelper.AMD
 
             if (p3DSettingsChangedEvent.IsAntiLagChanged())
             {
-                var isEnabled = amdManager.AMDRadeonAntiLagSetting.IsEnabled();
-                if (amdManager.AMDRadeonAntiLagEnabled != isEnabled)
+                if ((DateTime.Now - lastAntiLagChange).TotalMilliseconds < CHANGE_COOLDOWN_MS)
                 {
-                    amdManager.AMDRadeonAntiLagEnabled.SetValue(isEnabled);
+                    Logger.Debug("Skipping Anti-Lag read from driver - still in cooldown period");
+                }
+                else
+                {
+                    var isEnabled = amdManager.AMDRadeonAntiLagSetting.IsEnabled();
+                    if (amdManager.AMDRadeonAntiLagEnabled != isEnabled)
+                    {
+                        Logger.Info($"Anti-Lag state changed externally to {isEnabled}");
+                        amdManager.AMDRadeonAntiLagEnabled.SetValue(isEnabled);
+                    }
                 }
             }
 
             if (p3DSettingsChangedEvent.IsChillChanged())
             {
-                var isEnabled = amdManager.AMDRadeonChillSetting.IsEnabled();
-                if (amdManager.AMDRadeonChillEnabled != isEnabled)
+                if ((DateTime.Now - lastChillChange).TotalMilliseconds < CHANGE_COOLDOWN_MS)
                 {
-                    amdManager.AMDRadeonChillEnabled.SetValue(isEnabled);
+                    Logger.Debug("Skipping Chill read from driver - still in cooldown period");
+                }
+                else
+                {
+                    var isEnabled = amdManager.AMDRadeonChillSetting.IsEnabled();
+                    if (amdManager.AMDRadeonChillEnabled != isEnabled)
+                    {
+                        Logger.Info($"Chill state changed externally to {isEnabled}");
+                        amdManager.AMDRadeonChillEnabled.SetValue(isEnabled);
+                    }
                 }
             }
 
@@ -99,10 +145,18 @@ namespace XboxGamingBarHelper.AMD
 
             if (p3DSettingsChangedEvent.IsBoostChanged())
             {
-                var isEnabled = amdManager.AMDRadeonBoostSetting.IsEnabled();
-                if (amdManager.AMDRadeonBoostEnabled != isEnabled)
+                if ((DateTime.Now - lastBoostChange).TotalMilliseconds < CHANGE_COOLDOWN_MS)
                 {
-                    amdManager.AMDRadeonBoostEnabled.SetValue(isEnabled);
+                    Logger.Debug("Skipping Boost read from driver - still in cooldown period");
+                }
+                else
+                {
+                    var isEnabled = amdManager.AMDRadeonBoostSetting.IsEnabled();
+                    if (amdManager.AMDRadeonBoostEnabled != isEnabled)
+                    {
+                        Logger.Info($"Boost state changed externally to {isEnabled}");
+                        amdManager.AMDRadeonBoostEnabled.SetValue(isEnabled);
+                    }
                 }
             }
 

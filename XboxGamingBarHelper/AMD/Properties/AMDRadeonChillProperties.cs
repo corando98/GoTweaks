@@ -30,6 +30,7 @@ namespace XboxGamingBarHelper.AMD.Properties
             // regardless of whether the cached value changed.
             if (result && prev == Value)
             {
+                Manager.AMD3DSettingsChangedListener?.NotifyChillChanged();
                 Manager.AMDRadeonChillSetting.SetEnabled(Value);
             }
             return result;
@@ -39,6 +40,10 @@ namespace XboxGamingBarHelper.AMD.Properties
         {
             base.NotifyPropertyChanged(propertyName);
 
+            // Start cooldown before writing, same as AFMF/RSR/RIS - without this the native ADLX
+            // callback (AMD3DSettingsChangedListener) can read back a stale pre-commit value
+            // immediately after our own write and undo it.
+            Manager.AMD3DSettingsChangedListener?.NotifyChillChanged();
             Manager.AMDRadeonChillSetting.SetEnabled(Value);
         }
     }

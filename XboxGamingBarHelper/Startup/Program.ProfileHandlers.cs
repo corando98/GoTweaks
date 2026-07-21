@@ -114,7 +114,24 @@ namespace XboxGamingBarHelper
             else
             {
                 Logger.Info($"Saving {settingName} to global (per-game capture disabled)");
-                onGlobal(profileManager.GlobalProfile);
+                // [2.0 fix] The old code passed GlobalProfile (a mutable STRUCT) by value to the
+                // onGlobal lambda, so `glo => glo.X = value` only mutated a throwaway copy - the
+                // save was silently lost (proven via global.xml: LegionVibration/Light/gyro stayed
+                // xsi:nil while deadzones, which route through CurrentProfile, persisted). This is a
+                // pre-existing §29 bug, masked until the widget stopped owning these settings.
+                // When no game is active, CurrentProfile IS the global profile (a reference-type
+                // GameProfileProperty that persists correctly) - route through it. When a game IS
+                // active, mutate the GlobalProfile struct field and write it back.
+                if (profileManager.CurrentProfile.IsGlobalProfile)
+                {
+                    onCurrent(profileManager.CurrentProfile);
+                }
+                else
+                {
+                    var glob = profileManager.GlobalProfile;
+                    onGlobal(glob);
+                    profileManager.GlobalProfile = glob;
+                }
             }
         }
 

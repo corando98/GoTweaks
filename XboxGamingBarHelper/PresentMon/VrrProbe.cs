@@ -39,6 +39,7 @@ namespace XboxGamingBarHelper.PresentMon
 
         public void Start()
         {
+            if (_timer != null) return; // already running - avoid leaking a second Timer
             try
             {
                 _timer = new Timer(_ => OnTick(), null, dueTime: 1000, period: 500);
