@@ -69,15 +69,31 @@ namespace XboxGamingBarHelper.AMD
             return AMDUtilities.GetBoolValue(isEnabledFunction);
         }
 
-        public virtual void SetEnabled(bool enabled)
+        /// <summary>
+        /// Returns true only when ADLX confirms the write with ADLX_OK - callers must not treat
+        /// the reflected invoke succeeding (no exception) as proof the setting was actually
+        /// applied, since ADLX reports its own result code independent of the .NET call.
+        /// </summary>
+        public virtual bool SetEnabled(bool enabled)
         {
             if (setEnabledMethod == null)
             {
                 Logger.Warn($"{GetType().Name} SetEnabled method is not available.");
-                return;
+                return false;
             }
 
-            setEnabledMethod.Invoke(adlxSetting, new object[1] { enabled });
+            object result = setEnabledMethod.Invoke(adlxSetting, new object[1] { enabled });
+            if (result is ADLX_RESULT adlxResult)
+            {
+                if (adlxResult == ADLX_RESULT.ADLX_OK) return true;
+                Logger.Error($"{GetType().Name} SetEnabled({enabled}) returned {adlxResult}.");
+                return false;
+            }
+
+            // The reflected method didn't return an ADLX_RESULT (unexpected for the SWIG-generated
+            // interfaces this is used against) - no result code to check, assume success rather
+            // than falsely reporting failure for a case that was never actually observed.
+            return true;
         }
 
         ~AMDSetting()

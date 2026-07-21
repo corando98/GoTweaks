@@ -793,7 +793,7 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
                         try
                         {
                             string hex = string.Format("#{0:X2}{1:X2}{2:X2}", ledR, ledG, ledB);
-                            legionManager.SetLightColor(hex);
+                            legionManager.SetLightColor(hex, out _);
                         }
                         catch (Exception ex) { Logger.Debug($"Legion SetLightColor failed: {ex.Message}"); }
                     }

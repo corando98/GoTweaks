@@ -34,24 +34,24 @@ namespace XboxGamingBarHelper.AMD.Settings
             return AMDUtilities.GetIntValue(adlxSetting.GetMaxFPS);
         }
 
-        public void SetMinFPS(int minFPS)
+        public bool SetMinFPS(int minFPS)
         {
             if (adlxSetting == null)
             {
                 Logger.Warn("AMDRadeonChillSetting.SetMinFPS: adlxSetting is null (Radeon Chill may not be supported)");
-                return;
+                return false;
             }
-            adlxSetting.SetMinFPS(minFPS);
+            return adlxSetting.SetMinFPS(minFPS) == ADLX_RESULT.ADLX_OK;
         }
 
-        public void SetMaxFPS(int maxFPS)
+        public bool SetMaxFPS(int maxFPS)
         {
             if (adlxSetting == null)
             {
                 Logger.Warn("AMDRadeonChillSetting.SetMaxFPS: adlxSetting is null (Radeon Chill may not be supported)");
-                return;
+                return false;
             }
-            adlxSetting.SetMaxFPS(maxFPS);
+            return adlxSetting.SetMaxFPS(maxFPS) == ADLX_RESULT.ADLX_OK;
         }
     }
 }

@@ -12,8 +12,11 @@ namespace XboxGamingBarHelper.AMD.Properties
         }
     }
 
-    internal class AMDRadeonSuperResolutionEnabledProperty : HelperProperty<bool, AMDManager>
+    internal class AMDRadeonSuperResolutionEnabledProperty : HelperProperty<bool, AMDManager>, IHardwareApplyResult
     {
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
+
         public AMDRadeonSuperResolutionEnabledProperty(bool inValue, AMDManager inManager) : base(inValue, null, Function.AMDRadeonSuperResolutionEnabled, inManager)
         {
         }
@@ -32,7 +35,7 @@ namespace XboxGamingBarHelper.AMD.Properties
             if (result && prev == Value)
             {
                 Manager.AMD3DSettingsChangedListener?.NotifyRSRChanged();
-                Manager.AMDRadeonSuperResolutionSetting.SetEnabled(Value);
+                ApplyToDriver();
             }
             return result;
         }
@@ -45,12 +48,21 @@ namespace XboxGamingBarHelper.AMD.Properties
             // This prevents the listener from reading stale values when the driver callback fires
             Manager.AMD3DSettingsChangedListener?.NotifyRSRChanged();
 
-            Manager.AMDRadeonSuperResolutionSetting.SetEnabled(Value);
+            ApplyToDriver();
+        }
+
+        private void ApplyToDriver()
+        {
+            LastApplySucceeded = Manager.AMDRadeonSuperResolutionSetting.SetEnabled(Value);
+            LastApplyFailureReason = LastApplySucceeded ? null : "Radeon Super Resolution could not be applied.";
         }
     }
 
-    internal class AMDRadeonSuperResolutionSharpnessProperty : HelperProperty<int, AMDManager>
+    internal class AMDRadeonSuperResolutionSharpnessProperty : HelperProperty<int, AMDManager>, IHardwareApplyResult
     {
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
+
         public AMDRadeonSuperResolutionSharpnessProperty(int inValue, AMDManager inManager) : base(inValue, null, Function.AMDRadeonSuperResolutionSharpness, inManager)
         {
         }
@@ -60,14 +72,10 @@ namespace XboxGamingBarHelper.AMD.Properties
             base.NotifyPropertyChanged(propertyName);
 
             (int min, int max) = Manager.AMDRadeonSuperResolutionSetting.GetSharpnessRange();
-            if (min == 0 && max == 100)
-            {
-                Manager.AMDRadeonSuperResolutionSetting.SetSharpness(Value);
-            }
-            else
-            {
-                Manager.AMDRadeonSuperResolutionSetting.SetSharpness((int)Math.Round(min + Value / 100.0f * (max - min)));
-            }
+            LastApplySucceeded = (min == 0 && max == 100)
+                ? Manager.AMDRadeonSuperResolutionSetting.SetSharpness(Value)
+                : Manager.AMDRadeonSuperResolutionSetting.SetSharpness((int)Math.Round(min + Value / 100.0f * (max - min)));
+            LastApplyFailureReason = LastApplySucceeded ? null : "Radeon Super Resolution sharpness could not be applied.";
         }
     }
 }

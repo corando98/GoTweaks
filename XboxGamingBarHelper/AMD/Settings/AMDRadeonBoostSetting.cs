@@ -24,14 +24,14 @@ namespace XboxGamingBarHelper.AMD.Settings
             return AMDUtilities.GetIntValue(adlxSetting.GetResolution);
         }
 
-        public void SetResolution(int resolution)
+        public bool SetResolution(int resolution)
         {
             if (adlxSetting == null)
             {
                 Logger.Warn("AMDRadeonBoostSetting.SetResolution: adlxSetting is null (Radeon Boost may not be supported)");
-                return;
+                return false;
             }
-            adlxSetting.SetResolution(resolution);
+            return adlxSetting.SetResolution(resolution) == ADLX_RESULT.ADLX_OK;
         }
     }
 }

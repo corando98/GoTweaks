@@ -1,3 +1,4 @@
+using Shared.Data;
 using Shared.Enums;
 using XboxGamingBarHelper.Core;
 
@@ -8,8 +9,11 @@ namespace XboxGamingBarHelper.Systems
     // startup so the widget slider reflects reality on BatchGet. Not persisted here — panel
     // brightness is OS-owned state, we just read/write it. Optional Quick-tab slider (#50),
     // hidden by default and revealed under the Quick tab's Customize.
-    internal class PanelBrightnessProperty : HelperProperty<int, SystemManager>
+    internal class PanelBrightnessProperty : HelperProperty<int, SystemManager>, IHardwareApplyResult
     {
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
+
         public PanelBrightnessProperty(SystemManager inManager)
             : base(SeedBrightness(), null, Function.PanelBrightness, inManager)
         {
@@ -27,7 +31,8 @@ namespace XboxGamingBarHelper.Systems
             base.NotifyPropertyChanged(propertyName);
             // Apply to the built-in panel. When the change came from the widget slider,
             // SuppressRemoteSync stops the echo but the hardware apply still runs.
-            BrightnessManager.SetBrightness(Value);
+            LastApplySucceeded = BrightnessManager.SetBrightness(Value);
+            LastApplyFailureReason = LastApplySucceeded ? null : "Panel brightness could not be applied.";
         }
     }
 }

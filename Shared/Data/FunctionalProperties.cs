@@ -143,7 +143,23 @@ namespace Shared.Data
                     {
                         property.SuppressRemoteSync = false;
                     }
-                    response.Add(nameof(Content), "Success");
+                    // A property can accept the in-memory value yet still fail the actual
+                    // hardware/WMI/native apply performed inside its NotifyPropertyChanged
+                    // override. Consult the opt-in IHardwareApplyResult hook so that case is
+                    // reported truthfully instead of as "Success". Additive wire metadata:
+                    // the current widget ignores the Content string on Set responses, so
+                    // this only changes what honest data is available (and what the helper
+                    // logs), not behavior - until the widget starts rendering it.
+                    if (property is IHardwareApplyResult hardwareResult && !hardwareResult.LastApplySucceeded)
+                    {
+                        string failReason = hardwareResult.LastApplyFailureReason ?? "The helper could not apply this value to hardware.";
+                        Logger.Warn($"Set {function}: value accepted but hardware apply FAILED: {failReason}");
+                        response.Add(nameof(Content), $"Failed: {failReason}");
+                    }
+                    else
+                    {
+                        response.Add(nameof(Content), "Success");
+                    }
                     break;
                 default:
                     Logger.Warn($"Unknown command in pipe message: {command}");

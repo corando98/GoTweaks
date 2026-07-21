@@ -27,22 +27,30 @@ namespace XboxGamingBarHelper.Systems
             return 50;
         }
 
-        internal static void SetBrightness(int level)
+        internal static bool SetBrightness(int level)
         {
             try
             {
                 level = Math.Max(0, Math.Min(100, level));
+                bool appliedToAny = false;
                 using (var searcher = new ManagementObjectSearcher("root\\WMI", "SELECT * FROM WmiMonitorBrightnessMethods"))
                 {
                     foreach (ManagementObject obj in searcher.Get())
                     {
                         obj.InvokeMethod("WmiSetBrightness", new object[] { 1, level });
+                        appliedToAny = true;
                     }
                 }
+                if (!appliedToAny)
+                {
+                    Logger.Warn("BrightnessManager: SetBrightness found no WmiMonitorBrightnessMethods instance");
+                }
+                return appliedToAny;
             }
             catch (Exception ex)
             {
                 Logger.Error($"BrightnessManager: SetBrightness failed: {ex.Message}");
+                return false;
             }
         }
 

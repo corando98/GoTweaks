@@ -1,10 +1,14 @@
-﻿using Shared.Enums;
+﻿using Shared.Data;
+using Shared.Enums;
 using XboxGamingBarHelper.Core;
 
 namespace XboxGamingBarHelper.Power
 {
-    internal class CPUEPPProperty : HelperProperty<int, PowerManager>
+    internal class CPUEPPProperty : HelperProperty<int, PowerManager>, IHardwareApplyResult
     {
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
+
         // Track whether the user has explicitly changed this value
         // On fresh install, we read from system but don't write back unless user changes it
         private bool _hasUserModified = false;
@@ -30,14 +34,19 @@ namespace XboxGamingBarHelper.Power
                 }
                 else
                 {
-                    // Value is same as initial - this is just a sync, don't write to system
+                    // Value is same as initial - this is just a sync, don't write to system.
+                    // Nothing was attempted, so there is nothing to report as failed.
                     Logger.Debug($"CPU EPP: Skipping system write - value unchanged from initial ({Value})");
+                    LastApplySucceeded = true;
+                    LastApplyFailureReason = null;
                     return;
                 }
             }
 
-            PowerManager.SetEppValue(false, (uint)Value);
-            PowerManager.SetEppValue(true, (uint)Value);
+            bool dcOk = PowerManager.SetEppValue(false, (uint)Value);
+            bool acOk = PowerManager.SetEppValue(true, (uint)Value);
+            LastApplySucceeded = dcOk && acOk;
+            LastApplyFailureReason = LastApplySucceeded ? null : "CPU EPP could not be applied.";
         }
     }
 }

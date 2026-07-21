@@ -1,4 +1,5 @@
 using NLog;
+using Shared.Data;
 using Shared.Enums;
 using System;
 using System.Collections.Generic;
@@ -181,7 +182,7 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
     }
 
     // Touchpad control
-    internal class LegionTouchpadEnabledProperty : HelperProperty<bool, LegionManager>
+    internal class LegionTouchpadEnabledProperty : HelperProperty<bool, LegionManager>, IHardwareApplyResult
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
@@ -193,6 +194,9 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         // round-trip and could cause an oscillation if it fails partway.
         internal bool SuppressHardwareApply { get; set; }
 
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
+
         public LegionTouchpadEnabledProperty(bool initialValue, LegionManager inManager) : base(initialValue, null, Function.LegionTouchpadEnabled, inManager)
         {
         }
@@ -203,7 +207,16 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             Logger.Info($"LegionTouchpadEnabled changed to {Value}");
             if (!SuppressHardwareApply)
             {
-                Manager?.SetTouchpadEnabled(Value);
+                string reason = "Legion manager is not available.";
+                LastApplySucceeded = Manager != null && Manager.SetTouchpadEnabled(Value, out reason);
+                LastApplyFailureReason = LastApplySucceeded ? null : (reason ?? "Touchpad could not be applied.");
+            }
+            else
+            {
+                // A hardware readback, not a user request - nothing was attempted, so there is
+                // nothing to report as failed.
+                LastApplySucceeded = true;
+                LastApplyFailureReason = null;
             }
         }
 
@@ -222,11 +235,14 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
     }
 
     // Light mode (0=Off, 1=Solid, 2=Pulse, 3=Dynamic, 4=Spiral)
-    internal class LegionLightModeProperty : HelperProperty<int, LegionManager>
+    internal class LegionLightModeProperty : HelperProperty<int, LegionManager>, IHardwareApplyResult
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
         private bool _hasUserModified = false;
         private int _initialValue;
+
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
 
         public LegionLightModeProperty(int initialValue, LegionManager inManager) : base(initialValue, null, Function.LegionLightMode, inManager)
         {
@@ -246,22 +262,30 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                 }
                 else
                 {
+                    // Nothing was attempted, so there is nothing to report as failed.
                     Logger.Debug($"LegionLightMode: Skipping device write - value unchanged from initial ({Value})");
+                    LastApplySucceeded = true;
+                    LastApplyFailureReason = null;
                     return;
                 }
             }
 
             Logger.Info($"LegionLightMode changed to {Value}");
-            Manager?.SetLightMode(Value);
+            string reason = "Legion manager is not available.";
+            LastApplySucceeded = Manager != null && Manager.SetLightMode(Value, out reason);
+            LastApplyFailureReason = LastApplySucceeded ? null : (reason ?? "Light mode could not be applied.");
         }
     }
 
     // Light color (hex string "#RRGGBB")
-    internal class LegionLightColorProperty : HelperProperty<string, LegionManager>
+    internal class LegionLightColorProperty : HelperProperty<string, LegionManager>, IHardwareApplyResult
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
         private bool _hasUserModified = false;
         private string _initialValue;
+
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
 
         public LegionLightColorProperty(string initialValue, LegionManager inManager) : base(initialValue, null, Function.LegionLightColor, inManager)
         {
@@ -282,21 +306,28 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                 else
                 {
                     Logger.Debug($"LegionLightColor: Skipping device write - value unchanged from initial ({Value})");
+                    LastApplySucceeded = true;
+                    LastApplyFailureReason = null;
                     return;
                 }
             }
 
             Logger.Info($"LegionLightColor changed to {Value}");
-            Manager?.SetLightColor(Value);
+            string reason = "Legion manager is not available.";
+            LastApplySucceeded = Manager != null && Manager.SetLightColor(Value, out reason);
+            LastApplyFailureReason = LastApplySucceeded ? null : (reason ?? "Light color could not be applied.");
         }
     }
 
     // Light brightness (0-100)
-    internal class LegionLightBrightnessProperty : HelperProperty<int, LegionManager>
+    internal class LegionLightBrightnessProperty : HelperProperty<int, LegionManager>, IHardwareApplyResult
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
         private bool _hasUserModified = false;
         private int _initialValue;
+
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
 
         public LegionLightBrightnessProperty(int initialValue, LegionManager inManager) : base(initialValue, null, Function.LegionLightBrightness, inManager)
         {
@@ -317,21 +348,28 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                 else
                 {
                     Logger.Debug($"LegionLightBrightness: Skipping device write - value unchanged from initial ({Value})");
+                    LastApplySucceeded = true;
+                    LastApplyFailureReason = null;
                     return;
                 }
             }
 
             Logger.Info($"LegionLightBrightness changed to {Value}");
-            Manager?.SetLightBrightness(Value);
+            string reason = "Legion manager is not available.";
+            LastApplySucceeded = Manager != null && Manager.SetLightBrightness(Value, out reason);
+            LastApplyFailureReason = LastApplySucceeded ? null : (reason ?? "Light brightness could not be applied.");
         }
     }
 
     // Light speed (0-100, for animated modes)
-    internal class LegionLightSpeedProperty : HelperProperty<int, LegionManager>
+    internal class LegionLightSpeedProperty : HelperProperty<int, LegionManager>, IHardwareApplyResult
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
         private bool _hasUserModified = false;
         private int _initialValue;
+
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
 
         public LegionLightSpeedProperty(int initialValue, LegionManager inManager) : base(initialValue, null, Function.LegionLightSpeed, inManager)
         {
@@ -352,12 +390,16 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                 else
                 {
                     Logger.Debug($"LegionLightSpeed: Skipping device write - value unchanged from initial ({Value})");
+                    LastApplySucceeded = true;
+                    LastApplyFailureReason = null;
                     return;
                 }
             }
 
             Logger.Info($"LegionLightSpeed changed to {Value}");
-            Manager?.SetLightSpeed(Value);
+            string reason = "Legion manager is not available.";
+            LastApplySucceeded = Manager != null && Manager.SetLightSpeed(Value, out reason);
+            LastApplyFailureReason = LastApplySucceeded ? null : (reason ?? "Light speed could not be applied.");
         }
     }
 
@@ -409,9 +451,12 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
     }
 
     // Custom TDP Slow (SPL) in watts
-    internal class LegionCustomTDPSlowProperty : HelperProperty<int, LegionManager>
+    internal class LegionCustomTDPSlowProperty : HelperProperty<int, LegionManager>, IHardwareApplyResult
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
 
         public LegionCustomTDPSlowProperty(int initialValue, LegionManager inManager) : base(initialValue, null, Function.LegionCustomTDPSlow, inManager)
         {
@@ -421,14 +466,19 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         {
             base.NotifyPropertyChanged(propertyName);
             Logger.Info($"LegionCustomTDPSlow changed to {Value}W");
-            Manager?.ApplyCustomTDPSlow(Value);
+            string reason = "Legion manager is not available.";
+            LastApplySucceeded = Manager != null && Manager.ApplyCustomTDPSlow(Value, out reason);
+            LastApplyFailureReason = LastApplySucceeded ? null : (reason ?? "TDP (SPL) could not be applied.");
         }
     }
 
     // Custom TDP Fast (SPPL) in watts
-    internal class LegionCustomTDPFastProperty : HelperProperty<int, LegionManager>
+    internal class LegionCustomTDPFastProperty : HelperProperty<int, LegionManager>, IHardwareApplyResult
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
 
         public LegionCustomTDPFastProperty(int initialValue, LegionManager inManager) : base(initialValue, null, Function.LegionCustomTDPFast, inManager)
         {
@@ -438,14 +488,19 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         {
             base.NotifyPropertyChanged(propertyName);
             Logger.Info($"LegionCustomTDPFast changed to {Value}W");
-            Manager?.ApplyCustomTDPFast(Value);
+            string reason = "Legion manager is not available.";
+            LastApplySucceeded = Manager != null && Manager.ApplyCustomTDPFast(Value, out reason);
+            LastApplyFailureReason = LastApplySucceeded ? null : (reason ?? "TDP (SPPT) could not be applied.");
         }
     }
 
     // Custom TDP Peak (FPPT) in watts
-    internal class LegionCustomTDPPeakProperty : HelperProperty<int, LegionManager>
+    internal class LegionCustomTDPPeakProperty : HelperProperty<int, LegionManager>, IHardwareApplyResult
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
 
         public LegionCustomTDPPeakProperty(int initialValue, LegionManager inManager) : base(initialValue, null, Function.LegionCustomTDPPeak, inManager)
         {
@@ -455,14 +510,19 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         {
             base.NotifyPropertyChanged(propertyName);
             Logger.Info($"LegionCustomTDPPeak changed to {Value}W");
-            Manager?.ApplyCustomTDPPeak(Value);
+            string reason = "Legion manager is not available.";
+            LastApplySucceeded = Manager != null && Manager.ApplyCustomTDPPeak(Value, out reason);
+            LastApplyFailureReason = LastApplySucceeded ? null : (reason ?? "TDP (FPPT) could not be applied.");
         }
     }
 
     // Fan full speed toggle
-    internal class LegionFanFullSpeedProperty : HelperProperty<bool, LegionManager>
+    internal class LegionFanFullSpeedProperty : HelperProperty<bool, LegionManager>, IHardwareApplyResult
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
 
         public LegionFanFullSpeedProperty(bool initialValue, LegionManager inManager) : base(initialValue, null, Function.LegionFanFullSpeed, inManager)
         {
@@ -472,7 +532,9 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         {
             base.NotifyPropertyChanged(propertyName);
             Logger.Info($"LegionFanFullSpeed changed to {Value}");
-            Manager?.SetFanFullSpeed(Value);
+            string reason = "Legion manager is not available.";
+            LastApplySucceeded = Manager != null && Manager.SetFanFullSpeed(Value, out reason);
+            LastApplyFailureReason = LastApplySucceeded ? null : (reason ?? "Fan full speed could not be applied.");
         }
     }
 
@@ -731,9 +793,12 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
     }
 
     // Vibration level (0=Off, 1=Weak, 2=Medium, 3=Strong)
-    internal class LegionVibrationProperty : HelperProperty<int, LegionManager>
+    internal class LegionVibrationProperty : HelperProperty<int, LegionManager>, IHardwareApplyResult
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
 
         public LegionVibrationProperty(int initialValue, LegionManager inManager) : base(initialValue, null, Function.LegionVibration, inManager)
         {
@@ -743,14 +808,18 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         {
             base.NotifyPropertyChanged(propertyName);
             Logger.Info($"LegionVibration changed to {Value}");
-            Manager?.SetVibration(Value);
+            LastApplySucceeded = Manager != null && Manager.TrySetVibration(Value);
+            LastApplyFailureReason = LastApplySucceeded ? null : "Vibration intensity could not be applied.";
         }
     }
 
     // Power Light toggle
-    internal class LegionPowerLightProperty : HelperProperty<bool, LegionManager>
+    internal class LegionPowerLightProperty : HelperProperty<bool, LegionManager>, IHardwareApplyResult
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
 
         public LegionPowerLightProperty(bool initialValue, LegionManager inManager) : base(initialValue, null, Function.LegionPowerLight, inManager)
         {
@@ -760,14 +829,19 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         {
             base.NotifyPropertyChanged(propertyName);
             Logger.Info($"LegionPowerLight changed to {Value}");
-            Manager?.SetPowerLight(Value);
+            string reason = "Legion manager is not available.";
+            LastApplySucceeded = Manager != null && Manager.SetPowerLight(Value, out reason);
+            LastApplyFailureReason = LastApplySucceeded ? null : (reason ?? "Power light could not be applied.");
         }
     }
 
     // Battery Charge Limit (80%)
-    internal class LegionChargeLimitProperty : HelperProperty<bool, LegionManager>
+    internal class LegionChargeLimitProperty : HelperProperty<bool, LegionManager>, IHardwareApplyResult
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
 
         public LegionChargeLimitProperty(bool initialValue, LegionManager inManager) : base(initialValue, null, Function.LegionChargeLimit, inManager)
         {
@@ -777,14 +851,19 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         {
             base.NotifyPropertyChanged(propertyName);
             Logger.Info($"LegionChargeLimit changed to {Value}");
-            Manager?.SetChargeLimit(Value);
+            string reason = "Legion manager is not available.";
+            LastApplySucceeded = Manager != null && Manager.SetChargeLimit(Value, out reason);
+            LastApplyFailureReason = LastApplySucceeded ? null : (reason ?? "Charge limit could not be applied.");
         }
     }
 
     // Button Y1 remap (JSON ButtonMapping: Type, GamepadAction, KeyboardKeys[], MouseButton)
-    internal class LegionButtonY1Property : HelperProperty<string, LegionManager>
+    internal class LegionButtonY1Property : HelperProperty<string, LegionManager>, IHardwareApplyResult
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
 
         public LegionButtonY1Property(string initialValue, LegionManager inManager) : base(initialValue ?? "", null, Function.LegionButtonY1, inManager)
         {
@@ -795,14 +874,19 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             base.NotifyPropertyChanged(propertyName);
             Logger.Info($"LegionButtonY1 applying mapping: {Value}");
             var (type, gamepadAction, keyboardKeys, mouseButton) = ButtonMappingParser.Parse(Value);
-            Manager?.SetButtonMappingAdvanced(0, type, ButtonMappingParser.GetMappingValues(type, gamepadAction, keyboardKeys, mouseButton));
+            string reason = "Legion manager is not available.";
+            LastApplySucceeded = Manager != null && Manager.SetButtonMappingAdvanced(0, type, ButtonMappingParser.GetMappingValues(type, gamepadAction, keyboardKeys, mouseButton), out reason);
+            LastApplyFailureReason = LastApplySucceeded ? null : (reason ?? "Y1 button mapping could not be applied.");
         }
     }
 
     // Button Y2 remap (JSON ButtonMapping: Type, GamepadAction, KeyboardKeys[], MouseButton)
-    internal class LegionButtonY2Property : HelperProperty<string, LegionManager>
+    internal class LegionButtonY2Property : HelperProperty<string, LegionManager>, IHardwareApplyResult
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
 
         public LegionButtonY2Property(string initialValue, LegionManager inManager) : base(initialValue ?? "", null, Function.LegionButtonY2, inManager)
         {
@@ -813,14 +897,19 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             base.NotifyPropertyChanged(propertyName);
             Logger.Info($"LegionButtonY2 applying mapping: {Value}");
             var (type, gamepadAction, keyboardKeys, mouseButton) = ButtonMappingParser.Parse(Value);
-            Manager?.SetButtonMappingAdvanced(1, type, ButtonMappingParser.GetMappingValues(type, gamepadAction, keyboardKeys, mouseButton));
+            string reason = "Legion manager is not available.";
+            LastApplySucceeded = Manager != null && Manager.SetButtonMappingAdvanced(1, type, ButtonMappingParser.GetMappingValues(type, gamepadAction, keyboardKeys, mouseButton), out reason);
+            LastApplyFailureReason = LastApplySucceeded ? null : (reason ?? "Y2 button mapping could not be applied.");
         }
     }
 
     // Button Y3 remap (JSON ButtonMapping: Type, GamepadAction, KeyboardKeys[], MouseButton)
-    internal class LegionButtonY3Property : HelperProperty<string, LegionManager>
+    internal class LegionButtonY3Property : HelperProperty<string, LegionManager>, IHardwareApplyResult
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
 
         public LegionButtonY3Property(string initialValue, LegionManager inManager) : base(initialValue ?? "", null, Function.LegionButtonY3, inManager)
         {
@@ -831,14 +920,19 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             base.NotifyPropertyChanged(propertyName);
             Logger.Info($"LegionButtonY3 applying mapping: {Value}");
             var (type, gamepadAction, keyboardKeys, mouseButton) = ButtonMappingParser.Parse(Value);
-            Manager?.SetButtonMappingAdvanced(2, type, ButtonMappingParser.GetMappingValues(type, gamepadAction, keyboardKeys, mouseButton));
+            string reason = "Legion manager is not available.";
+            LastApplySucceeded = Manager != null && Manager.SetButtonMappingAdvanced(2, type, ButtonMappingParser.GetMappingValues(type, gamepadAction, keyboardKeys, mouseButton), out reason);
+            LastApplyFailureReason = LastApplySucceeded ? null : (reason ?? "Y3 button mapping could not be applied.");
         }
     }
 
     // Button M1 remap (JSON ButtonMapping: Type, GamepadAction, KeyboardKeys[], MouseButton)
-    internal class LegionButtonM1Property : HelperProperty<string, LegionManager>
+    internal class LegionButtonM1Property : HelperProperty<string, LegionManager>, IHardwareApplyResult
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
 
         public LegionButtonM1Property(string initialValue, LegionManager inManager) : base(initialValue ?? "", null, Function.LegionButtonM1, inManager)
         {
@@ -849,14 +943,19 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             base.NotifyPropertyChanged(propertyName);
             Logger.Info($"LegionButtonM1 applying mapping: {Value}");
             var (type, gamepadAction, keyboardKeys, mouseButton) = ButtonMappingParser.Parse(Value);
-            Manager?.SetButtonMappingAdvanced(3, type, ButtonMappingParser.GetMappingValues(type, gamepadAction, keyboardKeys, mouseButton));
+            string reason = "Legion manager is not available.";
+            LastApplySucceeded = Manager != null && Manager.SetButtonMappingAdvanced(3, type, ButtonMappingParser.GetMappingValues(type, gamepadAction, keyboardKeys, mouseButton), out reason);
+            LastApplyFailureReason = LastApplySucceeded ? null : (reason ?? "M1 button mapping could not be applied.");
         }
     }
 
     // Button M2 remap (JSON ButtonMapping: Type, GamepadAction, KeyboardKeys[], MouseButton)
-    internal class LegionButtonM2Property : HelperProperty<string, LegionManager>
+    internal class LegionButtonM2Property : HelperProperty<string, LegionManager>, IHardwareApplyResult
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
 
         public LegionButtonM2Property(string initialValue, LegionManager inManager) : base(initialValue ?? "", null, Function.LegionButtonM2, inManager)
         {
@@ -867,14 +966,19 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             base.NotifyPropertyChanged(propertyName);
             Logger.Info($"LegionButtonM2 applying mapping: {Value}");
             var (type, gamepadAction, keyboardKeys, mouseButton) = ButtonMappingParser.Parse(Value);
-            Manager?.SetButtonMappingAdvanced(4, type, ButtonMappingParser.GetMappingValues(type, gamepadAction, keyboardKeys, mouseButton));
+            string reason = "Legion manager is not available.";
+            LastApplySucceeded = Manager != null && Manager.SetButtonMappingAdvanced(4, type, ButtonMappingParser.GetMappingValues(type, gamepadAction, keyboardKeys, mouseButton), out reason);
+            LastApplyFailureReason = LastApplySucceeded ? null : (reason ?? "M2 button mapping could not be applied.");
         }
     }
 
     // Button M3 remap (JSON ButtonMapping: Type, GamepadAction, KeyboardKeys[], MouseButton)
-    internal class LegionButtonM3Property : HelperProperty<string, LegionManager>
+    internal class LegionButtonM3Property : HelperProperty<string, LegionManager>, IHardwareApplyResult
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
 
         public LegionButtonM3Property(string initialValue, LegionManager inManager) : base(initialValue ?? "", null, Function.LegionButtonM3, inManager)
         {
@@ -885,15 +989,20 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             base.NotifyPropertyChanged(propertyName);
             Logger.Info($"LegionButtonM3 applying mapping: {Value}");
             var (type, gamepadAction, keyboardKeys, mouseButton) = ButtonMappingParser.Parse(Value);
-            Manager?.SetButtonMappingAdvanced(5, type, ButtonMappingParser.GetMappingValues(type, gamepadAction, keyboardKeys, mouseButton));
+            string reason = "Legion manager is not available.";
+            LastApplySucceeded = Manager != null && Manager.SetButtonMappingAdvanced(5, type, ButtonMappingParser.GetMappingValues(type, gamepadAction, keyboardKeys, mouseButton), out reason);
+            LastApplyFailureReason = LastApplySucceeded ? null : (reason ?? "M3 button mapping could not be applied.");
         }
     }
 
     // Button Desktop remap (JSON ButtonMapping: Type, GamepadAction, KeyboardKeys[], MouseButton)
     // Default: Win+G (Game Bar)
-    internal class LegionButtonDesktopProperty : HelperProperty<string, LegionManager>
+    internal class LegionButtonDesktopProperty : HelperProperty<string, LegionManager>, IHardwareApplyResult
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
 
         public LegionButtonDesktopProperty(string initialValue, LegionManager inManager) : base(initialValue ?? "", null, Function.LegionButtonDesktop, inManager)
         {
@@ -904,15 +1013,20 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             base.NotifyPropertyChanged(propertyName);
             Logger.Info($"LegionButtonDesktop applying mapping: {Value}");
             var (type, gamepadAction, keyboardKeys, mouseButton) = ButtonMappingParser.Parse(Value);
-            Manager?.SetLegionButtonMapping(GamepadButton.DesktopButton, type, ButtonMappingParser.GetMappingValues(type, gamepadAction, keyboardKeys, mouseButton));
+            string reason = "Legion manager is not available.";
+            LastApplySucceeded = Manager != null && Manager.SetLegionButtonMapping(GamepadButton.DesktopButton, type, ButtonMappingParser.GetMappingValues(type, gamepadAction, keyboardKeys, mouseButton), out reason);
+            LastApplyFailureReason = LastApplySucceeded ? null : (reason ?? "Desktop button mapping could not be applied.");
         }
     }
 
     // Button Page remap (JSON ButtonMapping: Type, GamepadAction, KeyboardKeys[], MouseButton)
     // Default: Win+Tab (Task View)
-    internal class LegionButtonPageProperty : HelperProperty<string, LegionManager>
+    internal class LegionButtonPageProperty : HelperProperty<string, LegionManager>, IHardwareApplyResult
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
 
         public LegionButtonPageProperty(string initialValue, LegionManager inManager) : base(initialValue ?? "", null, Function.LegionButtonPage, inManager)
         {
@@ -923,14 +1037,19 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             base.NotifyPropertyChanged(propertyName);
             Logger.Info($"LegionButtonPage applying mapping: {Value}");
             var (type, gamepadAction, keyboardKeys, mouseButton) = ButtonMappingParser.Parse(Value);
-            Manager?.SetLegionButtonMapping(GamepadButton.PageButton, type, ButtonMappingParser.GetMappingValues(type, gamepadAction, keyboardKeys, mouseButton));
+            string reason = "Legion manager is not available.";
+            LastApplySucceeded = Manager != null && Manager.SetLegionButtonMapping(GamepadButton.PageButton, type, ButtonMappingParser.GetMappingValues(type, gamepadAction, keyboardKeys, mouseButton), out reason);
+            LastApplyFailureReason = LastApplySucceeded ? null : (reason ?? "Page button mapping could not be applied.");
         }
     }
 
     // Nintendo layout toggle (A↔B, X↔Y swap)
-    internal class LegionNintendoLayoutProperty : HelperProperty<bool, LegionManager>
+    internal class LegionNintendoLayoutProperty : HelperProperty<bool, LegionManager>, IHardwareApplyResult
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
 
         public LegionNintendoLayoutProperty(bool initialValue, LegionManager inManager) : base(initialValue, null, Function.LegionNintendoLayout, inManager)
         {
@@ -940,7 +1059,9 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         {
             base.NotifyPropertyChanged(propertyName);
             Logger.Info($"LegionNintendoLayout changed to {Value}");
-            Manager?.SetNintendoLayout(Value);
+            string reason = "Legion manager is not available.";
+            LastApplySucceeded = Manager != null && Manager.SetNintendoLayout(Value, out reason);
+            LastApplyFailureReason = LastApplySucceeded ? null : (reason ?? "Nintendo layout could not be applied.");
         }
     }
 

@@ -1,4 +1,5 @@
-﻿using Shared.Enums;
+﻿using Shared.Data;
+using Shared.Enums;
 using XboxGamingBarHelper.Core;
 
 namespace XboxGamingBarHelper.AMD.Properties
@@ -10,8 +11,11 @@ namespace XboxGamingBarHelper.AMD.Properties
         }
     }
 
-    internal class AMDFluidMotionFrameEnabledProperty : HelperProperty<bool, AMDManager>
+    internal class AMDFluidMotionFrameEnabledProperty : HelperProperty<bool, AMDManager>, IHardwareApplyResult
     {
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
+
         public AMDFluidMotionFrameEnabledProperty(bool inValue, AMDManager inManager) : base(inValue, null, Function.AMDFluidMotionFrameEnabled, inManager)
         {
         }
@@ -34,7 +38,7 @@ namespace XboxGamingBarHelper.AMD.Properties
             if (result && prev == Value)
             {
                 Manager.AMD3DSettingsChangedListener?.NotifyAFMFChanged();
-                Manager.AMDFluidMotionFrameSetting.SetEnabled(Value);
+                ApplyToDriver();
             }
             return result;
         }
@@ -47,7 +51,13 @@ namespace XboxGamingBarHelper.AMD.Properties
             // This prevents the listener from reading stale values when the driver callback fires
             Manager.AMD3DSettingsChangedListener?.NotifyAFMFChanged();
 
-            Manager.AMDFluidMotionFrameSetting.SetEnabled(Value);
+            ApplyToDriver();
+        }
+
+        private void ApplyToDriver()
+        {
+            LastApplySucceeded = Manager.AMDFluidMotionFrameSetting.SetEnabled(Value);
+            LastApplyFailureReason = LastApplySucceeded ? null : "AFMF could not be applied.";
         }
     }
 
@@ -58,8 +68,11 @@ namespace XboxGamingBarHelper.AMD.Properties
         }
     }
 
-    internal class AMDFluidMotionFrameAlgorithmProperty : HelperProperty<int, AMDManager>
+    internal class AMDFluidMotionFrameAlgorithmProperty : HelperProperty<int, AMDManager>, IHardwareApplyResult
     {
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
+
         public AMDFluidMotionFrameAlgorithmProperty(int inValue, AMDManager inManager) : base(inValue, null, Function.AMDFluidMotionFrameAlgorithm, inManager)
         {
         }
@@ -68,12 +81,22 @@ namespace XboxGamingBarHelper.AMD.Properties
         {
             base.NotifyPropertyChanged(propertyName);
             Manager.AMD3DSettingsChangedListener?.NotifyAFMFChanged();
-            Manager.AMDFluidMotionFrameSettingV1?.SetAlgorithm((ADLX_AFMF_ALGORITHM)Value);
+            ApplyToDriver();
+        }
+
+        private void ApplyToDriver()
+        {
+            LastApplySucceeded = Manager.AMDFluidMotionFrameSettingV1 != null
+                && Manager.AMDFluidMotionFrameSettingV1.SetAlgorithm((ADLX_AFMF_ALGORITHM)Value);
+            LastApplyFailureReason = LastApplySucceeded ? null : "AFMF algorithm could not be applied.";
         }
     }
 
-    internal class AMDFluidMotionFrameSearchModeProperty : HelperProperty<int, AMDManager>
+    internal class AMDFluidMotionFrameSearchModeProperty : HelperProperty<int, AMDManager>, IHardwareApplyResult
     {
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
+
         public AMDFluidMotionFrameSearchModeProperty(int inValue, AMDManager inManager) : base(inValue, null, Function.AMDFluidMotionFrameSearchMode, inManager)
         {
         }
@@ -82,12 +105,22 @@ namespace XboxGamingBarHelper.AMD.Properties
         {
             base.NotifyPropertyChanged(propertyName);
             Manager.AMD3DSettingsChangedListener?.NotifyAFMFChanged();
-            Manager.AMDFluidMotionFrameSettingV1?.SetSearchMode((ADLX_AFMF_SEARCH_MODE_TYPE)Value);
+            ApplyToDriver();
+        }
+
+        private void ApplyToDriver()
+        {
+            LastApplySucceeded = Manager.AMDFluidMotionFrameSettingV1 != null
+                && Manager.AMDFluidMotionFrameSettingV1.SetSearchMode((ADLX_AFMF_SEARCH_MODE_TYPE)Value);
+            LastApplyFailureReason = LastApplySucceeded ? null : "AFMF search mode could not be applied.";
         }
     }
 
-    internal class AMDFluidMotionFramePerformanceModeProperty : HelperProperty<int, AMDManager>
+    internal class AMDFluidMotionFramePerformanceModeProperty : HelperProperty<int, AMDManager>, IHardwareApplyResult
     {
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
+
         public AMDFluidMotionFramePerformanceModeProperty(int inValue, AMDManager inManager) : base(inValue, null, Function.AMDFluidMotionFramePerformanceMode, inManager)
         {
         }
@@ -96,12 +129,22 @@ namespace XboxGamingBarHelper.AMD.Properties
         {
             base.NotifyPropertyChanged(propertyName);
             Manager.AMD3DSettingsChangedListener?.NotifyAFMFChanged();
-            Manager.AMDFluidMotionFrameSettingV1?.SetPerformanceMode((ADLX_AFMF_PERFORMANCE_MODE_TYPE)Value);
+            ApplyToDriver();
+        }
+
+        private void ApplyToDriver()
+        {
+            LastApplySucceeded = Manager.AMDFluidMotionFrameSettingV1 != null
+                && Manager.AMDFluidMotionFrameSettingV1.SetPerformanceMode((ADLX_AFMF_PERFORMANCE_MODE_TYPE)Value);
+            LastApplyFailureReason = LastApplySucceeded ? null : "AFMF performance mode could not be applied.";
         }
     }
 
-    internal class AMDFluidMotionFrameFastMotionResponseProperty : HelperProperty<int, AMDManager>
+    internal class AMDFluidMotionFrameFastMotionResponseProperty : HelperProperty<int, AMDManager>, IHardwareApplyResult
     {
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
+
         public AMDFluidMotionFrameFastMotionResponseProperty(int inValue, AMDManager inManager) : base(inValue, null, Function.AMDFluidMotionFrameFastMotionResponse, inManager)
         {
         }
@@ -110,7 +153,14 @@ namespace XboxGamingBarHelper.AMD.Properties
         {
             base.NotifyPropertyChanged(propertyName);
             Manager.AMD3DSettingsChangedListener?.NotifyAFMFChanged();
-            Manager.AMDFluidMotionFrameSettingV1?.SetFastMotionResponse((ADLX_AFMF_FAST_MOTION_RESP)Value);
+            ApplyToDriver();
+        }
+
+        private void ApplyToDriver()
+        {
+            LastApplySucceeded = Manager.AMDFluidMotionFrameSettingV1 != null
+                && Manager.AMDFluidMotionFrameSettingV1.SetFastMotionResponse((ADLX_AFMF_FAST_MOTION_RESP)Value);
+            LastApplyFailureReason = LastApplySucceeded ? null : "AFMF fast motion response could not be applied.";
         }
     }
 }

@@ -69,7 +69,10 @@ namespace XboxGamingBarHelper.AMD.Settings
                 Logger.Warn("AMDFluidMotionFrameSettingV1.SetAlgorithm: adlxSetting is null (AFMF 2.x not supported on this driver)");
                 return false;
             }
-            return adlxSetting.SetAlgorithm(value) == ADLX_RESULT.ADLX_OK;
+            var result = adlxSetting.SetAlgorithm(value);
+            if (result != ADLX_RESULT.ADLX_OK)
+                Logger.Error($"AMDFluidMotionFrameSettingV1.SetAlgorithm({value}) returned {result}.");
+            return result == ADLX_RESULT.ADLX_OK;
         }
 
         public ADLX_AFMF_SEARCH_MODE_TYPE GetSearchMode()
@@ -97,7 +100,14 @@ namespace XboxGamingBarHelper.AMD.Settings
                 Logger.Warn("AMDFluidMotionFrameSettingV1.SetSearchMode: adlxSetting is null");
                 return false;
             }
-            return adlxSetting.SetSearchMode(value) == ADLX_RESULT.ADLX_OK;
+            var result = adlxSetting.SetSearchMode(value);
+            // ADLX_ALREADY_ENABLED means the driver is already at the requested value (confirmed
+            // via on-device logging - this specific driver returns it for AFMF_SEARCH_MODE_AUTO
+            // every time, not just on a genuine no-op), same false-failure pattern already fixed
+            // for AMDSetting.SetEnabled - not a real error.
+            if (result != ADLX_RESULT.ADLX_OK && result != ADLX_RESULT.ADLX_ALREADY_ENABLED)
+                Logger.Error($"AMDFluidMotionFrameSettingV1.SetSearchMode({value}) returned {result}.");
+            return result == ADLX_RESULT.ADLX_OK || result == ADLX_RESULT.ADLX_ALREADY_ENABLED;
         }
 
         public ADLX_AFMF_PERFORMANCE_MODE_TYPE GetPerformanceMode()
@@ -125,7 +135,11 @@ namespace XboxGamingBarHelper.AMD.Settings
                 Logger.Warn("AMDFluidMotionFrameSettingV1.SetPerformanceMode: adlxSetting is null");
                 return false;
             }
-            return adlxSetting.SetPerformanceMode(value) == ADLX_RESULT.ADLX_OK;
+            var result = adlxSetting.SetPerformanceMode(value);
+            // See SetSearchMode - same ADLX_ALREADY_ENABLED false-failure, confirmed on-device.
+            if (result != ADLX_RESULT.ADLX_OK && result != ADLX_RESULT.ADLX_ALREADY_ENABLED)
+                Logger.Error($"AMDFluidMotionFrameSettingV1.SetPerformanceMode({value}) returned {result}.");
+            return result == ADLX_RESULT.ADLX_OK || result == ADLX_RESULT.ADLX_ALREADY_ENABLED;
         }
 
         public ADLX_AFMF_FAST_MOTION_RESP GetFastMotionResponse()
@@ -153,7 +167,11 @@ namespace XboxGamingBarHelper.AMD.Settings
                 Logger.Warn("AMDFluidMotionFrameSettingV1.SetFastMotionResponse: adlxSetting is null");
                 return false;
             }
-            return adlxSetting.SetFastMotionResponse(value) == ADLX_RESULT.ADLX_OK;
+            var result = adlxSetting.SetFastMotionResponse(value);
+            // See SetSearchMode - same ADLX_ALREADY_ENABLED false-failure, confirmed on-device.
+            if (result != ADLX_RESULT.ADLX_OK && result != ADLX_RESULT.ADLX_ALREADY_ENABLED)
+                Logger.Error($"AMDFluidMotionFrameSettingV1.SetFastMotionResponse({value}) returned {result}.");
+            return result == ADLX_RESULT.ADLX_OK || result == ADLX_RESULT.ADLX_ALREADY_ENABLED;
         }
     }
 }

@@ -165,7 +165,7 @@ namespace XboxGamingBarHelper.Power
             return result != 0;
         }
 
-        public static void SetCpuBoostMode(bool isAC, bool enabled)
+        public static bool SetCpuBoostMode(bool isAC, bool enabled)
         {
             // Save original values before first modification (for clean uninstall)
             try
@@ -191,12 +191,13 @@ namespace XboxGamingBarHelper.Power
             if (status != 0)
             {
                 Logger.Error("Can't set CPU Boost Mode??");
-                return;
+                return false;
             }
 
             Logger.Info($"Set CPU Boost {(isAC ? "AC" : "DC")} to {value}.");
             // Apply the updated plan
             PowrProf.PowerSetActiveScheme(IntPtr.Zero, ref scheme);
+            return true;
         }
 
         public static uint GetEppValue(bool isAC)
@@ -219,7 +220,7 @@ namespace XboxGamingBarHelper.Power
             return result;
         }
 
-        public static void SetEppValue(bool isAC, uint value)
+        public static bool SetEppValue(bool isAC, uint value)
         {
             if (value > 100) value = 100; // clamp to valid range
 
@@ -246,12 +247,13 @@ namespace XboxGamingBarHelper.Power
             if (status != 0)
             {
                 Logger.Error("Can't set EPP value.");
-                return;
+                return false;
             }
 
             Logger.Info($"Set CPU EPP {(isAC ? "AC" : "DC")} to {value}.");
             // Apply changes to the currently active power plan
             PowrProf.PowerSetActiveScheme(IntPtr.Zero, ref scheme);
+            return true;
         }
 
         #region OS Power Mode (Windows 11 Power Slider)

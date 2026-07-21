@@ -1,4 +1,4 @@
-using NLog;
+﻿using NLog;
 using Shared.Data;
 using Shared.Enums;
 using System;
@@ -988,12 +988,14 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             return (slow, fast, peak);
         }
 
-        public void SetTouchpadEnabled(bool enabled)
+        public bool SetTouchpadEnabled(bool enabled, out string failureReason)
         {
+            failureReason = null;
             if (!isControllerConnected || controllerService == null)
             {
+                failureReason = "controller not connected";
                 Logger.Warn("Cannot set touchpad: controller not connected");
-                return;
+                return false;
             }
 
             try
@@ -1005,30 +1007,36 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                     try { Settings.LocalSettingsHelper.SetValue("LegionTouchpadEnabled", enabled); }
                     catch (Exception persistEx) { Logger.Debug($"Failed to persist LegionTouchpadEnabled: {persistEx.Message}"); }
                     Logger.Info($"Touchpad {(enabled ? "enabled" : "disabled")}");
+                    return true;
                 }
-                else
-                {
-                    Logger.Error($"Failed to set touchpad: {result.Message}");
-                }
+
+                failureReason = result.Message;
+                Logger.Error($"Failed to set touchpad: {result.Message}");
+                return false;
             }
             catch (Exception ex)
             {
+                failureReason = ex.Message;
                 Logger.Error($"Error setting touchpad: {ex.Message}");
+                return false;
             }
         }
 
-        public void SetLightMode(int mode)
+        public bool SetLightMode(int mode, out string failureReason)
         {
+            failureReason = null;
             // Check if we have a valid controller for RGB
             bool hasGoSController = isGoSControllerConnected && goSController != null;
             bool hasStandardController = isControllerConnected && controllerService != null;
 
             if (!hasGoSController && !hasStandardController)
             {
+                failureReason = "no RGB controller connected";
                 Logger.Warn("Cannot set light mode: no RGB controller connected");
-                return;
+                return false;
             }
 
+            bool success = false;
             try
             {
                 // Parse current color
@@ -1037,7 +1045,6 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                 // Use Go S controller if available (Legion Go S uses different HID protocol)
                 if (hasGoSController)
                 {
-                    bool success = false;
                     switch (mode)
                     {
                         case 0: // Disabled/Off
@@ -1067,6 +1074,7 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                     }
                     else
                     {
+                        failureReason = "Go S controller rejected the light mode write";
                         Logger.Error($"Failed to set light mode on Go S controller");
                     }
                 }
@@ -1077,7 +1085,6 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                     // invalid byte that the firmware silently rejects (and leaves the light
                     // in whatever state it was previously). Route mode=0 through SetRgbEnabled
                     // for both controllers, mirroring the Go S branch above.
-                    bool success;
                     if (mode == 0)
                     {
                         var leftOff = controllerService.SetRgbEnabled(Controller.Left, false);
@@ -1090,6 +1097,7 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                         }
                         else
                         {
+                            failureReason = $"L={leftOff.Message}, R={rightOff.Message}";
                             Logger.Error($"Failed to disable stick lights: L={leftOff.Message}, R={rightOff.Message}");
                         }
                     }
@@ -1122,6 +1130,7 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                         }
                         else
                         {
+                            failureReason = result.Message;
                             Logger.Error($"Failed to set light mode: {result.Message}");
                         }
                     }
@@ -1129,10 +1138,13 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             }
             catch (Exception ex)
             {
+                success = false;
+                failureReason = ex.Message;
                 Logger.Error($"Error setting light mode: {ex.Message}");
             }
             // Re-read hardware state so the Info card reflects the new mode promptly.
             RequestDeviceStatusRefresh();
+            return success;
         }
 
         public void RestoreLightSettings()
@@ -1178,7 +1190,7 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             // sync of LegionLightMode is the authoritative source for the user's static mode.
 
             Logger.Info($"Restoring light settings: mode={lightMode}, color={lightColor}, brightness={lightBrightness}");
-            SetLightMode(lightMode);
+            SetLightMode(lightMode, out _);
         }
 
         /// <summary>
@@ -1252,8 +1264,9 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         }
 
 
-        public void SetLightColor(string hexColor)
+        public bool SetLightColor(string hexColor, out string failureReason)
         {
+            failureReason = null;
             // An external color set is a real source of truth for the light state.
             _lightStateKnown = true;
 
@@ -1262,10 +1275,12 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
 
             if (!hasGoSController && !hasStandardController)
             {
+                failureReason = "no RGB controller connected";
                 Logger.Warn("Cannot set light color: no RGB controller connected");
-                return;
+                return false;
             }
 
+            bool success = false;
             try
             {
                 ParseHexColor(hexColor, out byte r, out byte g, out byte b);
@@ -1283,7 +1298,7 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                         _ => LegionGoSController.RgbMode.Solid
                     };
 
-                    bool success = goSController.SetRgbMode(goSMode, r, g, b, lightBrightness, lightSpeed);
+                    success = goSController.SetRgbMode(goSMode, r, g, b, lightBrightness, lightSpeed);
                     if (success)
                     {
                         lightColor = hexColor;
@@ -1291,6 +1306,7 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                     }
                     else
                     {
+                        failureReason = "Go S controller rejected the light color write";
                         Logger.Error($"Failed to set light color on Go S controller");
                     }
                 }
@@ -1303,19 +1319,22 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                     if (lightMode == 0)
                     {
                         lightColor = hexColor;
+                        success = true;
                         Logger.Info($"Light color cached as {hexColor} (mode is Off, not pushing profile)");
                     }
                     else
                     {
                         RgbMode rgbMode = (RgbMode)lightMode;
                         var result = controllerService.SetStickLightMode(rgbMode, r, g, b, lightBrightness / 100f, lightSpeed / 100f);
-                        if (result.Success)
+                        success = result.Success;
+                        if (success)
                         {
                             lightColor = hexColor;
                             Logger.Info($"Light color set to {hexColor}");
                         }
                         else
                         {
+                            failureReason = result.Message;
                             Logger.Error($"Failed to set light color: {result.Message}");
                         }
                     }
@@ -1323,10 +1342,13 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             }
             catch (Exception ex)
             {
+                success = false;
+                failureReason = ex.Message;
                 Logger.Error($"Error setting light color: {ex.Message}");
             }
             // Re-read hardware state so the Info card reflects the new color/mode promptly.
             RequestDeviceStatusRefresh();
+            return success;
         }
 
         private void ParseHexColor(string hexColor, out byte r, out byte g, out byte b)
@@ -1347,8 +1369,9 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             }
         }
 
-        public void SetLightBrightness(int brightness)
+        public bool SetLightBrightness(int brightness, out string failureReason)
         {
+            failureReason = null;
             // An external brightness set is a real source of truth for the light state.
             _lightStateKnown = true;
 
@@ -1357,10 +1380,12 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
 
             if (!hasGoSController && !hasStandardController)
             {
+                failureReason = "no RGB controller connected";
                 Logger.Warn("Cannot set light brightness: no RGB controller connected");
-                return;
+                return false;
             }
 
+            bool success = false;
             try
             {
                 brightness = Math.Max(0, Math.Min(100, brightness));
@@ -1378,7 +1403,7 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                         _ => LegionGoSController.RgbMode.Solid
                     };
 
-                    bool success = goSController.SetRgbMode(goSMode, r, g, b, brightness, lightSpeed);
+                    success = goSController.SetRgbMode(goSMode, r, g, b, brightness, lightSpeed);
                     if (success)
                     {
                         lightBrightness = brightness;
@@ -1386,6 +1411,7 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                     }
                     else
                     {
+                        failureReason = "Go S controller rejected the light brightness write";
                         Logger.Error($"Failed to set light brightness on Go S controller");
                     }
                 }
@@ -1397,19 +1423,22 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                     if (lightMode == 0)
                     {
                         lightBrightness = brightness;
+                        success = true;
                         Logger.Info($"Light brightness cached as {brightness}% (mode is Off, not pushing profile)");
                     }
                     else
                     {
                         RgbMode rgbMode = (RgbMode)lightMode;
                         var result = controllerService.SetStickLightMode(rgbMode, r, g, b, brightness / 100f, lightSpeed / 100f);
-                        if (result.Success)
+                        success = result.Success;
+                        if (success)
                         {
                             lightBrightness = brightness;
                             Logger.Info($"Light brightness set to {brightness}%");
                         }
                         else
                         {
+                            failureReason = result.Message;
                             Logger.Error($"Failed to set light brightness: {result.Message}");
                         }
                     }
@@ -1417,12 +1446,16 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             }
             catch (Exception ex)
             {
+                success = false;
+                failureReason = ex.Message;
                 Logger.Error($"Error setting light brightness: {ex.Message}");
             }
+            return success;
         }
 
-        public void SetLightSpeed(int speed)
+        public bool SetLightSpeed(int speed, out string failureReason)
         {
+            failureReason = null;
             // An external speed set is a real source of truth for the light state.
             _lightStateKnown = true;
 
@@ -1431,10 +1464,12 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
 
             if (!hasGoSController && !hasStandardController)
             {
+                failureReason = "no RGB controller connected";
                 Logger.Warn("Cannot set light speed: no RGB controller connected");
-                return;
+                return false;
             }
 
+            bool success = false;
             try
             {
                 speed = Math.Max(0, Math.Min(100, speed));
@@ -1452,7 +1487,7 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                         _ => LegionGoSController.RgbMode.Solid
                     };
 
-                    bool success = goSController.SetRgbMode(goSMode, r, g, b, lightBrightness, speed);
+                    success = goSController.SetRgbMode(goSMode, r, g, b, lightBrightness, speed);
                     if (success)
                     {
                         lightSpeed = speed;
@@ -1460,6 +1495,7 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                     }
                     else
                     {
+                        failureReason = "Go S controller rejected the light speed write";
                         Logger.Error($"Failed to set light speed on Go S controller");
                     }
                 }
@@ -1468,19 +1504,22 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                     if (lightMode == 0)
                     {
                         lightSpeed = speed;
+                        success = true;
                         Logger.Info($"Light speed cached as {speed}% (mode is Off, not pushing profile)");
                     }
                     else
                     {
                         RgbMode rgbMode = (RgbMode)lightMode;
                         var result = controllerService.SetStickLightMode(rgbMode, r, g, b, lightBrightness / 100f, speed / 100f);
-                        if (result.Success)
+                        success = result.Success;
+                        if (success)
                         {
                             lightSpeed = speed;
                             Logger.Info($"Light speed set to {speed}%");
                         }
                         else
                         {
+                            failureReason = result.Message;
                             Logger.Error($"Failed to set light speed: {result.Message}");
                         }
                     }
@@ -1488,8 +1527,11 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             }
             catch (Exception ex)
             {
+                success = false;
+                failureReason = ex.Message;
                 Logger.Error($"Error setting light speed: {ex.Message}");
             }
+            return success;
         }
 
         public void SetPerformanceMode(int mode)
@@ -1787,19 +1829,21 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         /// <summary>
         /// Apply individual Slow TDP (SPL) value
         /// </summary>
-        public void ApplyCustomTDPSlow(int slow)
+        public bool ApplyCustomTDPSlow(int slow, out string failureReason)
         {
+            failureReason = null;
             // Skip during startup grace period to prevent widget sync from overriding main TDP slider
             if ((DateTime.Now - startupTime).TotalMilliseconds < STARTUP_GRACE_PERIOD_MS)
             {
                 Logger.Info($"Skipping ApplyCustomTDPSlow({slow}W) - still in startup grace period");
-                return;
+                return true;
             }
 
             if (wmiService == null)
             {
+                failureReason = "WMI service not available";
                 Logger.Warn("Cannot set custom TDP Slow: WMI service not available");
-                return;
+                return false;
             }
 
             try
@@ -1809,34 +1853,39 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                 {
                     customTDPSlow = slow;
                     Logger.Info($"Slow TDP (SPL) set to {slow}W");
+                    return true;
                 }
-                else
-                {
-                    Logger.Error($"Failed to set Slow TDP: {result.Message}");
-                }
+
+                failureReason = result.Message;
+                Logger.Error($"Failed to set Slow TDP: {result.Message}");
+                return false;
             }
             catch (Exception ex)
             {
+                failureReason = ex.Message;
                 Logger.Error($"Error setting Slow TDP: {ex.Message}");
+                return false;
             }
         }
 
         /// <summary>
         /// Apply individual Fast TDP (SPPL) value
         /// </summary>
-        public void ApplyCustomTDPFast(int fast)
+        public bool ApplyCustomTDPFast(int fast, out string failureReason)
         {
+            failureReason = null;
             // Skip during startup grace period to prevent widget sync from overriding main TDP slider
             if ((DateTime.Now - startupTime).TotalMilliseconds < STARTUP_GRACE_PERIOD_MS)
             {
                 Logger.Info($"Skipping ApplyCustomTDPFast({fast}W) - still in startup grace period");
-                return;
+                return true;
             }
 
             if (wmiService == null)
             {
+                failureReason = "WMI service not available";
                 Logger.Warn("Cannot set custom TDP Fast: WMI service not available");
-                return;
+                return false;
             }
 
             try
@@ -1846,34 +1895,39 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                 {
                     customTDPFast = fast;
                     Logger.Info($"Fast TDP (SPPL) set to {fast}W");
+                    return true;
                 }
-                else
-                {
-                    Logger.Error($"Failed to set Fast TDP: {result.Message}");
-                }
+
+                failureReason = result.Message;
+                Logger.Error($"Failed to set Fast TDP: {result.Message}");
+                return false;
             }
             catch (Exception ex)
             {
+                failureReason = ex.Message;
                 Logger.Error($"Error setting Fast TDP: {ex.Message}");
+                return false;
             }
         }
 
         /// <summary>
         /// Apply individual Peak TDP (FPPT) value
         /// </summary>
-        public void ApplyCustomTDPPeak(int peak)
+        public bool ApplyCustomTDPPeak(int peak, out string failureReason)
         {
+            failureReason = null;
             // Skip during startup grace period to prevent widget sync from overriding main TDP slider
             if ((DateTime.Now - startupTime).TotalMilliseconds < STARTUP_GRACE_PERIOD_MS)
             {
                 Logger.Info($"Skipping ApplyCustomTDPPeak({peak}W) - still in startup grace period");
-                return;
+                return true;
             }
 
             if (wmiService == null)
             {
+                failureReason = "WMI service not available";
                 Logger.Warn("Cannot set custom TDP Peak: WMI service not available");
-                return;
+                return false;
             }
 
             try
@@ -1883,15 +1937,18 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                 {
                     customTDPPeak = peak;
                     Logger.Info($"Peak TDP (FPPT) set to {peak}W");
+                    return true;
                 }
-                else
-                {
-                    Logger.Error($"Failed to set Peak TDP: {result.Message}");
-                }
+
+                failureReason = result.Message;
+                Logger.Error($"Failed to set Peak TDP: {result.Message}");
+                return false;
             }
             catch (Exception ex)
             {
+                failureReason = ex.Message;
                 Logger.Error($"Error setting Peak TDP: {ex.Message}");
+                return false;
             }
         }
 
@@ -2657,12 +2714,14 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             return 100;
         }
 
-        public void SetFanFullSpeed(bool enabled)
+        public bool SetFanFullSpeed(bool enabled, out string failureReason)
         {
+            failureReason = null;
             if (wmiService == null)
             {
+                failureReason = "WMI service not available";
                 Logger.Warn("Cannot set fan full speed: WMI service not available");
-                return;
+                return false;
             }
 
             try
@@ -2672,15 +2731,18 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                 {
                     fanFullSpeed = enabled;
                     Logger.Info($"Fan full speed {(enabled ? "enabled" : "disabled")}");
+                    return true;
                 }
-                else
-                {
-                    Logger.Error($"Failed to set fan full speed: {result.Message}");
-                }
+
+                failureReason = result.Message;
+                Logger.Error($"Failed to set fan full speed: {result.Message}");
+                return false;
             }
             catch (Exception ex)
             {
+                failureReason = ex.Message;
                 Logger.Error($"Error setting fan full speed: {ex.Message}");
+                return false;
             }
         }
 
@@ -2848,17 +2910,14 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             }
         }
 
-        public void SetVibration(int level)
+        public bool SetPowerLight(bool enabled, out string failureReason)
         {
-            TrySetVibration(level);
-        }
-
-        public void SetPowerLight(bool enabled)
-        {
+            failureReason = null;
             if (wmiService == null)
             {
+                failureReason = "WMI service not available";
                 Logger.Warn("Cannot set power light: WMI service not available");
-                return;
+                return false;
             }
 
             try
@@ -2868,24 +2927,29 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                 {
                     powerLightEnabled = enabled;
                     Logger.Info($"Power light {(enabled ? "enabled" : "disabled")}");
+                    return true;
                 }
-                else
-                {
-                    Logger.Error($"Failed to set power light: {result.Message}");
-                }
+
+                failureReason = result.Message;
+                Logger.Error($"Failed to set power light: {result.Message}");
+                return false;
             }
             catch (Exception ex)
             {
+                failureReason = ex.Message;
                 Logger.Error($"Error setting power light: {ex.Message}");
+                return false;
             }
         }
 
-        public void SetChargeLimit(bool enabled)
+        public bool SetChargeLimit(bool enabled, out string failureReason)
         {
+            failureReason = null;
             if (wmiService == null)
             {
+                failureReason = "WMI service not available";
                 Logger.Warn("Cannot set charge limit: WMI service not available");
-                return;
+                return false;
             }
 
             try
@@ -2900,15 +2964,18 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                     try { Settings.LocalSettingsHelper.SetValue("LegionChargeLimit", enabled); }
                     catch (Exception persistEx) { Logger.Debug($"Failed to persist LegionChargeLimit: {persistEx.Message}"); }
                     Logger.Info($"Battery charge limit (80%) {(enabled ? "enabled" : "disabled")}");
+                    return true;
                 }
-                else
-                {
-                    Logger.Error($"Failed to set charge limit: {result.Message}");
-                }
+
+                failureReason = result.Message;
+                Logger.Error($"Failed to set charge limit: {result.Message}");
+                return false;
             }
             catch (Exception ex)
             {
+                failureReason = ex.Message;
                 Logger.Error($"Error setting charge limit: {ex.Message}");
+                return false;
             }
         }
 
@@ -2920,7 +2987,7 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         public void SetButtonMapping(int buttonIndex, int actionIndex)
         {
             // Forward to advanced method with gamepad type
-            SetButtonMappingAdvanced(buttonIndex, 0, new int[] { actionIndex });
+            SetButtonMappingAdvanced(buttonIndex, 0, new int[] { actionIndex }, out _);
         }
 
         /// <summary>
@@ -2929,8 +2996,9 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         /// <param name="buttonIndex">Button index: 0=Y1, 1=Y2, 2=Y3, 3=M1, 4=M2, 5=M3</param>
         /// <param name="mappingType">0=Gamepad, 1=Keyboard, 2=Mouse</param>
         /// <param name="values">Mapping values (gamepad action, keyboard keys[], or mouse button)</param>
-        public void SetButtonMappingAdvanced(int buttonIndex, int mappingType, int[] values)
+        public bool SetButtonMappingAdvanced(int buttonIndex, int mappingType, int[] values, out string failureReason)
         {
+            failureReason = null;
             try
             {
                 // Helper-side kinds (System actions; scroll directions repeat while held)
@@ -2949,8 +3017,9 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                 using var controller = new LegionGoController();
                 if (!controller.Connect())
                 {
+                    failureReason = "controller not connected";
                     Logger.Warn("Cannot set button mapping: controller not connected");
-                    return;
+                    return false;
                 }
 
                 // Map button index to RemappableButton enum
@@ -2971,7 +3040,7 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                 {
                     bool cleared = controller.ClearButtonMapping(remapButton);
                     Logger.Info($"Button {remapButton} firmware mapping cleared for helper-side {(isSystem ? "system action" : "scroll repeat")} (cleared={cleared})");
-                    return;
+                    return true;
                 }
 
                 // Log the button details for debugging
@@ -3010,15 +3079,19 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
 
                 if (!success)
                 {
+                    failureReason = $"controller rejected the mapping write for {remapButton}";
                     Logger.Error($"Failed to set button mapping for {remapButton}");
                 }
 
                 // Delay to allow controller firmware to process command before next one
                 System.Threading.Thread.Sleep(HID_COMMAND_DELAY_MS);
+                return success;
             }
             catch (Exception ex)
             {
+                failureReason = ex.Message;
                 Logger.Error($"Error setting button mapping: {ex.Message}");
+                return false;
             }
         }
 
@@ -3028,8 +3101,9 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         /// <param name="button">The GamepadButton to map (DesktopButton=0x25, PageButton=0x26)</param>
         /// <param name="mappingType">0=Gamepad, 1=Keyboard, 2=Mouse</param>
         /// <param name="values">Mapping values (key codes, button codes, etc.)</param>
-        public void SetLegionButtonMapping(GamepadButton button, int mappingType, int[] values)
+        public bool SetLegionButtonMapping(GamepadButton button, int mappingType, int[] values, out string failureReason)
         {
+            failureReason = null;
             try
             {
                 // Desktop/Page front buttons arrive on the edge stream as Mode/Share.
@@ -3048,15 +3122,16 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                 using var controller = new LegionGoController();
                 if (!controller.Connect())
                 {
+                    failureReason = "controller not connected";
                     Logger.Warn($"Cannot set {button} mapping: controller not connected");
-                    return;
+                    return false;
                 }
 
                 if (isSystem || isScrollRepeat)
                 {
                     controller.ClearGamepadButtonMapping(button);
                     Logger.Info($"{button} firmware mapping cleared for helper-side {(isSystem ? "system action" : "scroll repeat")}");
-                    return;
+                    return true;
                 }
 
                 var type = (MappingType)(mappingType + 1); // 0->Gamepad(1), 1->Keyboard(2), 2->Mouse(3)
@@ -3068,9 +3143,10 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                     if (values.Length == 0 || values[0] == 0)
                     {
                         // Disabled - clear the mapping
-                        controller.ClearGamepadButtonMapping(button);
+                        bool cleared = controller.ClearGamepadButtonMapping(button);
                         Logger.Info($"{button} mapping cleared (disabled)");
-                        return;
+                        if (!cleared) failureReason = $"controller rejected clearing {button} mapping";
+                        return cleared;
                     }
                     var action = RemapActionHelper.GetByIndex(values[0]);
                     mappings = new byte[] { (byte)action };
@@ -3087,29 +3163,35 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
 
                 if (!success)
                 {
+                    failureReason = $"controller rejected the mapping write for {button}";
                     Logger.Error($"Failed to set {button} mapping");
                 }
 
                 System.Threading.Thread.Sleep(HID_COMMAND_DELAY_MS);
+                return success;
             }
             catch (Exception ex)
             {
+                failureReason = ex.Message;
                 Logger.Error($"Error setting {button} mapping: {ex.Message}");
+                return false;
             }
         }
 
         /// <summary>
         /// Sets the Nintendo layout mode (swaps A↔B and X↔Y face buttons).
         /// </summary>
-        public void SetNintendoLayout(bool enabled)
+        public bool SetNintendoLayout(bool enabled, out string failureReason)
         {
+            failureReason = null;
             try
             {
                 using var controller = new LegionGoController();
                 if (!controller.Connect())
                 {
+                    failureReason = "controller not connected";
                     Logger.Warn("Cannot set Nintendo layout: controller not connected");
-                    return;
+                    return false;
                 }
 
                 bool success = controller.SetNintendoLayout(enabled);
@@ -3120,12 +3202,16 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                 }
                 else
                 {
+                    failureReason = "controller rejected the Nintendo layout write";
                     Logger.Error("Failed to set Nintendo layout");
                 }
+                return success;
             }
             catch (Exception ex)
             {
+                failureReason = ex.Message;
                 Logger.Error($"Error setting Nintendo layout: {ex.Message}");
+                return false;
             }
         }
 

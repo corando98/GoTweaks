@@ -1106,8 +1106,12 @@ public class LegionGoController : IDisposable
             TouchpadEnabled = response[18] == 0x01,
             LeftBattery = response[21],
             RightBattery = response[22],
+            // Bytes 28..30 are a little-endian version number rendered MSB-first, byte 31
+            // is a trailing suffix. Printing raw wire order showed "3160020A" where
+            // Legion Space shows "0260310A" for the same firmware (field-confirmed
+            // 2026-07-21) - swap 28<->30 to match Lenovo's own rendering.
             FirmwareVersion = string.Format("{0:X2}{1:X2}{2:X2}{3:X2}",
-                response[28], response[29], response[30], response[31]),
+                response[30], response[29], response[28], response[31]),
         };
     }
 

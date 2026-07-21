@@ -1,10 +1,14 @@
-﻿using Shared.Enums;
+﻿using Shared.Data;
+using Shared.Enums;
 using XboxGamingBarHelper.Core;
 
 namespace XboxGamingBarHelper.Power
 {
-    internal class CPUBoostProperty : HelperProperty<bool, PowerManager>
+    internal class CPUBoostProperty : HelperProperty<bool, PowerManager>, IHardwareApplyResult
     {
+        public bool LastApplySucceeded { get; private set; } = true;
+        public string LastApplyFailureReason { get; private set; }
+
         // Track whether the user has explicitly changed this value
         // On fresh install, we read from system but don't write back unless user changes it
         private bool _hasUserModified = false;
@@ -35,14 +39,19 @@ namespace XboxGamingBarHelper.Power
                 }
                 else
                 {
-                    // Value is same as initial and no widget yet - fresh-startup sync, don't write to system
+                    // Value is same as initial and no widget yet - fresh-startup sync, don't write to system.
+                    // Nothing was attempted, so there is nothing to report as failed.
                     Logger.Debug($"CPU Boost: Skipping system write - value unchanged from initial ({Value})");
+                    LastApplySucceeded = true;
+                    LastApplyFailureReason = null;
                     return;
                 }
             }
 
-            PowerManager.SetCpuBoostMode(false, Value);
-            PowerManager.SetCpuBoostMode(true, Value);
+            bool dcOk = PowerManager.SetCpuBoostMode(false, Value);
+            bool acOk = PowerManager.SetCpuBoostMode(true, Value);
+            LastApplySucceeded = dcOk && acOk;
+            LastApplyFailureReason = LastApplySucceeded ? null : "CPU Boost could not be applied.";
         }
     }
 }

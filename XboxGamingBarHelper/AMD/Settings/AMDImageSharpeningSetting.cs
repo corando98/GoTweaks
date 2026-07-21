@@ -23,14 +23,14 @@ namespace XboxGamingBarHelper.AMD.Settings
             return AMDUtilities.GetIntValue(adlxSetting.GetSharpness);
         }
 
-        public void SetSharpness(int sharpness)
+        public bool SetSharpness(int sharpness)
         {
             if (adlxSetting == null)
             {
                 Logger.Warn("AMDImageSharpeningSetting.SetSharpness: adlxSetting is null (Image Sharpening may not be supported)");
-                return;
+                return false;
             }
-            adlxSetting.SetSharpness(sharpness);
+            return adlxSetting.SetSharpness(sharpness) == ADLX_RESULT.ADLX_OK;
         }
     }
 }
