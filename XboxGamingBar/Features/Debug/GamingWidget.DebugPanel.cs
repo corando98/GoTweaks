@@ -831,6 +831,19 @@ namespace XboxGamingBar
                 string localFolderName = null;
                 try
                 {
+                    // The pipe often finishes connecting AFTER widget startup (especially
+                    // when the widget opens right after a resume), and the old silent
+                    // IsConnected skip made the local probe report "(n/a)" in that race -
+                    // fresh builds in AppPackages never surfaced an update banner. Wait
+                    // for the connection briefly before probing.
+                    for (int i = 0; i < 25 && !App.IsConnected; i++)
+                    {
+                        await Task.Delay(400);
+                    }
+                    if (!App.IsConnected)
+                    {
+                        Logger.Warn("Startup update check: helper not connected after 10s - skipping local debug probe");
+                    }
                     if (App.IsConnected)
                     {
                         var localMsg = new Windows.Foundation.Collections.ValueSet

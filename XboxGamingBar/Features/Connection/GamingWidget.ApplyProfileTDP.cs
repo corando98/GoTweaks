@@ -385,6 +385,35 @@ namespace XboxGamingBar
                                     writer.AutoFlush = true;
                                     await writer.WriteLineAsync("{\"RequestId\":0,\"ExitHelper\":true}");
                                 }
+
+                                // CRITICAL: keep the temp pipe open while the helper processes
+                                // the line. The helper treats ANY pipe connect as a widget and
+                                // immediately floods property pushes at it - disposing right
+                                // after the write made those sends hit "Pipe is broken", and the
+                                // helper's client teardown ran BEFORE its reader consumed the
+                                // buffered ExitHelper line (log-proven 2026-07-22: client
+                                // connected/broken/disconnected within 60ms, ExitHelper never
+                                // processed, old helper survived, its mutex blocked the upgraded
+                                // helper forever = the stuck "Upgrading helper..." banner).
+                                // Drain inbound pushes for up to 3s so the connection stays
+                                // healthy long enough for the exit to land.
+                                try
+                                {
+                                    var drainBuffer = new byte[8192];
+                                    var deadline = DateTime.UtcNow.AddSeconds(3);
+                                    while (DateTime.UtcNow < deadline)
+                                    {
+                                        var readTask = tempPipe.ReadAsync(drainBuffer, 0, drainBuffer.Length);
+                                        var finished = await Task.WhenAny(readTask, Task.Delay(500));
+                                        if (finished != readTask) continue;         // quiet - keep waiting out the window
+                                        if (readTask.Result == 0) break;            // helper closed its end (exiting)
+                                    }
+                                }
+                                catch
+                                {
+                                    // Helper tearing the pipe down mid-drain means it's exiting - success.
+                                }
+
                                 Logger.Info("Sent ExitHelper via temporary pipe connection");
                                 exitSent = true;
                             }
