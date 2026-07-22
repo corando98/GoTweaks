@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -18,7 +18,11 @@ namespace XboxGamingBarHelper.Labs
         XboxGuide = 0,
         KeyboardShortcut = 1,
         RunCommand = 2,
-        FocusGoTweaks = 3
+        FocusGoTweaks = 3,
+        // System entries (field request): fired via static hooks set by Program.Labs
+        // at monitor init - the monitor has no direct reference to the hotkey layer.
+        ToggleDesktopControls = 4,
+        TouchKeyboard = 5,
     }
 
     /// <summary>
@@ -148,6 +152,36 @@ namespace XboxGamingBarHelper.Labs
         private string legionRShortcutKeys = "";
         private string legionRCommandPath = "";
 
+        // Long-press variants (field request). When a long-press action is configured
+        // for a button, the short action is DEFERRED to release: a release before the
+        // threshold fires the short action as a tap (press+release burst), holding past
+        // the threshold fires the long action once and swallows the release. When no
+        // long action is configured, dispatch is unchanged (short fires on the press
+        // edge, so Xbox Guide hold-while-held semantics are preserved).
+        // Threshold is deliberately far below the firmware's 5-second hold, which
+        // RESTARTS the controller - the long action fires at 800ms so users release
+        // long before firmware territory.
+        private const int LongPressThresholdMs = 800;
+
+        // System-entry hooks (ToggleDesktopControls / TouchKeyboard actions) - set once
+        // by Program.Labs at monitor init; the monitor has no reference to the hotkey layer.
+        public static Action OnToggleDesktopControlsRequested;
+        public static Action OnTouchKeyboardRequested;
+        private bool legionLLongEnabled = false;
+        private LegionButtonAction legionLLongActionType = LegionButtonAction.KeyboardShortcut;
+        private string legionLLongShortcutKeys = "";
+        private string legionLLongCommandPath = "";
+        private bool legionRLongEnabled = false;
+        private LegionButtonAction legionRLongActionType = LegionButtonAction.KeyboardShortcut;
+        private string legionRLongShortcutKeys = "";
+        private string legionRLongCommandPath = "";
+        private bool legionLHeld;
+        private bool legionRHeld;
+        private DateTime legionLPressStartUtc;
+        private DateTime legionRPressStartUtc;
+        private bool legionLLongFired;
+        private bool legionRLongFired;
+
         // Configuration for Scroll Wheel (unified scroll + click)
         // Note: Raw Input API can't distinguish scroll up/down, so we have unified "scroll" action
         private bool scrollEnabled = false;
@@ -178,6 +212,12 @@ namespace XboxGamingBarHelper.Labs
         private SafeFileHandle hidHandle;
         private bool _hasWriteAccess = false;  // Track if we have write access for heartbeat
         private bool _highQualityGyroConfigured = false;
+        // Report-stream wake is sent ONCE per connection, not on the 3s keep-alive
+        // heartbeat (which also calls InitializeController). Re-poking the 04/03 + 02/01
+        // report-control commands every 3s dropped the input rate to ~42Hz and froze the
+        // pad after brief movement - field-confirmed 2026-07-22. Reset with the other
+        // per-connection flags on disconnect.
+        private bool _reportStreamWoken = false;
         private readonly object _hidLock = new object();  // Lock for HID operations to prevent race conditions
         private readonly object startStopLock = new object();  // #94: serialize Start/StartForBatteryMonitoring (see Start)
         private Thread monitorThread;
@@ -1019,6 +1059,35 @@ namespace XboxGamingBarHelper.Labs
         }
 
         /// <summary>
+        /// Configures the LONG-PRESS action for a Legion L/R button (fires after
+        /// <see cref="LongPressThresholdMs"/> of continuous hold; see the field block
+        /// for the short-action deferral semantics and the firmware 5s-restart note).
+        /// </summary>
+        public void ConfigureButtonLongPress(string button, bool enabled, int action, string shortcutOrCommand)
+        {
+            bool isLegionL = button == "L";
+            var actionType = (LegionButtonAction)action;
+            string shortcutKeys = actionType == LegionButtonAction.RunCommand ? "" : (shortcutOrCommand ?? "");
+            string commandPath = actionType == LegionButtonAction.RunCommand ? (shortcutOrCommand ?? "") : "";
+
+            if (isLegionL)
+            {
+                legionLLongEnabled = enabled;
+                legionLLongActionType = actionType;
+                legionLLongShortcutKeys = shortcutKeys;
+                legionLLongCommandPath = commandPath;
+            }
+            else
+            {
+                legionRLongEnabled = enabled;
+                legionRLongActionType = actionType;
+                legionRLongShortcutKeys = shortcutKeys;
+                legionRLongCommandPath = commandPath;
+            }
+            Logger.Info($"LegionButtonMonitor: Legion {button} LONG-press configured - enabled={enabled}, action={actionType}");
+        }
+
+        /// <summary>
         /// Configure a scroll wheel action (Up, Down, or Click).
         /// </summary>
         /// <param name="direction">"Up", "Down", or "Click"</param>
@@ -1268,6 +1337,7 @@ namespace XboxGamingBarHelper.Labs
             }
             _hasWriteAccess = false;
             _highQualityGyroConfigured = false;
+            _reportStreamWoken = false;
 
             Logger.Info("LegionButtonMonitor: Stopped");
             }
@@ -1332,6 +1402,7 @@ namespace XboxGamingBarHelper.Labs
                             hidHandle = cachedHandle;
                             _hasWriteAccess = cachedWriteAccess;
                             _highQualityGyroConfigured = false;
+                            _reportStreamWoken = false;
                             Logger.Info($"LegionButtonMonitor: Cached device path worked! VID:{_detectedVid:X4} PID:{_detectedPid:X4}");
                             return true;
                         }
@@ -1433,6 +1504,7 @@ namespace XboxGamingBarHelper.Labs
                                                 hidHandle = handle;
                                                 _hasWriteAccess = hasWriteAccess;
                                                 _highQualityGyroConfigured = false;
+                                                _reportStreamWoken = false;
                                                 _detectedVid = attrs.VendorID;
                                                 _detectedPid = attrs.ProductID;
                                                 Logger.Info($"LegionButtonMonitor: Selected device #{candidateCount} - VID:{_detectedVid:X4} PID:{_detectedPid:X4} (write: {hasWriteAccess})");
@@ -2061,8 +2133,12 @@ namespace XboxGamingBarHelper.Labs
                     return true;
                 }
 
+                // Keep-alive handshake (also the initial init). The controller drops back to the
+                // uninitialized report format after ~5s without this, so InitializeController is
+                // called every 3s. On newer firmware this handshake also leaves the pad in
+                // vendor-exclusive mode (XInput dead) until the coexistence registers below clear it.
                 byte[] initCommandPrefix = { 0x05, 0x00, 0x01, 0x04 };
-                if (!SendOutputReport(handle, initCommandPrefix, "init command"))
+                if (!SendOutputReport(handle, initCommandPrefix, "init/keep-alive command"))
                 {
                     return false;
                 }
@@ -2081,12 +2157,82 @@ namespace XboxGamingBarHelper.Labs
                     }
                 }
 
+                // ONCE per connection, and LAST so it is the final word: write the XInput+vendor
+                // coexistence registers (04/0f=01 XInput on, 04/11=02 init report format, 04/10=01
+                // gyro reporting). These are latched and persist across the recurring handshake, so
+                // one write per connect keeps the physical pad's XInput endpoint alive while the
+                // button monitor reads the vendor stream. Reverse-engineered + confirmed 2026-07-22.
+                if (!_reportStreamWoken)
+                {
+                    ReplayLegionSpaceInit(handle);
+                    _reportStreamWoken = true;
+                }
+
                 return true;
             }
             catch (Exception ex)
             {
                 Logger.Error($"LegionButtonMonitor: Exception sending initialization command: {ex.Message}");
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Replays the controller "wake / enable report stream" commands captured from
+        /// Legion Space's USB traffic (legion_space_enable_pad_question.pcapng, 2026-07-22).
+        /// After a firmware update, poking the 0x6A IMU report-mode sub-command can leave
+        /// the gamepad report stream stopped - the pad stays enumerated but silent, and
+        /// only launching Legion Space revived it. This sends exactly what Legion Space's
+        /// enable sequence begins with, so GoTweaks itself restores the stream on connect.
+        /// Wire format matches SendOutputReport (report id 0x05 first byte).
+        /// </summary>
+        // Controller feature-mode registers, reverse-engineered from Legion Space's USB
+        // traffic and confirmed on-hardware 2026-07-22. Each is a latched register on the
+        // 0xFFA0 vendor interface (value 0x02 = on, 0x01 = off) that STICKS until re-set or
+        // the controller re-enumerates:
+        //   04 0f 00 [v] : XInput output.  0x02 = vendor-EXCLUSIVE (XInput dead - the bug!),
+        //                  0x01 = XInput ON alongside the vendor stream.  <-- the fix.
+        //   04 11 00 [v] : report format.  0x02 = initialized 04:00:A1 (what we read for
+        //                  battery/buttons/gyro), 0x01 = uninitialized 04:3c:74.
+        //   04 10 [ctrl] [v] : gyro HID reporting per half. 0x01 = ON, 0x02 = OFF.
+        // Post-firmware-update, GoTweaks' bare init (01 04 + 6A) left 04 0f at 0x02, so the pad
+        // enumerated but fed no XInput ("shows in gamepad-tester, no inputs; killing GoTweaks or
+        // launching Legion Space revived it"). Writing these three registers establishes the
+        // coexistence Legion Space uses. Full diagnosis + the 35-command Legion Space replay it
+        // replaced are in memory (controller-report-stream-wake).
+        private static readonly byte[][] XInputCoexistenceRegisters =
+        {
+            new byte[] { 0x05, 0x00, 0x04, 0x11, 0x00, 0x02 },              // report format = initialized 04:00:A1
+            new byte[] { 0x05, 0x00, 0x04, 0x0F, 0x00, 0x01 },              // XInput output ON (the fix)
+            new byte[] { 0x05, 0x00, 0x04, 0x10, LEGION_CONTROLLER_LEFT_ID,  0x01 }, // gyro HID reporting ON, left
+            new byte[] { 0x05, 0x00, 0x04, 0x10, LEGION_CONTROLLER_RIGHT_ID, 0x01 }, // gyro HID reporting ON, right
+        };
+
+        /// <summary>
+        /// Writes the XInput+vendor coexistence registers (see field above). Sent once per
+        /// connect AFTER the init/handshake and HQ-IMU config so it is the final word - the
+        /// 0x04/0x0f=0x01 write is what keeps the physical pad's XInput endpoint alive while
+        /// GoTweaks reads the vendor report stream.
+        /// </summary>
+        private void ReplayLegionSpaceInit(SafeFileHandle handle)
+        {
+            if (handle == null || handle.IsInvalid || !_hasWriteAccess)
+            {
+                return;
+            }
+            try
+            {
+                int ok = 0;
+                foreach (byte[] cmd in XInputCoexistenceRegisters)
+                {
+                    if (SendOutputReport(handle, cmd, "xinput-coexist")) ok++;
+                    System.Threading.Thread.Sleep(20);
+                }
+                Logger.Info($"LegionButtonMonitor: Wrote XInput coexistence registers ({ok}/{XInputCoexistenceRegisters.Length}) - keeps the physical pad's XInput alive alongside the vendor stream");
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"LegionButtonMonitor: XInput coexistence write failed: {ex.Message}");
             }
         }
 
@@ -2192,17 +2338,17 @@ namespace XboxGamingBarHelper.Labs
 
         private void DisableHighQualityGyroReports(SafeFileHandle handle)
         {
-            if (handle == null || handle.IsInvalid || !_hasWriteAccess || !IsTabletControllerDevice())
-            {
-                return;
-            }
-
-            byte[] leftDisableHighQuality = { 0x05, 0x06, 0x6A, 0x07, LEGION_CONTROLLER_LEFT_ID, 0x01, 0x01 };
-            byte[] rightDisableHighQuality = { 0x05, 0x06, 0x6A, 0x07, LEGION_CONTROLLER_RIGHT_ID, 0x01, 0x01 };
-
-            SendOutputReport(handle, leftDisableHighQuality, "left gyro high-quality disable");
-            SendOutputReport(handle, rightDisableHighQuality, "right gyro high-quality disable");
+            // DISABLED on teardown (2026-07-22): this 0x6A/0x07 = 0x01 write ran right
+            // before closing the HID handle on every GoTweaks shutdown/disconnect. On
+            // controller firmware after a recent Legion Space update, poking this IMU
+            // report-mode sub-command halts the gamepad report stream and the pad does
+            // NOT recover on its own - "restart GoTweaks and the controller stops
+            // emitting inputs" (field report; only relaunching Legion Space revived it).
+            // Leaving high-quality IMU enabled at exit is harmless (Legion Space itself
+            // runs with it on), so we simply no longer send this. The stream is now
+            // (re)woken on connect via WakeControllerReportStream instead.
             _highQualityGyroConfigured = false;
+            _reportStreamWoken = false;
         }
 
         /// <summary>
@@ -2509,6 +2655,7 @@ namespace XboxGamingBarHelper.Labs
                 }
                 _hasWriteAccess = false;
                 _highQualityGyroConfigured = false;
+                _reportStreamWoken = false;
 
                 // Try to find and open the controller again
                 if (!OpenLegionController())
@@ -2704,6 +2851,7 @@ namespace XboxGamingBarHelper.Labs
                                     hidHandle = null;
                                     _hasWriteAccess = false;
                                     _highQualityGyroConfigured = false;
+                                    _reportStreamWoken = false;
                                     consecutiveReadTimeouts = 0;
                                 }
                                 continue;
@@ -2745,6 +2893,7 @@ namespace XboxGamingBarHelper.Labs
                                 hidHandle = null;
                                 _hasWriteAccess = false;
                                 _highQualityGyroConfigured = false;
+                                _reportStreamWoken = false;
                                 consecutiveFailures = 0;
                             }
                             continue;
@@ -2958,8 +3107,8 @@ namespace XboxGamingBarHelper.Labs
                                     legionRRawPressed = (gosButtonByte & GOS_LEGION_R_BIT) != 0;
                                 }
 
-                                // Process Legion L button if configured
-                                if (legionLEnabled)
+                                // Process Legion L button if configured (short OR long action)
+                                if (legionLEnabled || legionLLongEnabled)
                                 {
                                     if (TryCommitDebouncedButtonState(
                                         legionLRawPressed,
@@ -2970,8 +3119,7 @@ namespace XboxGamingBarHelper.Labs
                                     {
                                         try
                                         {
-                                            ProcessButtonAction("Legion L", legionLPressed, legionLActionType,
-                                                legionLShortcutKeys, legionLCommandPath);
+                                            HandleLegionButtonEdgeWithLongPress(true, legionLPressed);
                                         }
                                         catch (Exception btnEx)
                                         {
@@ -2980,8 +3128,8 @@ namespace XboxGamingBarHelper.Labs
                                     }
                                 }
 
-                                // Process Legion R button if configured
-                                if (legionREnabled)
+                                // Process Legion R button if configured (short OR long action)
+                                if (legionREnabled || legionRLongEnabled)
                                 {
                                     if (TryCommitDebouncedButtonState(
                                         legionRRawPressed,
@@ -2992,8 +3140,7 @@ namespace XboxGamingBarHelper.Labs
                                     {
                                         try
                                         {
-                                            ProcessButtonAction("Legion R", legionRPressed, legionRActionType,
-                                                legionRShortcutKeys, legionRCommandPath);
+                                            HandleLegionButtonEdgeWithLongPress(false, legionRPressed);
                                         }
                                         catch (Exception btnEx)
                                         {
@@ -3001,6 +3148,10 @@ namespace XboxGamingBarHelper.Labs
                                         }
                                     }
                                 }
+
+                                // Long-press thresholds are time-driven, not edge-driven -
+                                // check every report tick (~130Hz stream).
+                                CheckLegionLongPressTimeouts();
                             }
                         }
                     }
@@ -3781,6 +3932,88 @@ namespace XboxGamingBarHelper.Labs
         /// <summary>
         /// Process button press/release and execute the configured action.
         /// </summary>
+        /// <summary>
+        /// Legion L/R edge handler with long-press support. Without a long action the
+        /// short action fires on the press edge exactly as before (preserving Xbox
+        /// Guide hold-while-held semantics). With a long action configured, the short
+        /// action is deferred: release before the threshold = tap (press+release
+        /// burst), hold past the threshold = long action once, release swallowed.
+        /// </summary>
+        private void HandleLegionButtonEdgeWithLongPress(bool isLegionL, bool pressed)
+        {
+            bool longEnabled = isLegionL ? legionLLongEnabled : legionRLongEnabled;
+            bool shortEnabled = isLegionL ? legionLEnabled : legionREnabled;
+            string name = isLegionL ? "Legion L" : "Legion R";
+
+            if (!longEnabled)
+            {
+                if (shortEnabled)
+                {
+                    if (isLegionL) ProcessButtonAction(name, pressed, legionLActionType, legionLShortcutKeys, legionLCommandPath);
+                    else ProcessButtonAction(name, pressed, legionRActionType, legionRShortcutKeys, legionRCommandPath);
+                }
+                return;
+            }
+
+            if (pressed)
+            {
+                if (isLegionL) { legionLHeld = true; legionLPressStartUtc = DateTime.UtcNow; legionLLongFired = false; }
+                else { legionRHeld = true; legionRPressStartUtc = DateTime.UtcNow; legionRLongFired = false; }
+                return; // action deferred until release or threshold
+            }
+
+            bool longFired = isLegionL ? legionLLongFired : legionRLongFired;
+            if (isLegionL) legionLHeld = false; else legionRHeld = false;
+            if (longFired)
+            {
+                return; // hold was consumed by the long action
+            }
+
+            if (shortEnabled)
+            {
+                // Tap: replay the short action as an immediate press+release burst.
+                if (isLegionL)
+                {
+                    ProcessButtonAction(name, true, legionLActionType, legionLShortcutKeys, legionLCommandPath);
+                    ProcessButtonAction(name, false, legionLActionType, legionLShortcutKeys, legionLCommandPath);
+                }
+                else
+                {
+                    ProcessButtonAction(name, true, legionRActionType, legionRShortcutKeys, legionRCommandPath);
+                    ProcessButtonAction(name, false, legionRActionType, legionRShortcutKeys, legionRCommandPath);
+                }
+            }
+        }
+
+        private void CheckLegionLongPressTimeouts()
+        {
+            var now = DateTime.UtcNow;
+            if (legionLHeld && legionLLongEnabled && !legionLLongFired &&
+                (now - legionLPressStartUtc).TotalMilliseconds >= LongPressThresholdMs)
+            {
+                legionLLongFired = true;
+                Logger.Info("LegionButtonMonitor: Legion L LONG press fired");
+                try
+                {
+                    ProcessButtonAction("Legion L (long)", true, legionLLongActionType, legionLLongShortcutKeys, legionLLongCommandPath);
+                    ProcessButtonAction("Legion L (long)", false, legionLLongActionType, legionLLongShortcutKeys, legionLLongCommandPath);
+                }
+                catch (Exception ex) { Logger.Error($"Legion L long-press action exception: {ex.Message}"); }
+            }
+            if (legionRHeld && legionRLongEnabled && !legionRLongFired &&
+                (now - legionRPressStartUtc).TotalMilliseconds >= LongPressThresholdMs)
+            {
+                legionRLongFired = true;
+                Logger.Info("LegionButtonMonitor: Legion R LONG press fired");
+                try
+                {
+                    ProcessButtonAction("Legion R (long)", true, legionRLongActionType, legionRLongShortcutKeys, legionRLongCommandPath);
+                    ProcessButtonAction("Legion R (long)", false, legionRLongActionType, legionRLongShortcutKeys, legionRLongCommandPath);
+                }
+                catch (Exception ex) { Logger.Error($"Legion R long-press action exception: {ex.Message}"); }
+            }
+        }
+
         private void ProcessButtonAction(string buttonName, bool pressed, LegionButtonAction actionType,
             string shortcutKeys, string commandPath)
         {
@@ -3869,6 +4102,28 @@ namespace XboxGamingBarHelper.Labs
                         catch (Exception ex)
                         {
                             Logger.Error($"LegionButtonMonitor: FocusGoTweaks trigger exception: {ex.Message}");
+                        }
+                        break;
+                    case LegionButtonAction.ToggleDesktopControls:
+                        try
+                        {
+                            OnToggleDesktopControlsRequested?.Invoke();
+                            Logger.Info($"LegionButtonMonitor: {buttonName} pressed -> Toggle Desktop Controls");
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Error($"LegionButtonMonitor: ToggleDesktopControls exception: {ex.Message}");
+                        }
+                        break;
+                    case LegionButtonAction.TouchKeyboard:
+                        try
+                        {
+                            OnTouchKeyboardRequested?.Invoke();
+                            Logger.Info($"LegionButtonMonitor: {buttonName} pressed -> Touch Keyboard");
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Error($"LegionButtonMonitor: TouchKeyboard exception: {ex.Message}");
                         }
                         break;
                 }
