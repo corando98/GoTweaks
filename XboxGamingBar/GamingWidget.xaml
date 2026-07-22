@@ -7034,7 +7034,19 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0">
-                                        <TextBlock Text="Lighting" Style="{StaticResource CardTitleStyle}"/>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="Lighting" Style="{StaticResource CardTitleStyle}"/>
+                                            <!-- Shown while a reactive effect is active so the header explains
+                                                 why the sticks may not match the configured static mode. -->
+                                            <Border x:Name="LightingReactiveBadge"
+                                                    Visibility="Collapsed"
+                                                    Background="#2A4A66" CornerRadius="4"
+                                                    Padding="6,1,6,2" Margin="8,2,0,0"
+                                                    VerticalAlignment="Center"
+                                                    ToolTipService.ToolTip="A reactive lighting effect is enabled and is driving the stick RGB. It runs even while Light Mode is Off - set Reactive Effect to Off to stop it.">
+                                                <TextBlock x:Name="LightingReactiveBadgeText" Text="Reactive" FontSize="11" Foreground="#9ED2FF"/>
+                                            </Border>
+                                        </StackPanel>
                                         <TextBlock Text="Controller RGB and power button lighting"
                                                    Style="{StaticResource CardCaptionStyle}"/>
                                     </StackPanel>
@@ -7895,6 +7907,8 @@
                                             <ComboBoxItem Content="Keyboard Shortcut"/>
                                             <ComboBoxItem Content="Run Command"/>
                                             <ComboBoxItem Content="Focus GoTweaks"/>
+                                            <ComboBoxItem Content="Desktop Controls"/>
+                                            <ComboBoxItem Content="Touch Keyboard"/>
                                         </ComboBox>
                                     </Grid>
 
@@ -7929,6 +7943,55 @@
                                                 Margin="8,0,0,0"
                                                 Click="LegionLCommandApplyButton_Click"/>
                                     </Grid><TextBlock x:Name="LegionLRemapStatusText" FontSize="11" Foreground="#FFC864" TextWrapping="Wrap" HorizontalAlignment="Right" Margin="0,4,0,0"/>
+                                    <!-- Legion L LONG-press Row: separate action fired after holding
+                                         ~0.8s. Short press then fires on RELEASE instead of press. -->
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="115"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Legion L (hold):" Grid.Column="0"
+                                                   VerticalAlignment="Center" FontSize="13" Foreground="#C8C8C8"/>
+                                        <ComboBox x:Name="LegionLLongActionComboBox" MaxWidth="200" HorizontalAlignment="Right"
+                                                  Grid.Column="1"
+                                                  Style="{StaticResource ModernComboBoxStyle}">
+                                            <ComboBoxItem Content="Disabled" IsSelected="True"/>
+                                            <ComboBoxItem Content="Guide"/>
+                                            <ComboBoxItem Content="Keyboard Shortcut"/>
+                                            <ComboBoxItem Content="Run Command"/>
+                                            <ComboBoxItem Content="Focus GoTweaks"/>
+                                            <ComboBoxItem Content="Desktop Controls"/>
+                                            <ComboBoxItem Content="Touch Keyboard"/>
+                                        </ComboBox>
+                                    </Grid>
+                                    <StackPanel x:Name="LegionLLongShortcutPanel" Margin="0,8,0,0" HorizontalAlignment="Right" Visibility="Collapsed" Orientation="Horizontal">
+                                        <ItemsControl x:Name="LegionLLongKeyTags">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Orientation="Horizontal"/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                        </ItemsControl>
+                                        <ComboBox x:Name="LegionLLongKeyComboBox" MaxWidth="200" HorizontalAlignment="Right" Width="90" Style="{StaticResource ModernComboBoxStyle}"
+                                                  SelectedIndex="0" SelectionChanged="LegionLLongKeyComboBox_SelectionChanged">
+                                            <x:String>+ Key</x:String><x:String>A</x:String><x:String>B</x:String><x:String>C</x:String><x:String>D</x:String><x:String>E</x:String><x:String>F</x:String><x:String>G</x:String><x:String>H</x:String><x:String>I</x:String><x:String>J</x:String><x:String>K</x:String><x:String>L</x:String><x:String>M</x:String><x:String>N</x:String><x:String>O</x:String><x:String>P</x:String><x:String>Q</x:String><x:String>R</x:String><x:String>S</x:String><x:String>T</x:String><x:String>U</x:String><x:String>V</x:String><x:String>W</x:String><x:String>X</x:String><x:String>Y</x:String><x:String>Z</x:String><x:String>0</x:String><x:String>1</x:String><x:String>2</x:String><x:String>3</x:String><x:String>4</x:String><x:String>5</x:String><x:String>6</x:String><x:String>7</x:String><x:String>8</x:String><x:String>9</x:String><x:String>F1</x:String><x:String>F2</x:String><x:String>F3</x:String><x:String>F4</x:String><x:String>F5</x:String><x:String>F6</x:String><x:String>F7</x:String><x:String>F8</x:String><x:String>F9</x:String><x:String>F10</x:String><x:String>F11</x:String><x:String>F12</x:String><x:String>Enter</x:String><x:String>Esc</x:String><x:String>Space</x:String><x:String>Tab</x:String><x:String>Backspace</x:String><x:String>Up</x:String><x:String>Down</x:String><x:String>Left</x:String><x:String>Right</x:String><x:String>LCtrl</x:String><x:String>LShift</x:String><x:String>LAlt</x:String><x:String>LWin</x:String><x:String>RCtrl</x:String><x:String>RShift</x:String><x:String>RAlt</x:String><x:String>RWin</x:String><x:String>Home</x:String><x:String>End</x:String><x:String>PgUp</x:String><x:String>PgDn</x:String><x:String>Insert</x:String><x:String>Delete</x:String><x:String>PrintScr</x:String><x:String>Pause</x:String><x:String>VolUp</x:String><x:String>VolDown</x:String><x:String>VolMute</x:String><x:String>[</x:String><x:String>]</x:String>
+                                        </ComboBox>
+                                    </StackPanel>
+                                    <Grid x:Name="LegionLLongCommandGrid" Margin="115,8,0,0" Visibility="Collapsed">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="LegionLLongCommandTextBox"
+                                                 Grid.Column="0"
+                                                 PlaceholderText="e.g. C:\path\app.exe -arg1"/>
+                                        <Button x:Name="LegionLLongCommandApplyButton"
+                                                Grid.Column="1"
+                                                Content="Apply"
+                                                Style="{StaticResource ModernButtonStyle}"
+                                                Margin="8,0,0,0"
+                                                Click="LegionLLongCommandApplyButton_Click"/>
+                                    </Grid>
 
                                     <!-- Legion R Row -->
                                     <Grid Margin="0,12,0,0">
@@ -7948,6 +8011,8 @@
                                             <ComboBoxItem Content="Keyboard Shortcut"/>
                                             <ComboBoxItem Content="Run Command"/>
                                             <ComboBoxItem Content="Focus GoTweaks"/>
+                                            <ComboBoxItem Content="Desktop Controls"/>
+                                            <ComboBoxItem Content="Touch Keyboard"/>
                                         </ComboBox>
                                     </Grid>
 
@@ -7982,6 +8047,58 @@
                                                 Margin="8,0,0,0"
                                                 Click="LegionRCommandApplyButton_Click"/>
                                     </Grid><TextBlock x:Name="LegionRRemapStatusText" FontSize="11" Foreground="#FFC864" TextWrapping="Wrap" HorizontalAlignment="Right" Margin="0,4,0,0"/>
+                                    <!-- Legion R LONG-press Row: separate action fired after holding
+                                         ~0.8s. Short press then fires on RELEASE instead of press. -->
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="115"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Legion R (hold):" Grid.Column="0"
+                                                   VerticalAlignment="Center" FontSize="13" Foreground="#C8C8C8"/>
+                                        <ComboBox x:Name="LegionRLongActionComboBox" MaxWidth="200" HorizontalAlignment="Right"
+                                                  Grid.Column="1"
+                                                  Style="{StaticResource ModernComboBoxStyle}">
+                                            <ComboBoxItem Content="Disabled" IsSelected="True"/>
+                                            <ComboBoxItem Content="Guide"/>
+                                            <ComboBoxItem Content="Keyboard Shortcut"/>
+                                            <ComboBoxItem Content="Run Command"/>
+                                            <ComboBoxItem Content="Focus GoTweaks"/>
+                                            <ComboBoxItem Content="Desktop Controls"/>
+                                            <ComboBoxItem Content="Touch Keyboard"/>
+                                        </ComboBox>
+                                    </Grid>
+                                    <StackPanel x:Name="LegionRLongShortcutPanel" Margin="0,8,0,0" HorizontalAlignment="Right" Visibility="Collapsed" Orientation="Horizontal">
+                                        <ItemsControl x:Name="LegionRLongKeyTags">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Orientation="Horizontal"/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                        </ItemsControl>
+                                        <ComboBox x:Name="LegionRLongKeyComboBox" MaxWidth="200" HorizontalAlignment="Right" Width="90" Style="{StaticResource ModernComboBoxStyle}"
+                                                  SelectedIndex="0" SelectionChanged="LegionRLongKeyComboBox_SelectionChanged">
+                                            <x:String>+ Key</x:String><x:String>A</x:String><x:String>B</x:String><x:String>C</x:String><x:String>D</x:String><x:String>E</x:String><x:String>F</x:String><x:String>G</x:String><x:String>H</x:String><x:String>I</x:String><x:String>J</x:String><x:String>K</x:String><x:String>L</x:String><x:String>M</x:String><x:String>N</x:String><x:String>O</x:String><x:String>P</x:String><x:String>Q</x:String><x:String>R</x:String><x:String>S</x:String><x:String>T</x:String><x:String>U</x:String><x:String>V</x:String><x:String>W</x:String><x:String>X</x:String><x:String>Y</x:String><x:String>Z</x:String><x:String>0</x:String><x:String>1</x:String><x:String>2</x:String><x:String>3</x:String><x:String>4</x:String><x:String>5</x:String><x:String>6</x:String><x:String>7</x:String><x:String>8</x:String><x:String>9</x:String><x:String>F1</x:String><x:String>F2</x:String><x:String>F3</x:String><x:String>F4</x:String><x:String>F5</x:String><x:String>F6</x:String><x:String>F7</x:String><x:String>F8</x:String><x:String>F9</x:String><x:String>F10</x:String><x:String>F11</x:String><x:String>F12</x:String><x:String>Enter</x:String><x:String>Esc</x:String><x:String>Space</x:String><x:String>Tab</x:String><x:String>Backspace</x:String><x:String>Up</x:String><x:String>Down</x:String><x:String>Left</x:String><x:String>Right</x:String><x:String>LCtrl</x:String><x:String>LShift</x:String><x:String>LAlt</x:String><x:String>LWin</x:String><x:String>RCtrl</x:String><x:String>RShift</x:String><x:String>RAlt</x:String><x:String>RWin</x:String><x:String>Home</x:String><x:String>End</x:String><x:String>PgUp</x:String><x:String>PgDn</x:String><x:String>Insert</x:String><x:String>Delete</x:String><x:String>PrintScr</x:String><x:String>Pause</x:String><x:String>VolUp</x:String><x:String>VolDown</x:String><x:String>VolMute</x:String><x:String>[</x:String><x:String>]</x:String>
+                                        </ComboBox>
+                                    </StackPanel>
+                                    <Grid x:Name="LegionRLongCommandGrid" Margin="115,8,0,0" Visibility="Collapsed">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="LegionRLongCommandTextBox"
+                                                 Grid.Column="0"
+                                                 PlaceholderText="e.g. C:\path\app.exe -arg1"/>
+                                        <Button x:Name="LegionRLongCommandApplyButton"
+                                                Grid.Column="1"
+                                                Content="Apply"
+                                                Style="{StaticResource ModernButtonStyle}"
+                                                Margin="8,0,0,0"
+                                                Click="LegionRLongCommandApplyButton_Click"/>
+                                    </Grid>
+
+                                    <TextBlock Text="Note: holding Legion L/R for 5 seconds restarts the controller (firmware behavior - release well before that). The hold action here fires at ~0.8s."
+                                               FontSize="11" Foreground="#909090" TextWrapping="Wrap" Margin="0,10,0,0"/>
 
                                     <!-- Status Text for Legion buttons -->
                                     <TextBlock x:Name="LegionRemapStatusText"

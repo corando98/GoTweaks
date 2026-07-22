@@ -268,6 +268,37 @@ namespace XboxGamingBar
             ApplyLegionButtonConfig(false);
         }
 
+        // Long-press variants of the Legion L/R key pickers.
+        private void LegionLLongKeyComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            var combo = FindName("LegionLLongKeyComboBox") as ComboBox;
+            if (combo?.SelectedIndex <= 0) return;
+            int keyCode = GetKeyCodeFromDropdownIndex(combo.SelectedIndex);
+            AddKeyToSelection("LegionLLong", keyCode, FindName("LegionLLongKeyTags") as ItemsControl, combo, SaveLegionLLongKeys);
+        }
+
+        private void LegionRLongKeyComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            var combo = FindName("LegionRLongKeyComboBox") as ComboBox;
+            if (combo?.SelectedIndex <= 0) return;
+            int keyCode = GetKeyCodeFromDropdownIndex(combo.SelectedIndex);
+            AddKeyToSelection("LegionRLong", keyCode, FindName("LegionRLongKeyTags") as ItemsControl, combo, SaveLegionRLongKeys);
+        }
+
+        private void SaveLegionLLongKeys()
+        {
+            ApplicationData.Current.LocalSettings.Values["LegionL_LongShortcut"] = GetKeysAsString("LegionLLong");
+            SaveLegionRemapSettings();
+            ApplyLegionButtonLongConfig(true);
+        }
+
+        private void SaveLegionRLongKeys()
+        {
+            ApplicationData.Current.LocalSettings.Values["LegionR_LongShortcut"] = GetKeysAsString("LegionRLong");
+            SaveLegionRemapSettings();
+            ApplyLegionButtonLongConfig(false);
+        }
+
         // Scroll wheel key selection handlers
         private void ScrollKeyComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {

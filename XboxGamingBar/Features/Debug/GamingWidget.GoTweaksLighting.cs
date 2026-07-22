@@ -150,6 +150,13 @@ namespace XboxGamingBar
             {
                 GoTweaksPaletteCard.Visibility = (mode == "cycle") ? Visibility.Visible : Visibility.Collapsed;
             }
+            // Lighting-card header badge (with tooltip): visible whenever a reactive
+            // effect is active, so the collapsed card still signals that something is
+            // driving the stick RGB.
+            if (LightingReactiveBadge != null)
+            {
+                LightingReactiveBadge.Visibility = (mode != "disabled") ? Visibility.Visible : Visibility.Collapsed;
+            }
             if (GoTweaksReactiveDecayValue != null && GoTweaksReactiveDecaySlider != null)
             {
                 GoTweaksReactiveDecayValue.Text = $"{(int)GoTweaksReactiveDecaySlider.Value} ms";

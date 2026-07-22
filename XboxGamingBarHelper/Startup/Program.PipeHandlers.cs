@@ -916,10 +916,23 @@ namespace XboxGamingBarHelper
                     if (request.Extra.TryGetValue("Shortcut", out object shortcutObj))
                         shortcut = shortcutObj?.ToString() ?? "";
 
-                    bool success = ConfigureLegionButtonRemap(button, enabled, actionType, shortcut);
+                    // Long=true configures the LONG-PRESS binding for the button (fires
+                    // after ~0.8s hold; short action then defers to release).
+                    bool isLongPress = request.Extra.TryGetValue("Long", out object longObj) && Convert.ToBoolean(longObj);
+
+                    bool success;
+                    if (isLongPress)
+                    {
+                        legionButtonMonitor?.ConfigureButtonLongPress(button, enabled, actionType, shortcut);
+                        success = legionButtonMonitor != null;
+                    }
+                    else
+                    {
+                        success = ConfigureLegionButtonRemap(button, enabled, actionType, shortcut);
+                    }
                     response = new global::Windows.Foundation.Collections.ValueSet();
                     response.Add("Success", success);
-                    Logger.Info($"Pipe: Legion {button} Remap - Enabled: {enabled}, Success: {success}");
+                    Logger.Info($"Pipe: Legion {button} {(isLongPress ? "LONG " : "")}Remap - Enabled: {enabled}, Success: {success}");
                 }
                 // Labs: Scroll Wheel Remap
                 else if (functionValue == (int)Function.Labs_LegionScrollRemap)

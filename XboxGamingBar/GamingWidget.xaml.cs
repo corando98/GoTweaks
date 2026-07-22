@@ -2792,6 +2792,7 @@ namespace XboxGamingBar
                 LegionButtonDesktopKeyComboBox, LegionButtonPageKeyComboBox,
                 LegionGamepadKeyComboBox,
                 LegionLKeyComboBox, LegionRKeyComboBox,
+                FindName("LegionLLongKeyComboBox") as ComboBox, FindName("LegionRLongKeyComboBox") as ComboBox,
                 ScrollKeyComboBox, ScrollClickKeyComboBox,
                 CustomShortcutKeyComboBox,
                 HotkeyMenuAKeyComboBox, HotkeyMenuBKeyComboBox,

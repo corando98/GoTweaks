@@ -54,6 +54,10 @@ namespace XboxGamingBar
             // Wire up Legion button remap event handlers (done in code to avoid XAML init issues)
             if (LegionLActionComboBox != null)
                 LegionLActionComboBox.SelectionChanged += LegionLActionComboBox_SelectionChanged;
+            if (LegionLLongActionComboBox != null)
+                LegionLLongActionComboBox.SelectionChanged += (s2, e2) => LegionLongActionComboBox_SelectionChanged(true);
+            if (LegionRLongActionComboBox != null)
+                LegionRLongActionComboBox.SelectionChanged += (s2, e2) => LegionLongActionComboBox_SelectionChanged(false);
             if (LegionRActionComboBox != null)
                 LegionRActionComboBox.SelectionChanged += LegionRActionComboBox_SelectionChanged;
 
@@ -461,6 +465,14 @@ namespace XboxGamingBar
                 settings.Values["LegionR_Shortcut"] = rShortcut;
                 settings.Values["LegionR_Command"] = rCommand;
 
+                // Long-press variants (helper stores 1-based action: combo index used directly)
+                settings.Values["LegionL_LongAction"] = LegionLLongActionComboBox?.SelectedIndex ?? 0;
+                settings.Values["LegionL_LongShortcut"] = GetKeysAsString("LegionLLong");
+                settings.Values["LegionL_LongCommand"] = (FindName("LegionLLongCommandTextBox") as TextBox)?.Text ?? "";
+                settings.Values["LegionR_LongAction"] = LegionRLongActionComboBox?.SelectedIndex ?? 0;
+                settings.Values["LegionR_LongShortcut"] = GetKeysAsString("LegionRLong");
+                settings.Values["LegionR_LongCommand"] = (FindName("LegionRLongCommandTextBox") as TextBox)?.Text ?? "";
+
                 // Also save to JSON fallback file for elevated helper
                 SaveToFallbackSettingsFile(new Dictionary<string, object>
                 {
@@ -489,7 +501,7 @@ namespace XboxGamingBar
                 // Load Legion L settings
                 if (settings.Values.TryGetValue("LegionL_Action", out var lAction) && lAction is int lActionInt)
                 {
-                    if (LegionLActionComboBox != null && lActionInt >= 0 && lActionInt <= 4)
+                    if (LegionLActionComboBox != null && lActionInt >= 0 && lActionInt <= 6)
                         LegionLActionComboBox.SelectedIndex = lActionInt;
                 }
                 if (settings.Values.TryGetValue("LegionL_Shortcut", out var lShortcut) && lShortcut is string lShortcutStr)
@@ -505,7 +517,7 @@ namespace XboxGamingBar
                 // Load Legion R settings
                 if (settings.Values.TryGetValue("LegionR_Action", out var rAction) && rAction is int rActionInt)
                 {
-                    if (LegionRActionComboBox != null && rActionInt >= 0 && rActionInt <= 4)
+                    if (LegionRActionComboBox != null && rActionInt >= 0 && rActionInt <= 6)
                         LegionRActionComboBox.SelectedIndex = rActionInt;
                 }
                 if (settings.Values.TryGetValue("LegionR_Shortcut", out var rShortcut) && rShortcut is string rShortcutStr)
@@ -517,6 +529,33 @@ namespace XboxGamingBar
                     if (LegionRCommandTextBox != null)
                         LegionRCommandTextBox.Text = rCommandStr;
                 }
+
+                // Long-press variants
+                if (settings.Values.TryGetValue("LegionL_LongAction", out var lLongA) && lLongA is int lLongAi &&
+                    LegionLLongActionComboBox != null && lLongAi >= 0 && lLongAi <= 6)
+                    LegionLLongActionComboBox.SelectedIndex = lLongAi;
+                if (settings.Values.TryGetValue("LegionL_LongShortcut", out var lLongS) && lLongS is string lLongSs)
+                    LoadKeysFromString("LegionLLong", lLongSs, FindName("LegionLLongKeyTags") as ItemsControl);
+                if (settings.Values.TryGetValue("LegionL_LongCommand", out var lLongC) && lLongC is string lLongCs &&
+                    FindName("LegionLLongCommandTextBox") is TextBox lLongTb)
+                    lLongTb.Text = lLongCs;
+                if (settings.Values.TryGetValue("LegionR_LongAction", out var rLongA) && rLongA is int rLongAi &&
+                    LegionRLongActionComboBox != null && rLongAi >= 0 && rLongAi <= 6)
+                    LegionRLongActionComboBox.SelectedIndex = rLongAi;
+                if (settings.Values.TryGetValue("LegionR_LongShortcut", out var rLongS) && rLongS is string rLongSs)
+                    LoadKeysFromString("LegionRLong", rLongSs, FindName("LegionRLongKeyTags") as ItemsControl);
+                if (settings.Values.TryGetValue("LegionR_LongCommand", out var rLongC) && rLongC is string rLongCs &&
+                    FindName("LegionRLongCommandTextBox") is TextBox rLongTb)
+                    rLongTb.Text = rLongCs;
+
+                if (FindName("LegionLLongShortcutPanel") is StackPanel lLongPanel)
+                    lLongPanel.Visibility = (LegionLLongActionComboBox?.SelectedIndex ?? 0) == 2 ? Visibility.Visible : Visibility.Collapsed;
+                if (FindName("LegionLLongCommandGrid") is Grid lLongGrid)
+                    lLongGrid.Visibility = (LegionLLongActionComboBox?.SelectedIndex ?? 0) == 3 ? Visibility.Visible : Visibility.Collapsed;
+                if (FindName("LegionRLongShortcutPanel") is StackPanel rLongPanel)
+                    rLongPanel.Visibility = (LegionRLongActionComboBox?.SelectedIndex ?? 0) == 2 ? Visibility.Visible : Visibility.Collapsed;
+                if (FindName("LegionRLongCommandGrid") is Grid rLongGrid)
+                    rLongGrid.Visibility = (LegionRLongActionComboBox?.SelectedIndex ?? 0) == 3 ? Visibility.Visible : Visibility.Collapsed;
 
                 // Update description and show/hide input grids based on loaded settings
                 UpdateLegionRemapDescription();
@@ -559,6 +598,89 @@ namespace XboxGamingBar
             await Task.Delay(100);
 
             ApplyLegionButtonConfig(false);
+
+            await Task.Delay(100);
+            ApplyLegionButtonLongConfig(true);
+            await Task.Delay(100);
+            ApplyLegionButtonLongConfig(false);
+        }
+
+        private void LegionLongActionComboBox_SelectionChanged(bool isLegionL)
+        {
+            if (!labsSectionInitialized) return;
+
+            var combo = isLegionL ? LegionLLongActionComboBox : LegionRLongActionComboBox;
+            int selection = combo?.SelectedIndex ?? 0;
+            var shortcutPanel = FindName(isLegionL ? "LegionLLongShortcutPanel" : "LegionRLongShortcutPanel") as StackPanel;
+            var commandGrid = FindName(isLegionL ? "LegionLLongCommandGrid" : "LegionRLongCommandGrid") as Grid;
+            if (shortcutPanel != null)
+                shortcutPanel.Visibility = selection == 2 ? Visibility.Visible : Visibility.Collapsed;
+            if (commandGrid != null)
+                commandGrid.Visibility = selection == 3 ? Visibility.Visible : Visibility.Collapsed;
+
+            SaveLegionRemapSettings();
+            if (selection != 2 && selection != 3)
+                ApplyLegionButtonLongConfig(isLegionL);
+        }
+
+        /// <summary>
+        /// Sends the LONG-press binding for a Legion button to the helper. Same message
+        /// shape as ApplyLegionButtonConfig with Long=true; the helper defers the short
+        /// action to release and fires this one after ~0.8s of hold (well before the
+        /// firmware's 5-second hold, which restarts the controller).
+        /// </summary>
+        private async void ApplyLegionButtonLongConfig(bool isLegionL)
+        {
+            if (!App.IsConnected) return;
+
+            try
+            {
+                var actionComboBox = isLegionL ? LegionLLongActionComboBox : LegionRLongActionComboBox;
+                var commandTextBox = FindName(isLegionL ? "LegionLLongCommandTextBox" : "LegionRLongCommandTextBox") as TextBox;
+                if (actionComboBox == null) return;
+
+                int selection = actionComboBox.SelectedIndex;
+                bool enabled = selection > 0;
+                int actionType = selection == 1 ? 0 : selection == 2 ? 1 : selection == 3 ? 2 : selection == 4 ? 3 : selection == 5 ? 4 : selection == 6 ? 5 : 0;
+
+                string shortcutOrCommand = "";
+                if (selection == 2)
+                {
+                    shortcutOrCommand = GetKeysAsString(isLegionL ? "LegionLLong" : "LegionRLong");
+                    if (string.IsNullOrEmpty(shortcutOrCommand)) return;   // keys not picked yet
+                }
+                else if (selection == 3)
+                {
+                    shortcutOrCommand = commandTextBox?.Text?.Trim() ?? "";
+                    if (string.IsNullOrEmpty(shortcutOrCommand)) return;
+                }
+
+                var request = new Windows.Foundation.Collections.ValueSet();
+                request.Add("Function", (int)Function.Labs_LegionButtonRemap);
+                request.Add("Button", isLegionL ? "L" : "R");
+                request.Add("Enabled", enabled);
+                request.Add("Action", actionType);
+                request.Add("Shortcut", shortcutOrCommand);
+                request.Add("Long", true);
+                await App.SendMessageAsync(request);
+                Logger.Info($"Legion {(isLegionL ? "L" : "R")} LONG remap sent: enabled={enabled}, action={actionType}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"ApplyLegionButtonLongConfig failed: {ex.Message}");
+            }
+        }
+
+        private void LegionLLongCommandApplyButton_Click(object sender, RoutedEventArgs e)
+        {
+            SaveLegionRemapSettings();
+            ApplyLegionButtonLongConfig(true);
+        }
+
+        private void LegionRLongCommandApplyButton_Click(object sender, RoutedEventArgs e)
+        {
+            SaveLegionRemapSettings();
+            ApplyLegionButtonLongConfig(false);
         }
 
         private async void ApplyLegionButtonConfig(bool isLegionL)
@@ -580,7 +702,7 @@ namespace XboxGamingBar
                 int selection = actionComboBox.SelectedIndex; // 0=Disabled, 1=Xbox Guide, 2=Shortcut, 3=Command, 4=Focus GoTweaks
                 bool enabled = selection != 0;
                 // Convert UI selection to helper action type: 0=Xbox Guide, 1=Shortcut, 2=Command, 3=Focus GoTweaks
-                int actionType = selection == 1 ? 0 : selection == 2 ? 1 : selection == 3 ? 2 : selection == 4 ? 3 : 0;
+                int actionType = selection == 1 ? 0 : selection == 2 ? 1 : selection == 3 ? 2 : selection == 4 ? 3 : selection == 5 ? 4 : selection == 6 ? 5 : 0;
 
                 string shortcutOrCommand = "";
                 if (selection == 2)

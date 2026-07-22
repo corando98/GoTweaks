@@ -763,6 +763,10 @@ namespace XboxGamingBarHelper
                 if (legionButtonMonitor == null)
                 {
                     legionButtonMonitor = new LegionButtonMonitor();
+                    // System-entry hooks for the Legion L/R action list (Desktop Controls
+                    // toggle + Touch Keyboard) - the monitor invokes these on press.
+                    LegionButtonMonitor.OnToggleDesktopControlsRequested = () => ToggleDesktopControls();
+                    LegionButtonMonitor.OnTouchKeyboardRequested = () => OpenOnScreenKeyboard();
                     Logger.Info("Labs: Created unified Legion button monitor with battery support");
                 }
 
@@ -931,6 +935,32 @@ namespace XboxGamingBarHelper
                 {
                     ConfigureLegionButtonRemap("R", false, 0, "");
                     Logger.Info("Labs: Legion R remap disabled (Action=0)");
+                }
+
+                // Long-press variants (same action indexing as the short bindings:
+                // stored 1=Xbox Guide, 2=Keyboard Shortcut, 3=Run Command,
+                // 4=Focus GoTweaks; 0/absent = no long action).
+                foreach (var side in new[] { "L", "R" })
+                {
+                    int longAction = 0;
+                    if (Settings.LocalSettingsHelper.TryGetValue<int>($"Legion{side}_LongAction", out var longActionVal))
+                        longAction = longActionVal;
+                    string longShortcut = "";
+                    string longCommand = "";
+                    if (Settings.LocalSettingsHelper.TryGetValue<string>($"Legion{side}_LongShortcut", out var lsv)) longShortcut = lsv;
+                    if (Settings.LocalSettingsHelper.TryGetValue<string>($"Legion{side}_LongCommand", out var lcv)) longCommand = lcv;
+
+                    if (longAction > 0)
+                    {
+                        int actionType = longAction - 1;
+                        string shortcutOrCommand = actionType == 1 ? longShortcut : (actionType == 2 ? longCommand : "");
+                        legionButtonMonitor?.ConfigureButtonLongPress(side, true, actionType, shortcutOrCommand);
+                        Logger.Info($"Labs: Loaded Legion {side} LONG-press remap - Action={longAction}");
+                    }
+                    else
+                    {
+                        legionButtonMonitor?.ConfigureButtonLongPress(side, false, 0, "");
+                    }
                 }
             }
             catch (Exception ex)
