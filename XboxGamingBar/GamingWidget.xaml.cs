@@ -907,6 +907,11 @@ namespace XboxGamingBar
         private readonly ControllerDockedRightProperty controllerDockedRight;
         private readonly LegionControllerInputModeProperty legionControllerInputMode;
         private readonly LegionMcuFirmwareVersionProperty legionMcuFirmwareVersion;
+        private readonly LegionRgbActiveProfileProperty legionRgbActiveProfile;
+        private readonly LegionGamepadModeSelectProperty legionGamepadModeSelect;
+        private readonly LegionOsReportingDisabledProperty legionOsReportingDisabled;
+        // Guards SelectionChanged/Toggled handlers while code updates the controls from sync.
+        private bool _legionFirmwareControlSyncing;
         private readonly ControllerVidPidProperty controllerVidPid;
         private readonly ControllerDeviceStatusProperty controllerDeviceStatus;
 
@@ -1605,6 +1610,9 @@ namespace XboxGamingBar
             controllerDockedRight = new ControllerDockedRightProperty();
             legionControllerInputMode = new LegionControllerInputModeProperty();
             legionMcuFirmwareVersion = new LegionMcuFirmwareVersionProperty();
+            legionRgbActiveProfile = new LegionRgbActiveProfileProperty();
+            legionGamepadModeSelect = new LegionGamepadModeSelectProperty();
+            legionOsReportingDisabled = new LegionOsReportingDisabledProperty();
             controllerVidPid = new ControllerVidPidProperty();
             controllerDeviceStatus = new ControllerDeviceStatusProperty();
 
@@ -2015,6 +2023,9 @@ namespace XboxGamingBar
                 controllerDockedRight,
                 legionControllerInputMode,
                 legionMcuFirmwareVersion,
+                legionRgbActiveProfile,
+                legionGamepadModeSelect,
+                legionOsReportingDisabled,
                 controllerVidPid,
                 controllerDeviceStatus,
                 // Device capability properties (for UI visibility)
@@ -2411,6 +2422,18 @@ namespace XboxGamingBar
                     });
                 };
             }
+            if (legionRgbActiveProfile != null)
+            {
+                legionRgbActiveProfile.PropertyChanged += (s2, e2) => UpdateLegionFirmwareControls();
+            }
+            if (legionGamepadModeSelect != null)
+            {
+                legionGamepadModeSelect.PropertyChanged += (s2, e2) => UpdateLegionFirmwareControls();
+            }
+            if (legionOsReportingDisabled != null)
+            {
+                legionOsReportingDisabled.PropertyChanged += (s2, e2) => UpdateLegionFirmwareControls();
+            }
             if (controllerDockedRight != null)
             {
                 controllerDockedRight.PropertyChanged += LegionControllerBattery_PropertyChanged;
@@ -2483,6 +2506,86 @@ namespace XboxGamingBar
                 LegionInputModePill.Background = new Windows.UI.Xaml.Media.SolidColorBrush(bg);
                 LegionInputModePill.Visibility = Visibility.Visible;
             });
+        }
+
+        /// <summary>
+        /// Syncs the firmware-backed controls (lighting profile, input mode, OS-reporting
+        /// toggle) from their properties. Values originate from controller readbacks, so
+        /// this also reveals the Input Mode card once a mode is known.
+        /// </summary>
+        private async void UpdateLegionFirmwareControls()
+        {
+            await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
+            {
+                _legionFirmwareControlSyncing = true;
+                try
+                {
+                    int prof = legionRgbActiveProfile?.Value ?? 0;
+                    if (LegionRgbProfileComboBox != null && prof >= 1 && prof <= 3 &&
+                        LegionRgbProfileComboBox.SelectedIndex != prof - 1)
+                    {
+                        LegionRgbProfileComboBox.SelectedIndex = prof - 1;
+                    }
+
+                    int mode = legionGamepadModeSelect?.Value ?? 0;
+                    if (mode == 1 || mode == 2)
+                    {
+                        if (ControllerInputModeCard != null)
+                        {
+                            ControllerInputModeCard.Visibility = Visibility.Visible;
+                        }
+                        if (LegionGamepadModeComboBox != null && LegionGamepadModeComboBox.SelectedIndex != mode - 1)
+                        {
+                            LegionGamepadModeComboBox.SelectedIndex = mode - 1;
+                        }
+                    }
+
+                    bool osDisabled = legionOsReportingDisabled?.Value ?? false;
+                    if (LegionOsReportingToggle != null && LegionOsReportingToggle.IsOn != osDisabled)
+                    {
+                        LegionOsReportingToggle.IsOn = osDisabled;
+                    }
+                }
+                finally
+                {
+                    _legionFirmwareControlSyncing = false;
+                }
+            });
+        }
+
+        private void LegionRgbProfileComboBox_SelectionChanged(object sender, Windows.UI.Xaml.Controls.SelectionChangedEventArgs e)
+        {
+            if (_legionFirmwareControlSyncing) return;
+            int slot = (LegionRgbProfileComboBox?.SelectedIndex ?? -1) + 1;
+            if (slot < 1 || slot > 3) return;
+            SendFirmwareControlSet(Shared.Enums.Function.LegionRgbActiveProfile, slot);
+        }
+
+        private void LegionGamepadModeComboBox_SelectionChanged(object sender, Windows.UI.Xaml.Controls.SelectionChangedEventArgs e)
+        {
+            if (_legionFirmwareControlSyncing) return;
+            int mode = (LegionGamepadModeComboBox?.SelectedIndex ?? -1) + 1;
+            if (mode != 1 && mode != 2) return;
+            SendFirmwareControlSet(Shared.Enums.Function.LegionGamepadModeSelect, mode);
+        }
+
+        private void LegionOsReportingToggle_Toggled(object sender, RoutedEventArgs e)
+        {
+            if (_legionFirmwareControlSyncing) return;
+            if (LegionOsReportingToggle == null) return;
+            SendFirmwareControlSet(Shared.Enums.Function.LegionOsReportingDisabled, LegionOsReportingToggle.IsOn);
+        }
+
+        private static void SendFirmwareControlSet(Shared.Enums.Function fn, object value)
+        {
+            if (!App.IsConnected) return;
+            var msg = new Windows.Foundation.Collections.ValueSet
+            {
+                { "Command", (int)Shared.Enums.Command.Set },
+                { "Function", (int)fn },
+                { "Content", value }
+            };
+            App.PipeClient?.SendValueSet(msg);
         }
 
         private void UpdateLegionControllerBatteryDisplay()
@@ -3664,9 +3767,12 @@ namespace XboxGamingBar
                     {
                         // Speed only applies to animated modes; Solid (device readback lm=0) has no
                         // speed, so omit it. (Device lm: 0=Solid, 1=Pulse, 2=Dynamic, 3=Spiral.)
+                        // Prefix the active stored profile slot when the firmware has reported it.
+                        int activeProfile = legionRgbActiveProfile?.Value ?? 0;
+                        string profilePrefix = activeProfile >= 1 && activeProfile <= 3 ? $"P{activeProfile} · " : "";
                         LegionControllerLightText.Text = lightMode == 0
-                            ? $"{LightModeLabel(lightMode)} · {brightness}%"
-                            : $"{LightModeLabel(lightMode)} · {brightness}% · speed {speed}%";
+                            ? $"{profilePrefix}{LightModeLabel(lightMode)} · {brightness}%"
+                            : $"{profilePrefix}{LightModeLabel(lightMode)} · {brightness}% · speed {speed}%";
                     }
                 }
                 if (LegionControllerLightSwatch != null)

@@ -1662,6 +1662,13 @@ namespace XboxGamingBarHelper
                 legionManager.ControllerConnectedRight,
                 legionManager.ControllerVidPid,
                 legionManager.ControllerDeviceStatus,
+                legionManager.LegionControllerInputMode,
+                legionManager.LegionMcuFirmwareVersion,
+                // Firmware-backed controls: MUST be in this registry or widget Sets are
+                // dropped with "Property X not found for pipe message" (field 2026-07-23).
+                legionManager.LegionRgbActiveProfile,
+                legionManager.LegionGamepadModeSelect,
+                legionManager.LegionOsReportingDisabled,
                 // Device capability properties (for UI visibility based on device features)
                 legionManager.DeviceDisplayName,
                 legionManager.DeviceSupportsControllerRemap,

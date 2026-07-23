@@ -1,4 +1,4 @@
-using NLog;
+﻿using NLog;
 using Shared.Constants;
 using Shared.Data;
 using Shared.IPC;
@@ -391,6 +391,9 @@ namespace XboxGamingBarHelper
         /// </summary>
         internal static void ExecuteSystemAction(int action, string keyParam = null, string sourceName = "system-action")
         {
+            // Confirmation buzz on every executed system action (System-tab hotkeys and
+            // system-action button remaps) so the user feels the trigger land.
+            try { goTweaksHapticManager?.PlayConfirmationPulse(); } catch { }
             try
             {
                 // HotkeyAction enum from widget:

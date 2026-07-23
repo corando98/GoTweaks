@@ -299,6 +299,9 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         public readonly ControllerDockedRightProperty ControllerDockedRight;
         public readonly LegionControllerInputModeProperty LegionControllerInputMode;
         public readonly LegionMcuFirmwareVersionProperty LegionMcuFirmwareVersion;
+        public readonly LegionRgbActiveProfileProperty LegionRgbActiveProfile;
+        public readonly LegionGamepadModeSelectProperty LegionGamepadModeSelect;
+        public readonly LegionOsReportingDisabledProperty LegionOsReportingDisabled;
         public readonly ControllerConnectedLeftProperty ControllerConnectedLeft;
         public readonly ControllerConnectedRightProperty ControllerConnectedRight;
         public readonly ControllerVidPidProperty ControllerVidPid;
@@ -608,6 +611,9 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             ControllerDockedRight = new ControllerDockedRightProperty(false, this);
             LegionControllerInputMode = new LegionControllerInputModeProperty(0, this);
             LegionMcuFirmwareVersion = new LegionMcuFirmwareVersionProperty("", this);
+            LegionRgbActiveProfile = new LegionRgbActiveProfileProperty(0, this);
+            LegionGamepadModeSelect = new LegionGamepadModeSelectProperty(0, this);
+            LegionOsReportingDisabled = new LegionOsReportingDisabledProperty(false, this);
             ControllerConnectedLeft = new ControllerConnectedLeftProperty(false, this);
             ControllerConnectedRight = new ControllerConnectedRightProperty(false, this);
             ControllerVidPid = new ControllerVidPidProperty("", this);

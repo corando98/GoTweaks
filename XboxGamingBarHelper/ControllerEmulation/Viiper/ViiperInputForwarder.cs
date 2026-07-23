@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Threading;
 using NLog;
 using Shared.Data;
@@ -843,6 +843,7 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             stickGyro.Reset();
 
             activeInstance = this;
+            labsGuideHeld = false; // never inherit a stale Guide latch across sessions
             running = true;
             pollThread = new Thread(PollLoop)
             {
@@ -1492,6 +1493,7 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
         public void Stop()
         {
             if (!running) return;
+            labsGuideHeld = false; // clear latch so a restart never starts guide-held
             running = false;
             if (activeInstance == this) activeInstance = null;
             try

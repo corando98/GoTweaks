@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -70,6 +70,7 @@ namespace XboxGamingBarHelper.Core
 
         // Combo detection
         private ushort _lastButtons = 0;
+        private ushort _lastVendorButtons;
         private uint _lastPacketNumber = 0;
         private DateTime _comboStartTime = DateTime.MinValue;
         private ushort _comboModifier = 0;
@@ -272,6 +273,31 @@ namespace XboxGamingBarHelper.Core
                         }
                     }
 
+                    // Firmware XInput suppression (controller emulation, register 04/0f)
+                    // removes the physical pad from XInput entirely - and DS-family
+                    // emulated targets aren't XInput either - which silenced every
+                    // System-tab hotkey and quick-tile combo while emulation ran (field
+                    // report 2026-07-23). The button monitor's vendor-stream sample
+                    // carries the same XInput-format button bitmask, so merge it in as
+                    // an input source; it is fresh only while the vendor stream runs.
+                    try
+                    {
+                        if (XboxGamingBarHelper.Labs.LegionButtonMonitor.TryGetLatestGamepadSample(out var vendorSample)
+                            && (DateTime.UtcNow.Ticks - vendorSample.TimestampTicksUtc) < TimeSpan.TicksPerSecond)
+                        {
+                            combinedXInput |= vendorSample.Buttons;
+                            if (vendorSample.Buttons != _lastVendorButtons)
+                            {
+                                _lastVendorButtons = vendorSample.Buttons;
+                                if (vendorSample.Buttons != 0 || _lastButtons != 0)
+                                {
+                                    ProcessButtonState(vendorSample.Buttons);
+                                }
+                            }
+                        }
+                    }
+                    catch { }
+
                     // Quick-tile combos are evaluated every pass (not gated on XInput packet
                     // changes) so all-paddle combos and the hold timer still work when the
                     // sticks are perfectly still. Cheap no-op when none are registered.
@@ -443,6 +469,7 @@ namespace XboxGamingBarHelper.Core
                 string name;
                 lock (_tileHotkeyLock) { _tileHotkeyNames.TryGetValue(bestMask, out name); }
                 Logger.Info($"ControllerHotkeyMonitor: tile combo '{name}' (mask=0x{bestMask:X}) triggered");
+                try { Program.goTweaksHapticManager?.PlayConfirmationPulse(); } catch { }
 
                 var cb = bestCb;
                 ThreadPool.QueueUserWorkItem(_ =>

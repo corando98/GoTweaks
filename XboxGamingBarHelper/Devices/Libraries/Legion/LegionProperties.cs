@@ -1567,6 +1567,89 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         }
     }
 
+    // Firmware-backed controls (Legion Go 2): the widget SETS these; NotifyPropertyChanged
+    // applies to hardware via the button monitor unless SuppressHardwareApply is set
+    // (readback path - the value came FROM the firmware, don't bounce it back).
+    internal class LegionRgbActiveProfileProperty : HelperProperty<int, LegionManager>
+    {
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+        internal bool SuppressHardwareApply { get; set; }
+
+        public LegionRgbActiveProfileProperty(int initialValue, LegionManager inManager) : base(initialValue, null, Function.LegionRgbActiveProfile, inManager)
+        {
+        }
+
+        protected override void NotifyPropertyChanged(string propertyName = "")
+        {
+            base.NotifyPropertyChanged(propertyName);
+            if (!SuppressHardwareApply && Value >= 1 && Value <= 3)
+            {
+                bool ok = Labs.LegionButtonMonitor.Current?.ApplyRgbActiveProfile(Value) ?? false;
+                Logger.Info($"LegionRgbActiveProfile apply {Value} => {ok}");
+            }
+        }
+
+        public void SetValueAndSync(int value)
+        {
+            SetValue((object)value);
+            SyncToRemote();
+        }
+    }
+
+    internal class LegionGamepadModeSelectProperty : HelperProperty<int, LegionManager>
+    {
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+        internal bool SuppressHardwareApply { get; set; }
+
+        public LegionGamepadModeSelectProperty(int initialValue, LegionManager inManager) : base(initialValue, null, Function.LegionGamepadModeSelect, inManager)
+        {
+        }
+
+        protected override void NotifyPropertyChanged(string propertyName = "")
+        {
+            base.NotifyPropertyChanged(propertyName);
+            if (!SuppressHardwareApply && (Value == 1 || Value == 2))
+            {
+                bool ok = Labs.LegionButtonMonitor.Current?.ApplyGamepadMode(Value) ?? false;
+                Logger.Info($"LegionGamepadModeSelect apply {(Value == 1 ? "xinput" : "dinput")} => {ok}");
+            }
+        }
+
+        public void SetValueAndSync(int value)
+        {
+            SetValue((object)value);
+            SyncToRemote();
+        }
+    }
+
+    internal class LegionOsReportingDisabledProperty : HelperProperty<bool, LegionManager>
+    {
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+        internal bool SuppressHardwareApply { get; set; }
+
+        public LegionOsReportingDisabledProperty(bool initialValue, LegionManager inManager) : base(initialValue, null, Function.LegionOsReportingDisabled, inManager)
+        {
+        }
+
+        protected override void NotifyPropertyChanged(string propertyName = "")
+        {
+            base.NotifyPropertyChanged(propertyName);
+            if (!SuppressHardwareApply)
+            {
+                // Routed through SetPhysicalXInputEnabled so the desired state is
+                // remembered and re-asserted on reconnects, same as emulation's use.
+                bool ok = Labs.LegionButtonMonitor.Current?.SetPhysicalXInputEnabled(!Value) ?? false;
+                Logger.Info($"LegionOsReportingDisabled apply disabled={Value} => {ok}");
+            }
+        }
+
+        public void SetValueAndSync(bool value)
+        {
+            SetValue((object)value);
+            SyncToRemote();
+        }
+    }
+
     // Receiver/MCU firmware version string, read once per connect via GET_VERSION_DATA.
     internal class LegionMcuFirmwareVersionProperty : HelperProperty<string, LegionManager>
     {

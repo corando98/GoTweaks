@@ -596,5 +596,10 @@
         // GET_VERSION_DATA(firmware, USB_MCU). Shown under the controller firmware
         // in the Controller Information card.
         LegionMcuFirmwareVersion,   // string
+
+        // Firmware-backed Legion Go 2 controls (values read back from the controller):
+        LegionRgbActiveProfile,     // int 1-3 (0 = unknown) - active stored lighting profile
+        LegionGamepadModeSelect,    // int 1=xinput 2=dinput (0 = unknown)
+        LegionOsReportingDisabled,  // bool - true = 04/0f vendor-exclusive (pad hidden from OS)
     }
 }

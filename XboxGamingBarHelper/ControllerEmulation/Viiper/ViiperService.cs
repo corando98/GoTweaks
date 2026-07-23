@@ -1,4 +1,4 @@
-using NLog;
+﻿using NLog;
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
@@ -64,6 +64,7 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
                 }
                 _initialized = true;
                 Logger.Info($"VIIPER USBIP server started on {listenAddr}");
+                UsbipCli.NoteServerStarted(); // imports predating this server are zombies - sweep on first attach
                 return true;
             }
         }

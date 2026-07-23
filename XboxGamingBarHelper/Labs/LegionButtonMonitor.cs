@@ -23,6 +23,7 @@ namespace XboxGamingBarHelper.Labs
         // at monitor init - the monitor has no direct reference to the hotkey layer.
         ToggleDesktopControls = 4,
         TouchKeyboard = 5,
+        ToggleControllerEmulation = 6,
     }
 
     /// <summary>
@@ -175,6 +176,7 @@ namespace XboxGamingBarHelper.Labs
         // by Program.Labs at monitor init; the monitor has no reference to the hotkey layer.
         public static Action OnToggleDesktopControlsRequested;
         public static Action OnTouchKeyboardRequested;
+        public static Action OnToggleControllerEmulationRequested;
         private bool legionLLongEnabled = false;
         private LegionButtonAction legionLLongActionType = LegionButtonAction.KeyboardShortcut;
         private string legionLLongShortcutKeys = "";
@@ -234,8 +236,16 @@ namespace XboxGamingBarHelper.Labs
         private byte _lastFpsSwitch = 0;     // 1=gamepad 2=fps
         private int _lastReportedInputMode = 0;
         private string _lastMcuFirmware = "";
+        private int _lastRgbProfile = 0;
+        private bool _lastOsReportingDisabled = false;
+        private bool _osReportingKnown = false;
         public static Action<int> InputModeUpdated;
         public static Action<string> McuFirmwareUpdated;
+        public static Action<int> GamepadModeRawUpdated;    // raw 1=xinput 2=dinput (no FPS override)
+        public static Action<int> RgbProfileUpdated;        // active stored lighting profile 1-3
+        public static Action<bool> OsReportingUpdated;      // true = 04/0f reads vendor-exclusive
+        // Set on construction; used by the firmware-backed helper properties to apply writes.
+        public static LegionButtonMonitor Current;
 
         /// <summary>Queries gamepad mode + FPS switch; responses land in the read loop.</summary>
         public void QueryInputMode()
@@ -249,6 +259,31 @@ namespace XboxGamingBarHelper.Labs
             SendOutputReport(handle, new byte[] { 0x05, 0x00, 0x03, 0x0E, 0x03 }, "get gamepad mode");
             SendOutputReport(handle, new byte[] { 0x05, 0x00, 0x03, 0x0B, 0x03 }, "get fps switch");
             SendOutputReport(handle, new byte[] { 0x05, 0x00, 0x02, 0x04, 0x01 }, "get mcu fw version");
+            SendOutputReport(handle, new byte[] { 0x05, 0x00, 0x0F, 0x03 }, "get rgb active profile");
+            SendOutputReport(handle, new byte[] { 0x05, 0x00, 0x03, 0x0F, 0x00 }, "get xinput-output register");
+        }
+
+        /// <summary>Activates a stored lighting profile (1-3) on both halves via the
+        /// legacy 06/73 command (the form Legion Space uses), then re-reads it.</summary>
+        public bool ApplyRgbActiveProfile(int slot)
+        {
+            var handle = hidHandle;
+            if (handle == null || handle.IsInvalid || !_hasWriteAccess || IsGoSControllerDevice()) return false;
+            if (slot < 1 || slot > 3) return false;
+            bool ok = SendOutputReport(handle, new byte[] { 0x05, 0x06, 0x73, 0x02, LEGION_CONTROLLER_LEFT_ID, (byte)slot, 0x01 }, "rgb profile activate L");
+            ok &= SendOutputReport(handle, new byte[] { 0x05, 0x06, 0x73, 0x02, LEGION_CONTROLLER_RIGHT_ID, (byte)slot, 0x01 }, "rgb profile activate R");
+            SendOutputReport(handle, new byte[] { 0x05, 0x00, 0x0F, 0x03 }, "get rgb active profile");
+            return ok;
+        }
+
+        /// <summary>Switches the gamepad protocol (1=xinput 2=dinput). The receiver
+        /// re-enumerates; the per-connect init re-reads the mode for the pill/dropdown.</summary>
+        public bool ApplyGamepadMode(int mode)
+        {
+            var handle = hidHandle;
+            if (handle == null || handle.IsInvalid || !_hasWriteAccess || IsGoSControllerDevice()) return false;
+            if (mode != 1 && mode != 2) return false;
+            return SendOutputReport(handle, new byte[] { 0x05, 0x00, 0x04, 0x0E, 0x03, (byte)mode }, $"set gamepad mode {(mode == 1 ? "xinput" : "dinput")}");
         }
 
         // Desired state of the physical pad's XInput output (firmware register 04/0f).
@@ -1043,6 +1078,7 @@ namespace XboxGamingBarHelper.Labs
         public LegionButtonMonitor(Action<bool> onStateChanged = null)
         {
             onButtonStateChanged = onStateChanged;
+            Current = this;
         }
 
         /// <summary>
@@ -2296,8 +2332,43 @@ namespace XboxGamingBarHelper.Labs
                     enabled ? "physical XInput output ON" : "physical XInput output OFF (controller emulation)");
                 System.Threading.Thread.Sleep(20);
             }
+            ApplyFrontButtonFirmwareState(handle);
             Logger.Info($"LegionButtonMonitor: physical XInput output {(enabled ? "ENABLED" : "SUPPRESSED")} via 04/0f (global+L+R) => {ok}");
             return ok;
+        }
+
+        // Legion Desktop (0x25) / Page (0x26) firmware button mappings. In vendor-exclusive
+        // mode (04/0f=0x02, i.e. OS reporting disabled / emulation) the firmware handles these
+        // front buttons ITSELF and emits their stock keyboard shortcuts (Win+D / Win+Tab),
+        // which fire UNDERNEATH GoTweaks' software aux-button remaps and can't be overridden
+        // from the UI (field report 2026-07-23). Clearing the firmware mapping stops the stock
+        // emission; GoTweaks still reads the Mode/Share aux bits from the vendor stream and
+        // applies its own action. Restored to defaults when OS reporting is re-enabled.
+        private const byte LEGION_FRONT_DESKTOP_BUTTON = 0x25;
+        private const byte LEGION_FRONT_PAGE_BUTTON = 0x26;
+
+        private void ApplyFrontButtonFirmwareState(SafeFileHandle handle)
+        {
+            if (handle == null || handle.IsInvalid || !_hasWriteAccess || !IsTabletControllerDevice()) return;
+            try
+            {
+                foreach (byte btn in new[] { LEGION_FRONT_DESKTOP_BUTTON, LEGION_FRONT_PAGE_BUTTON })
+                {
+                    // 12 0A [ctrl] 01 11 01 [btn] [type] [maps...]. Desktop/Page live on the
+                    // LEFT controller (0x03). type 0x01 with no map bytes = cleared/default;
+                    // to clear the stock behavior in vendor-exclusive mode we map to "none".
+                    byte[] cmd = _physicalXInputSuppressed
+                        // Suppressed: clear the firmware binding (map-to-none) so no stock shortcut fires.
+                        ? new byte[] { 0x05, 0x00, 0x12, 0x0A, LEGION_CONTROLLER_LEFT_ID, 0x01, 0x11, 0x01, btn, 0x00 }
+                        // Enabled: restore the firmware default (self-map) so nothing is left cleared.
+                        : new byte[] { 0x05, 0x00, 0x12, 0x0A, LEGION_CONTROLLER_LEFT_ID, 0x01, 0x11, 0x01, btn, 0x01 };
+                    SendOutputReport(handle, cmd, _physicalXInputSuppressed
+                        ? $"clear front-button 0x{btn:X2} (suppress)"
+                        : $"restore front-button 0x{btn:X2}");
+                    System.Threading.Thread.Sleep(15);
+                }
+            }
+            catch (Exception ex) { Logger.Warn($"ApplyFrontButtonFirmwareState failed: {ex.Message}"); }
         }
 
         /// <summary>
@@ -2328,6 +2399,10 @@ namespace XboxGamingBarHelper.Labs
                         System.Threading.Thread.Sleep(20);
                     }
                 }
+                // Re-assert the front-button firmware state to match the current suppression
+                // (a reconnect while suppressed must re-clear Desktop/Page, else the stock
+                // Win+D / Win+Tab shortcuts come back).
+                ApplyFrontButtonFirmwareState(handle);
                 Logger.Info($"LegionButtonMonitor: Wrote XInput coexistence registers ({ok}/{total}, xinput={(!_physicalXInputSuppressed ? "ON" : "SUPPRESSED (emu)")})");
             }
             catch (Exception ex)
@@ -3096,10 +3171,37 @@ namespace XboxGamingBarHelper.Labs
                                     }
                                 }
 
+                                // GET_RGB(profile-sel) response: 04 00 0f 03 00 [profile 1-3].
+                                if (bytesRead >= 6 && buffer[0] == 0x04 && buffer[1] == 0x00 && buffer[2] == 0x0F && buffer[3] == 0x03)
+                                {
+                                    int prof = buffer[5];
+                                    if (prof >= 1 && prof <= 3 && prof != _lastRgbProfile)
+                                    {
+                                        _lastRgbProfile = prof;
+                                        Logger.Info($"LegionButtonMonitor: active RGB profile = {prof}");
+                                        try { RgbProfileUpdated?.Invoke(prof); } catch { }
+                                    }
+                                }
+
                                 if (bytesRead >= 6 && buffer[0] == 0x04 && buffer[1] == 0x00 && buffer[2] == 0x03)
                                 {
-                                    if (buffer[3] == 0x0E) _lastGamepadMode = buffer[5];
+                                    if (buffer[3] == 0x0E)
+                                    {
+                                        _lastGamepadMode = buffer[5];
+                                        try { GamepadModeRawUpdated?.Invoke(buffer[5]); } catch { }
+                                    }
                                     else if (buffer[3] == 0x0B) _lastFpsSwitch = buffer[5];
+                                    else if (buffer[3] == 0x0F)
+                                    {
+                                        bool disabled = buffer[5] == 0x02;
+                                        if (disabled != _lastOsReportingDisabled || !_osReportingKnown)
+                                        {
+                                            _osReportingKnown = true;
+                                            _lastOsReportingDisabled = disabled;
+                                            Logger.Info($"LegionButtonMonitor: xinput-output register = {(disabled ? "vendor-exclusive (hidden)" : "on")}");
+                                            try { OsReportingUpdated?.Invoke(disabled); } catch { }
+                                        }
+                                    }
                                     int display = _lastFpsSwitch == 2 ? 3 : _lastGamepadMode; // FPS overrides
                                     if (display != _lastReportedInputMode && display != 0)
                                     {
@@ -4189,6 +4291,7 @@ namespace XboxGamingBarHelper.Labs
             {
                 legionLLongFired = true;
                 Logger.Info("LegionButtonMonitor: Legion L LONG press fired");
+                try { Program.goTweaksHapticManager?.PlayConfirmationPulse(); } catch { }
                 try
                 {
                     ProcessButtonAction("Legion L (long)", true, legionLLongActionType, legionLLongShortcutKeys, legionLLongCommandPath);
@@ -4201,6 +4304,7 @@ namespace XboxGamingBarHelper.Labs
             {
                 legionRLongFired = true;
                 Logger.Info("LegionButtonMonitor: Legion R LONG press fired");
+                try { Program.goTweaksHapticManager?.PlayConfirmationPulse(); } catch { }
                 try
                 {
                     ProcessButtonAction("Legion R (long)", true, legionRLongActionType, legionRLongShortcutKeys, legionRLongCommandPath);
@@ -4322,6 +4426,12 @@ namespace XboxGamingBarHelper.Labs
                             Logger.Error($"LegionButtonMonitor: TouchKeyboard exception: {ex.Message}");
                         }
                         break;
+
+                    case LegionButtonAction.ToggleControllerEmulation:
+                        Logger.Info($"LegionButtonMonitor: {buttonName} pressed -> Toggle Controller Emulation");
+                        try { OnToggleControllerEmulationRequested?.Invoke(); }
+                        catch (Exception ex) { Logger.Error($"Toggle Controller Emulation failed: {ex.Message}"); }
+                        break;
                 }
             }
             else
@@ -4329,23 +4439,16 @@ namespace XboxGamingBarHelper.Labs
                 // Button released - only release Xbox Guide if that's the action
                 if (actionType == LegionButtonAction.XboxGuide)
                 {
-                    // VIIPER intercept for release (match the press path).
-                    if (XboxGamingBarHelper.ControllerEmulation.Viiper.ViiperInputForwarder.TryHandleGuideButtonFromLabs(false))
-                    {
-                        Logger.Info($"LegionButtonMonitor: Routed XboxGuide release to VIIPER backend for {buttonName}");
-                        return;
-                    }
-
-                    if (XboxGamingBarHelper.ControllerEmulation.Viiper.ViiperEmulationManager.TrySetGuideFromLabs(false))
-                    {
-                        Logger.Info($"LegionButtonMonitor: Routed XboxGuide release to VIIPER guide-only pad for {buttonName}");
-                        return;
-                    }
-
-                    if (ControllerEmulationManager.TrySetGuideFromExternal(false))
-                    {
-                        Logger.Info($"LegionButtonMonitor: Routed SetGuide(false) to controller emulation virtual pad for {buttonName}");
-                    }
+                    // Release clears EVERY tier, not first-accept-wins like the press path.
+                    // The press can latch in one tier (e.g. the forwarder's labsGuideHeld)
+                    // and an emulation toggle between press and release changes which tier
+                    // answers - the original latch then survived and the Guide stayed held
+                    // forever (field report 2026-07-23: click=Guide + hold=Toggle Emu left
+                    // Guide stuck after emu turned off). All three calls are idempotent.
+                    bool relA = XboxGamingBarHelper.ControllerEmulation.Viiper.ViiperInputForwarder.TryHandleGuideButtonFromLabs(false);
+                    bool relB = XboxGamingBarHelper.ControllerEmulation.Viiper.ViiperEmulationManager.TrySetGuideFromLabs(false);
+                    bool relC = ControllerEmulationManager.TrySetGuideFromExternal(false);
+                    Logger.Info($"LegionButtonMonitor: XboxGuide release cleared (forwarder={relA}, guideOnly={relB}, external={relC}) for {buttonName}");
                     // (No ViGEm fallback — dedicated Guide pad retired in phase 2.)
                 }
             }

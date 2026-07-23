@@ -308,6 +308,16 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                 // Re-push their own current values through the equality-skip bypass.
                 LegionControllerInputMode.ForceSetValue(LegionControllerInputMode.Value);
                 LegionMcuFirmwareVersion.ForceSetValue(LegionMcuFirmwareVersion.Value);
+                // Firmware-backed controls: suppress hardware re-apply, this is UI resync only.
+                LegionRgbActiveProfile.SuppressHardwareApply = true;
+                try { LegionRgbActiveProfile.ForceSetValue(LegionRgbActiveProfile.Value); }
+                finally { LegionRgbActiveProfile.SuppressHardwareApply = false; }
+                LegionGamepadModeSelect.SuppressHardwareApply = true;
+                try { LegionGamepadModeSelect.ForceSetValue(LegionGamepadModeSelect.Value); }
+                finally { LegionGamepadModeSelect.SuppressHardwareApply = false; }
+                LegionOsReportingDisabled.SuppressHardwareApply = true;
+                try { LegionOsReportingDisabled.ForceSetValue(LegionOsReportingDisabled.Value); }
+                finally { LegionOsReportingDisabled.SuppressHardwareApply = false; }
                 Logger.Info($"Controller status resynced to widget: L={leftControllerBattery}% (conn={leftControllerConnected}) R={rightControllerBattery}% (conn={rightControllerConnected})");
             }
             catch (Exception ex)

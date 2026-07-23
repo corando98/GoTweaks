@@ -925,6 +925,17 @@ namespace XboxGamingBarHelper
                     {
                         legionButtonMonitor?.ConfigureButtonLongPress(button, enabled, actionType, shortcut);
                         success = legionButtonMonitor != null;
+                        // Persist helper-side (the short path already does): the widget's
+                        // ApplicationData copy is not visible from the helper's fallback
+                        // store, so without this the hold binding silently vanished on
+                        // every helper restart (field report 2026-07-23).
+                        try
+                        {
+                            Settings.LocalSettingsHelper.SetValue($"Legion{button}_LongAction", enabled ? actionType + 1 : 0);
+                            if (actionType == 1) Settings.LocalSettingsHelper.SetValue($"Legion{button}_LongShortcut", shortcut ?? "");
+                            else if (actionType == 2) Settings.LocalSettingsHelper.SetValue($"Legion{button}_LongCommand", shortcut ?? "");
+                        }
+                        catch (Exception pex) { Logger.Warn($"Persist long remap failed: {pex.Message}"); }
                     }
                     else
                     {

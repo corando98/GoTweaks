@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using NLog;
 using Shared.Data;
 using XboxGamingBarHelper.Core;
@@ -297,6 +297,18 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
                 bool legacyPadOwnsGuide = ControllerEmulationManager.CanHandleExternalGuide();
                 if (LabsHasGuideConfigured() && !legacyPadOwnsGuide)
                 {
+                    // Idempotent: if the guide-only pad is already up, DON'T tear it down and
+                    // recreate it. StartGuideOnly runs CleanupAllKnownGhosts, which pnputil-
+                    // removes 045E:028E nodes (the guide-only pad's own VID/PID); that removal
+                    // triggers a controller re-enumeration, whose ControllerReconnected fires
+                    // OnGuideRouteChanged -> back here -> another StartGuideOnly -> another
+                    // cleanup... a self-sustaining restart loop that never let the pad settle
+                    // and left Guide presses hitting a pad about to be torn down
+                    // (field-diagnosed 2026-07-23). Only (re)start when not already active.
+                    if (guideOnlyMode && !isRunning)
+                    {
+                        return;
+                    }
                     if (isRunning) StopLocked();
                     StartGuideOnly();
                     return;
@@ -339,11 +351,44 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
         /// press/release. Returns true only when guide-only mode is currently active
         /// (full CE path owns Guide through ViiperInputForwarder.TryHandleGuideButtonFromLabs).
         /// </summary>
+        // Minimum time the Guide bit stays latched on the virtual pad. A "tap" from the
+        // Legion-button long-press mechanism fires press+release back-to-back (microseconds
+        // apart); without a floor, Windows/XInput never polls the pad while the bit is set,
+        // so the Guide press is invisible - "Guide works only when Legion L hold is
+        // Disabled" (field-diagnosed 2026-07-23). 90ms comfortably spans a 60Hz+ poll.
+        private const int GuideOnlyMinHoldMs = 90;
+        private long _guideOnlyPressTicks;
+        private int _guideOnlyReleaseScheduled;
+
         public static bool TrySetGuideFromLabs(bool pressed)
         {
             var inst = activeInstance;
             if (inst == null || !inst.guideOnlyMode || inst.activeDeviceId == 0) return false;
-            return inst.SubmitGuideOnlyFrame(pressed);
+
+            if (pressed)
+            {
+                inst._guideOnlyPressTicks = DateTime.UtcNow.Ticks;
+                return inst.SubmitGuideOnlyFrame(true);
+            }
+
+            // Release: honor the minimum hold so a fast tap-burst still registers.
+            long heldMs = (DateTime.UtcNow.Ticks - inst._guideOnlyPressTicks) / TimeSpan.TicksPerMillisecond;
+            if (heldMs >= GuideOnlyMinHoldMs)
+            {
+                return inst.SubmitGuideOnlyFrame(false);
+            }
+            // Defer the release on a background thread; coalesce concurrent taps.
+            if (System.Threading.Interlocked.Exchange(ref inst._guideOnlyReleaseScheduled, 1) == 0)
+            {
+                int wait = (int)(GuideOnlyMinHoldMs - heldMs);
+                System.Threading.Tasks.Task.Run(async () =>
+                {
+                    try { await System.Threading.Tasks.Task.Delay(wait); inst.SubmitGuideOnlyFrame(false); }
+                    catch (Exception ex) { Logger.Warn($"guide-only deferred release threw: {ex.Message}"); }
+                    finally { System.Threading.Interlocked.Exchange(ref inst._guideOnlyReleaseScheduled, 0); }
+                });
+            }
+            return true;
         }
 
         private bool SubmitGuideOnlyFrame(bool pressed)
@@ -400,6 +445,12 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             // virtual pad sits alongside it just to deliver Game-Bar guide presses.
 
             ViiperPnpCleanup.CleanupAllKnownGhosts();
+
+            // A prior emulation session's pad may have been auto-reattached by usbip2_ude
+            // after our DetachAll - force the next attach pass to sweep such zombies, else
+            // this guide-only add sees a stale import as "already attached" and skips it,
+            // leaving the guide route dead after an emu on->off cycle (field report 2026-07-23).
+            UsbipCli.NoteServerStarted();
 
             var addResult = service.AddDevice(activeBusId, DefaultDeviceType, 0, 0);
             if (!addResult.Success)
@@ -634,21 +685,12 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             }
             catch (Exception ex) { Logger.Warn($"VIIPER HidHide Enable threw: {ex.Message}"); }
 
-            // Firmware-level XInput suppression (Legion Go 2 register 04/0f): when the
-            // forwarder reads the raw vendor HID stream (LegionHid source), the stock pad's
-            // XInput endpoint is switched off at the controller itself, so games can't see
-            // it even through GameInput-brokered paths that pierce HidHide's cloak
-            // (browser gamepad testers, Win11 XInput shim). NOT done for the XInput input
-            // source - the forwarder reads the physical pad's XInput slot there, so
-            // suppressing it would starve the emulation. State is remembered by the button
-            // monitor and re-asserted on every reconnect (dock/undock PID flips).
-            // (Direct call, not UpdatePhysicalXInputSuppression: isRunning isn't set yet here.)
-            try
-            {
-                Program.legionButtonMonitor?.SetPhysicalXInputEnabled(
-                    ResolveInputSource() != ViiperInputSourceKind.LegionHid);
-            }
-            catch (Exception ex) { Logger.Warn($"VIIPER physical XInput suppress threw: {ex.Message}"); }
+            // Firmware-level XInput suppression (register 04/0f) is NO LONGER applied
+            // automatically on emulation start. It also disables the firmware's front-button
+            // Desktop-controls behavior (field report 2026-07-23: Desktop controls break while
+            // OS reporting is disabled), and the interaction needs more testing. HidHide still
+            // cloaks the stock pad as before. Users who want the stronger firmware-level hide
+            // can toggle "Disable OS Reporting" manually in Controller Settings.
 
             // Sweep ghost PnP entries left over from a previous helper session.
             // Hot-swaps in libviiper detach the old USB device, but Windows keeps
@@ -665,6 +707,7 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             // half below, and keep activeDeviceType = "joycon-pair" so the
             // forwarder's BuildDeviceInput picks the paired wire format.
             string registryName = targetType == "joycon-pair" ? "joycon-left" : targetType;
+            UsbipCli.NoteServerStarted(); // sweep any zombie import from a prior session before attaching
             var addResult = service.AddDevice(activeBusId, registryName, vid, pid);
             if (!addResult.Success)
             {
@@ -836,24 +879,8 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
         {
             try { forwarder.SetInputSource(ResolveInputSource()); }
             catch (Exception ex) { Logger.Warn($"OnInputSourceChanged threw: {ex.Message}"); }
-            // Source flips mid-run change whether firmware XInput suppression is safe:
-            // LegionHid -> suppress; XInput -> must NOT suppress (it is the input feed).
-            UpdatePhysicalXInputSuppression();
-        }
-
-        /// <summary>
-        /// Applies the correct physical-pad XInput state (Legion firmware register 04/0f)
-        /// for the current emulation/source combination: suppressed only while emulation
-        /// runs with the LegionHid input source; enabled otherwise.
-        /// </summary>
-        private void UpdatePhysicalXInputSuppression()
-        {
-            try
-            {
-                bool suppress = isRunning && ResolveInputSource() == ViiperInputSourceKind.LegionHid;
-                Program.legionButtonMonitor?.SetPhysicalXInputEnabled(!suppress);
-            }
-            catch (Exception ex) { Logger.Warn($"UpdatePhysicalXInputSuppression threw: {ex.Message}"); }
+            // (Firmware XInput suppression is no longer auto-driven by emulation - see
+            // StartLocked. The manual "Disable OS Reporting" toggle owns register 04/0f.)
         }
 
         private ViiperGyroSourceKind ResolveGyroSource()
@@ -1126,12 +1153,8 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
                 viiperOwnsSuppression = false;
             }
 
-            // Always restore the physical pad's XInput output on stop (see StartLocked).
-            try
-            {
-                Program.legionButtonMonitor?.SetPhysicalXInputEnabled(true);
-            }
-            catch (Exception ex) { Logger.Warn($"VIIPER physical XInput restore threw: {ex.Message}"); }
+            // (No physical-XInput restore here: register 04/0f is now owned solely by the
+            // manual "Disable OS Reporting" toggle, not by emulation start/stop.)
 
             // Detach our UDE imports first (we attach explicitly via usbip.exe on add — see
             // UsbipCli), then tear down the server side.

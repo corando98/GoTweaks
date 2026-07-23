@@ -3746,7 +3746,7 @@
                                                 <ColumnDefinition Width="80"/>
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Text="View + A" VerticalAlignment="Center" Foreground="#FFFFFF" FontSize="13"/>
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/view.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image><TextBlock Text="+" VerticalAlignment="Center" Foreground="#AAAAAA" FontSize="14" Margin="5,0,5,0"/><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/a.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image></StackPanel>
                                             <ComboBox x:Name="HotkeyMenuAComboBox" Grid.Column="1"
                                                       SelectionChanged="HotkeyMenuA_SelectionChanged">
                                                 <ComboBoxItem Content="Disabled" Tag="0"/>
@@ -3780,7 +3780,7 @@
                                                 <ColumnDefinition Width="80"/>
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Text="View + B" VerticalAlignment="Center" Foreground="#FFFFFF" FontSize="13"/>
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/view.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image><TextBlock Text="+" VerticalAlignment="Center" Foreground="#AAAAAA" FontSize="14" Margin="5,0,5,0"/><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/b.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image></StackPanel>
                                             <ComboBox x:Name="HotkeyMenuBComboBox" Grid.Column="1"
                                                       SelectionChanged="HotkeyMenuB_SelectionChanged">
                                                 <ComboBoxItem Content="Disabled" Tag="0"/>
@@ -3814,7 +3814,7 @@
                                                 <ColumnDefinition Width="80"/>
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Text="View + X" VerticalAlignment="Center" Foreground="#FFFFFF" FontSize="13"/>
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/view.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image><TextBlock Text="+" VerticalAlignment="Center" Foreground="#AAAAAA" FontSize="14" Margin="5,0,5,0"/><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/x.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image></StackPanel>
                                             <ComboBox x:Name="HotkeyMenuXComboBox" Grid.Column="1"
                                                       SelectionChanged="HotkeyMenuX_SelectionChanged">
                                                 <ComboBoxItem Content="Disabled" Tag="0"/>
@@ -3848,7 +3848,7 @@
                                                 <ColumnDefinition Width="80"/>
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Text="View + Y" VerticalAlignment="Center" Foreground="#FFFFFF" FontSize="13"/>
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/view.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image><TextBlock Text="+" VerticalAlignment="Center" Foreground="#AAAAAA" FontSize="14" Margin="5,0,5,0"/><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/y.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image></StackPanel>
                                             <ComboBox x:Name="HotkeyMenuYComboBox" Grid.Column="1"
                                                       SelectionChanged="HotkeyMenuY_SelectionChanged">
                                                 <ComboBoxItem Content="Disabled" Tag="0"/>
@@ -3882,7 +3882,7 @@
                                                 <ColumnDefinition Width="80"/>
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Text="Menu + ↑" VerticalAlignment="Center" Foreground="#FFFFFF" FontSize="13"/>
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/menu.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image><TextBlock Text="+" VerticalAlignment="Center" Foreground="#AAAAAA" FontSize="14" Margin="5,0,5,0"/><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/dpad-up.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image></StackPanel>
                                             <ComboBox x:Name="HotkeyMenuDpadUpComboBox" Grid.Column="1"
                                                       SelectionChanged="HotkeyMenuDpadUp_SelectionChanged">
                                                 <ComboBoxItem Content="Disabled" Tag="0"/>
@@ -3916,7 +3916,7 @@
                                                 <ColumnDefinition Width="80"/>
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Text="Menu + ↓" VerticalAlignment="Center" Foreground="#FFFFFF" FontSize="13"/>
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/menu.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image><TextBlock Text="+" VerticalAlignment="Center" Foreground="#AAAAAA" FontSize="14" Margin="5,0,5,0"/><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/dpad-down.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image></StackPanel>
                                             <ComboBox x:Name="HotkeyMenuDpadDownComboBox" Grid.Column="1"
                                                       SelectionChanged="HotkeyMenuDpadDown_SelectionChanged">
                                                 <ComboBoxItem Content="Disabled" Tag="0"/>
@@ -3950,7 +3950,7 @@
                                                 <ColumnDefinition Width="80"/>
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Text="Menu + ←" VerticalAlignment="Center" Foreground="#FFFFFF" FontSize="13"/>
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/menu.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image><TextBlock Text="+" VerticalAlignment="Center" Foreground="#AAAAAA" FontSize="14" Margin="5,0,5,0"/><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/dpad-left.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image></StackPanel>
                                             <ComboBox x:Name="HotkeyMenuDpadLeftComboBox" Grid.Column="1"
                                                       SelectionChanged="HotkeyMenuDpadLeft_SelectionChanged">
                                                 <ComboBoxItem Content="Disabled" Tag="0"/>
@@ -3984,7 +3984,7 @@
                                                 <ColumnDefinition Width="80"/>
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Text="Menu + →" VerticalAlignment="Center" Foreground="#FFFFFF" FontSize="13"/>
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/menu.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image><TextBlock Text="+" VerticalAlignment="Center" Foreground="#AAAAAA" FontSize="14" Margin="5,0,5,0"/><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/dpad-right.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image></StackPanel>
                                             <ComboBox x:Name="HotkeyMenuDpadRightComboBox" Grid.Column="1"
                                                       SelectionChanged="HotkeyMenuDpadRight_SelectionChanged">
                                                 <ComboBoxItem Content="Disabled" Tag="0"/>
@@ -6849,6 +6849,45 @@
                             </Grid>
                         </Border>
 
+                        <!-- Input Mode & OS Reporting Card (Legion Go 2 firmware registers; values
+                             read back from the controller, not cached settings) -->
+                        <Border x:Name="ControllerInputModeCard" Style="{StaticResource CardStyle}" Visibility="Collapsed">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="Input Mode" Style="{StaticResource CardTitleStyle}"/>
+                                        <TextBlock Text="Controller gamepad protocol (switching briefly reconnects the pad)"
+                                                   FontSize="11" Foreground="#888888" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <ComboBox x:Name="LegionGamepadModeComboBox" Grid.Column="1" Width="110"
+                                              VerticalAlignment="Center"
+                                              Style="{StaticResource ModernComboBoxStyle}"
+                                              SelectionChanged="LegionGamepadModeComboBox_SelectionChanged">
+                                        <ComboBoxItem Content="X-Input"/>
+                                        <ComboBoxItem Content="D-Input"/>
+                                    </ComboBox>
+                                </Grid>
+                                <Grid Margin="0,10,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="Disable OS Reporting" Foreground="#DDDDDD" FontSize="14"/>
+                                        <TextBlock Text="Hide the controller from games and the OS (GoTweaks features keep working). Applied automatically during controller emulation."
+                                                   FontSize="11" Foreground="#888888" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <ToggleSwitch x:Name="LegionOsReportingToggle" Grid.Column="1"
+                                                  Style="{StaticResource ModernToggleStyle}"
+                                                  Toggled="LegionOsReportingToggle_Toggled"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
                         <!-- Touchpad & Vibration Card (hidden on devices without HID touchpad support) -->
                         <StackPanel x:Name="TouchpadVibrationSection">
                             <Border Style="{StaticResource CardStyle}">
@@ -7113,6 +7152,23 @@
                                             <x:String>Spiral</x:String>
                                         </ComboBox>
                                     </StackPanel>
+
+                                    <!-- Firmware lighting profile slot (read back from the controller) -->
+                                    <Grid Margin="0,12,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Lighting Profile" Grid.Column="0" VerticalAlignment="Center" Foreground="#AAAAAA" FontSize="13"
+                                                   ToolTipService.ToolTip="The controller stores 3 lighting profiles; this selects which one is active (shared with Legion Space)."/>
+                                        <ComboBox x:Name="LegionRgbProfileComboBox" Grid.Column="1" Width="110"
+                                                  Style="{StaticResource ModernComboBoxStyle}"
+                                                  SelectionChanged="LegionRgbProfileComboBox_SelectionChanged">
+                                            <ComboBoxItem Content="Profile 1"/>
+                                            <ComboBoxItem Content="Profile 2"/>
+                                            <ComboBoxItem Content="Profile 3"/>
+                                        </ComboBox>
+                                    </Grid>
 
                                     <!-- Light Color (Solid, Pulse only) -->
                                     <StackPanel x:Name="LegionColorCard" Margin="0,12,0,0">
@@ -7947,6 +8003,7 @@
                                             <ComboBoxItem Content="Focus GoTweaks"/>
                                             <ComboBoxItem Content="Desktop Controls"/>
                                             <ComboBoxItem Content="Touch Keyboard"/>
+                                            <ComboBoxItem Content="Toggle Controller Emu"/>
                                         </ComboBox>
                                     </Grid>
 
@@ -7980,7 +8037,7 @@
                                                 Style="{StaticResource ModernButtonStyle}"
                                                 Margin="8,0,0,0"
                                                 Click="LegionLCommandApplyButton_Click"/>
-                                    </Grid><TextBlock x:Name="LegionLRemapStatusText" FontSize="11" Foreground="#FFC864" TextWrapping="Wrap" HorizontalAlignment="Right" Margin="0,4,0,0"/>
+                                    </Grid><TextBlock x:Name="LegionLRemapStatusText" FontSize="11" Foreground="#FFC864" TextWrapping="Wrap" HorizontalAlignment="Right" Margin="0,4,0,0" Visibility="Collapsed"/>
                                     <!-- Legion L LONG-press Row: separate action fired after holding
                                          ~0.8s. Short press then fires on RELEASE instead of press. -->
                                     <Grid Margin="0,8,0,0">
@@ -8000,6 +8057,7 @@
                                             <ComboBoxItem Content="Focus GoTweaks"/>
                                             <ComboBoxItem Content="Desktop Controls"/>
                                             <ComboBoxItem Content="Touch Keyboard"/>
+                                            <ComboBoxItem Content="Toggle Controller Emu"/>
                                         </ComboBox>
                                     </Grid>
                                     <StackPanel x:Name="LegionLLongShortcutPanel" Margin="0,8,0,0" HorizontalAlignment="Right" Visibility="Collapsed" Orientation="Horizontal">
@@ -8013,7 +8071,7 @@
                                         <ComboBox x:Name="LegionLLongKeyComboBox" MaxWidth="200" HorizontalAlignment="Right" Width="90" Style="{StaticResource ModernComboBoxStyle}"
                                                   SelectedIndex="0" SelectionChanged="LegionLLongKeyComboBox_SelectionChanged">
                                             <x:String>+ Key</x:String><x:String>A</x:String><x:String>B</x:String><x:String>C</x:String><x:String>D</x:String><x:String>E</x:String><x:String>F</x:String><x:String>G</x:String><x:String>H</x:String><x:String>I</x:String><x:String>J</x:String><x:String>K</x:String><x:String>L</x:String><x:String>M</x:String><x:String>N</x:String><x:String>O</x:String><x:String>P</x:String><x:String>Q</x:String><x:String>R</x:String><x:String>S</x:String><x:String>T</x:String><x:String>U</x:String><x:String>V</x:String><x:String>W</x:String><x:String>X</x:String><x:String>Y</x:String><x:String>Z</x:String><x:String>0</x:String><x:String>1</x:String><x:String>2</x:String><x:String>3</x:String><x:String>4</x:String><x:String>5</x:String><x:String>6</x:String><x:String>7</x:String><x:String>8</x:String><x:String>9</x:String><x:String>F1</x:String><x:String>F2</x:String><x:String>F3</x:String><x:String>F4</x:String><x:String>F5</x:String><x:String>F6</x:String><x:String>F7</x:String><x:String>F8</x:String><x:String>F9</x:String><x:String>F10</x:String><x:String>F11</x:String><x:String>F12</x:String><x:String>Enter</x:String><x:String>Esc</x:String><x:String>Space</x:String><x:String>Tab</x:String><x:String>Backspace</x:String><x:String>Up</x:String><x:String>Down</x:String><x:String>Left</x:String><x:String>Right</x:String><x:String>LCtrl</x:String><x:String>LShift</x:String><x:String>LAlt</x:String><x:String>LWin</x:String><x:String>RCtrl</x:String><x:String>RShift</x:String><x:String>RAlt</x:String><x:String>RWin</x:String><x:String>Home</x:String><x:String>End</x:String><x:String>PgUp</x:String><x:String>PgDn</x:String><x:String>Insert</x:String><x:String>Delete</x:String><x:String>PrintScr</x:String><x:String>Pause</x:String><x:String>VolUp</x:String><x:String>VolDown</x:String><x:String>VolMute</x:String><x:String>[</x:String><x:String>]</x:String>
-                                        </ComboBox>
+                                        </ComboBox><Button x:Name="LegionLLongKeyPicker" Width="100" MaxWidth="200" HorizontalAlignment="Right" HorizontalContentAlignment="Left" MinHeight="32" Padding="8,4,8,4"/>
                                     </StackPanel>
                                     <Grid x:Name="LegionLLongCommandGrid" Margin="115,8,0,0" Visibility="Collapsed">
                                         <Grid.ColumnDefinitions>
@@ -8053,6 +8111,7 @@
                                             <ComboBoxItem Content="Focus GoTweaks"/>
                                             <ComboBoxItem Content="Desktop Controls"/>
                                             <ComboBoxItem Content="Touch Keyboard"/>
+                                            <ComboBoxItem Content="Toggle Controller Emu"/>
                                         </ComboBox>
                                     </Grid>
 
@@ -8086,7 +8145,7 @@
                                                 Style="{StaticResource ModernButtonStyle}"
                                                 Margin="8,0,0,0"
                                                 Click="LegionRCommandApplyButton_Click"/>
-                                    </Grid><TextBlock x:Name="LegionRRemapStatusText" FontSize="11" Foreground="#FFC864" TextWrapping="Wrap" HorizontalAlignment="Right" Margin="0,4,0,0"/>
+                                    </Grid><TextBlock x:Name="LegionRRemapStatusText" FontSize="11" Foreground="#FFC864" TextWrapping="Wrap" HorizontalAlignment="Right" Margin="0,4,0,0" Visibility="Collapsed"/>
                                     <!-- Legion R LONG-press Row: separate action fired after holding
                                          ~0.8s. Short press then fires on RELEASE instead of press. -->
                                     <Grid Margin="0,8,0,0">
@@ -8106,6 +8165,7 @@
                                             <ComboBoxItem Content="Focus GoTweaks"/>
                                             <ComboBoxItem Content="Desktop Controls"/>
                                             <ComboBoxItem Content="Touch Keyboard"/>
+                                            <ComboBoxItem Content="Toggle Controller Emu"/>
                                         </ComboBox>
                                     </Grid>
                                     <StackPanel x:Name="LegionRLongShortcutPanel" Margin="0,8,0,0" HorizontalAlignment="Right" Visibility="Collapsed" Orientation="Horizontal">
@@ -8119,7 +8179,7 @@
                                         <ComboBox x:Name="LegionRLongKeyComboBox" MaxWidth="200" HorizontalAlignment="Right" Width="90" Style="{StaticResource ModernComboBoxStyle}"
                                                   SelectedIndex="0" SelectionChanged="LegionRLongKeyComboBox_SelectionChanged">
                                             <x:String>+ Key</x:String><x:String>A</x:String><x:String>B</x:String><x:String>C</x:String><x:String>D</x:String><x:String>E</x:String><x:String>F</x:String><x:String>G</x:String><x:String>H</x:String><x:String>I</x:String><x:String>J</x:String><x:String>K</x:String><x:String>L</x:String><x:String>M</x:String><x:String>N</x:String><x:String>O</x:String><x:String>P</x:String><x:String>Q</x:String><x:String>R</x:String><x:String>S</x:String><x:String>T</x:String><x:String>U</x:String><x:String>V</x:String><x:String>W</x:String><x:String>X</x:String><x:String>Y</x:String><x:String>Z</x:String><x:String>0</x:String><x:String>1</x:String><x:String>2</x:String><x:String>3</x:String><x:String>4</x:String><x:String>5</x:String><x:String>6</x:String><x:String>7</x:String><x:String>8</x:String><x:String>9</x:String><x:String>F1</x:String><x:String>F2</x:String><x:String>F3</x:String><x:String>F4</x:String><x:String>F5</x:String><x:String>F6</x:String><x:String>F7</x:String><x:String>F8</x:String><x:String>F9</x:String><x:String>F10</x:String><x:String>F11</x:String><x:String>F12</x:String><x:String>Enter</x:String><x:String>Esc</x:String><x:String>Space</x:String><x:String>Tab</x:String><x:String>Backspace</x:String><x:String>Up</x:String><x:String>Down</x:String><x:String>Left</x:String><x:String>Right</x:String><x:String>LCtrl</x:String><x:String>LShift</x:String><x:String>LAlt</x:String><x:String>LWin</x:String><x:String>RCtrl</x:String><x:String>RShift</x:String><x:String>RAlt</x:String><x:String>RWin</x:String><x:String>Home</x:String><x:String>End</x:String><x:String>PgUp</x:String><x:String>PgDn</x:String><x:String>Insert</x:String><x:String>Delete</x:String><x:String>PrintScr</x:String><x:String>Pause</x:String><x:String>VolUp</x:String><x:String>VolDown</x:String><x:String>VolMute</x:String><x:String>[</x:String><x:String>]</x:String>
-                                        </ComboBox>
+                                        </ComboBox><Button x:Name="LegionRLongKeyPicker" Width="100" MaxWidth="200" HorizontalAlignment="Right" HorizontalContentAlignment="Left" MinHeight="32" Padding="8,4,8,4"/>
                                     </StackPanel>
                                     <Grid x:Name="LegionRLongCommandGrid" Margin="115,8,0,0" Visibility="Collapsed">
                                         <Grid.ColumnDefinitions>

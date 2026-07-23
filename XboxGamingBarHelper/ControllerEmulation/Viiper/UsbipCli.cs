@@ -1,4 +1,4 @@
-using NLog;
+﻿using NLog;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -58,6 +58,15 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
         // two "usbip attach -b 1-1 succeeded" 3s apart, both "newly attached=1".
         private static readonly object AttachSync = new object();
 
+        // Set when the in-process USBIP server (re)starts. Any import of our busids
+        // that predates the server is a ZOMBIE: it belongs to a dead helper's server
+        // (helper killed/upgraded without DetachAll), shows up as a working pad in
+        // XInput, but receives no data - guide presses vanished into it (field report
+        // 2026-07-23 after the 2723 upgrade's triple helper restart). The first attach
+        // pass after server start detaches such imports and re-attaches fresh.
+        private static bool _staleSweepPending;
+        public static void NoteServerStarted() { lock (AttachSync) { _staleSweepPending = true; } }
+
         /// <summary>
         /// Attaches every device libviiper is exporting on its loopback USBIP server that
         /// isn't already imported into the local UDE bus. Best-effort: logs and returns
@@ -87,8 +96,20 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
 
                     var attachedPorts = ListAttachedPortsByBusId(exe);
                     int attachedNow = 0;
+                    bool sweepStale = _staleSweepPending;
+                    _staleSweepPending = false;
                     foreach (var busId in exported)
                     {
+                        if (sweepStale && attachedPorts.TryGetValue(busId, out var stalePorts) && stalePorts.Count > 0)
+                        {
+                            Logger.Info($"usbip: detaching {stalePorts.Count} stale import(s) of {busId} from a previous server session");
+                            foreach (var stalePort in stalePorts)
+                            {
+                                string o = Run(exe, $"detach -p {stalePort}");
+                                Logger.Info($"usbip detach stale -p {stalePort} -> {(o ?? string.Empty).Trim()}");
+                            }
+                            attachedPorts.Remove(busId);
+                        }
                         if (attachedPorts.TryGetValue(busId, out var ports) && ports.Count > 0)
                         {
                             // Already imported. If it's imported MORE than once (a past race,

@@ -767,6 +767,25 @@ namespace XboxGamingBarHelper
                     // toggle + Touch Keyboard) - the monitor invokes these on press.
                     LegionButtonMonitor.OnToggleDesktopControlsRequested = () => ToggleDesktopControls();
                     LegionButtonMonitor.OnTouchKeyboardRequested = () => OpenOnScreenKeyboard();
+                    // Toggle emulation off the HID thread - SetEnabled does heavy work
+                    // (usbip attach/detach, HidHide, device publish) and must not stall
+                    // the button monitor's report loop.
+                    LegionButtonMonitor.OnToggleControllerEmulationRequested = () =>
+                    {
+                        System.Threading.Tasks.Task.Run(() =>
+                        {
+                            try
+                            {
+                                var prop = controllerEmulationManager?.ControllerEmulationEnabled;
+                                if (prop == null) { Logger.Warn("Toggle emu: no emulation manager"); return; }
+                                bool next = !prop.Value;
+                                Logger.Info($"Legion button: toggling controller emulation -> {(next ? "ON" : "OFF")}");
+                                prop.SetValue((object)next);
+                                prop.SyncToRemote();
+                            }
+                            catch (Exception ex) { Logger.Error($"Toggle emu failed: {ex.Message}"); }
+                        });
+                    };
                     // Input-mode pill: route firmware mode/FPS-switch reads into the synced property.
                     LegionButtonMonitor.InputModeUpdated = (mode) =>
                     {
@@ -777,6 +796,35 @@ namespace XboxGamingBarHelper
                     {
                         try { legionManager?.LegionMcuFirmwareVersion?.SetValueAndSync(fw); }
                         catch (Exception ex) { Logger.Warn($"McuFirmwareUpdated sync threw: {ex.Message}"); }
+                    };
+                    // Firmware-backed control readbacks: values came FROM hardware, so
+                    // suppress the hardware re-apply while syncing to the widget.
+                    LegionButtonMonitor.RgbProfileUpdated = (prof) =>
+                    {
+                        var prop = legionManager?.LegionRgbActiveProfile;
+                        if (prop == null) return;
+                        prop.SuppressHardwareApply = true;
+                        try { prop.SetValueAndSync(prof); }
+                        catch (Exception ex) { Logger.Warn($"RgbProfileUpdated sync threw: {ex.Message}"); }
+                        finally { prop.SuppressHardwareApply = false; }
+                    };
+                    LegionButtonMonitor.GamepadModeRawUpdated = (mode) =>
+                    {
+                        var prop = legionManager?.LegionGamepadModeSelect;
+                        if (prop == null) return;
+                        prop.SuppressHardwareApply = true;
+                        try { prop.SetValueAndSync(mode); }
+                        catch (Exception ex) { Logger.Warn($"GamepadModeRawUpdated sync threw: {ex.Message}"); }
+                        finally { prop.SuppressHardwareApply = false; }
+                    };
+                    LegionButtonMonitor.OsReportingUpdated = (disabled) =>
+                    {
+                        var prop = legionManager?.LegionOsReportingDisabled;
+                        if (prop == null) return;
+                        prop.SuppressHardwareApply = true;
+                        try { prop.SetValueAndSync(disabled); }
+                        catch (Exception ex) { Logger.Warn($"OsReportingUpdated sync threw: {ex.Message}"); }
+                        finally { prop.SuppressHardwareApply = false; }
                     };
                     Logger.Info("Labs: Created unified Legion button monitor with battery support");
                 }

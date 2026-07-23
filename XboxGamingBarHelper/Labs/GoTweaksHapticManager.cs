@@ -45,6 +45,15 @@ namespace XboxGamingBarHelper.Labs
         private long _motorExpiresTicks;
         private bool _motorActive;
 
+        // Confirmation-pulse sequencer: back-to-back holds fire pulses microseconds apart;
+        // just extending the active pulse blends them into one continuous buzz so the second
+        // isn't felt (field report 2026-07-23). Queue them and play each with a forced OFF
+        // gap so every confirmation is a distinct tap.
+        private readonly System.Collections.Generic.Queue<(byte strength, int durMs)> _confirmQueue
+            = new System.Collections.Generic.Queue<(byte, int)>();
+        private long _confirmNextAllowedTicks;   // don't start the next queued pulse before this
+        private const int ConfirmGapMs = 45;
+
         private Thread _tickThread;
         private volatile bool _running;
         private bool _edgeHooked;
@@ -200,6 +209,8 @@ namespace XboxGamingBarHelper.Labs
                 long now = DateTime.UtcNow.Ticks;
 
                 bool stop = false;
+                bool startNext = false;
+                byte nextStrength = 0;
                 lock (_stateLock)
                 {
                     if (_motorActive && now >= _motorExpiresTicks)
@@ -207,9 +218,23 @@ namespace XboxGamingBarHelper.Labs
                         _motorActive = false;
                         _motorStrength = 0;
                         stop = true;
+                        // Enforce the OFF gap before the next queued confirmation.
+                        _confirmNextAllowedTicks = now + ConfirmGapMs * TimeSpan.TicksPerMillisecond;
+                    }
+                    // Start the next queued confirmation pulse once the motor is idle and
+                    // the inter-pulse gap has elapsed.
+                    if (!_motorActive && _confirmQueue.Count > 0 && now >= _confirmNextAllowedTicks)
+                    {
+                        var (s, dur) = _confirmQueue.Dequeue();
+                        _motorStrength = s;
+                        _motorExpiresTicks = now + dur * TimeSpan.TicksPerMillisecond;
+                        _motorActive = true;
+                        startNext = true;
+                        nextStrength = s;
                     }
                 }
                 if (stop) EmitMotor(0);
+                if (startNext) EmitMotor(nextStrength);
 
                 if (now - _lastSlotProbeTicks >= SlotRefreshTicks)
                 {
@@ -244,6 +269,52 @@ namespace XboxGamingBarHelper.Labs
                     _slot = found;
                     Logger.Info($"GoTweaksHaptics: Legion XInput slot = {(_slot < 0 ? "none" : _slot.ToString())}");
                 }
+            }
+        }
+
+        /// <summary>
+        /// One-shot confirmation buzz for executed actions (Legion L/R hold bindings,
+        /// quick-tile combos, System-tab hotkeys). Independent of the per-button click
+        /// engine: fires even when GoTweaks Haptics is disabled, since it confirms an
+        /// action rather than echoing a button press. Slightly longer than a click so
+        /// it reads as "something happened" (default 70ms @ ~55%).
+        /// </summary>
+        public void PlayConfirmationPulse(int intensityPercent = 55, int durationMs = 70)
+        {
+            try
+            {
+                if (intensityPercent <= 0 || durationMs <= 0) return;
+                byte strength = (byte)Math.Min(255, intensityPercent * 255 / 100);
+
+                // The tick thread owns the pulse cutoff, gap sequencing and slot re-probing;
+                // make sure it runs even if the click engine was never enabled.
+                StartTickThread();
+                bool needProbe;
+                bool playNow;
+                long now = DateTime.UtcNow.Ticks;
+                lock (_stateLock)
+                {
+                    needProbe = _slot < 0;
+                    // If nothing is playing and no gap is pending, play immediately for lowest
+                    // latency; otherwise queue so the tick loop sequences it after the gap.
+                    playNow = !_motorActive && _confirmQueue.Count == 0 && now >= _confirmNextAllowedTicks;
+                    if (playNow)
+                    {
+                        _motorStrength = strength;
+                        _motorExpiresTicks = now + durationMs * TimeSpan.TicksPerMillisecond;
+                        _motorActive = true;
+                    }
+                    else if (_confirmQueue.Count < 4) // cap so a mash doesn't buzz for seconds
+                    {
+                        _confirmQueue.Enqueue((strength, durationMs));
+                    }
+                }
+                if (needProbe) ProbeSlot(force: true);
+                if (playNow) EmitMotor(strength);
+            }
+            catch (Exception ex)
+            {
+                Logger.Debug($"GoTweaksHaptics: confirmation pulse failed: {ex.Message}");
             }
         }
 

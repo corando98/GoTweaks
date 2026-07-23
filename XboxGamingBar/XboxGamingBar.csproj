@@ -242,6 +242,9 @@
     <Compile Include="Data\Controller\ControllerDockedLeftProperty.cs" />
     <Compile Include="Data\Controller\LegionControllerInputModeProperty.cs" />
     <Compile Include="Data\Controller\LegionMcuFirmwareVersionProperty.cs" />
+    <Compile Include="Data\Controller\LegionRgbActiveProfileProperty.cs" />
+    <Compile Include="Data\Controller\LegionGamepadModeSelectProperty.cs" />
+    <Compile Include="Data\Controller\LegionOsReportingDisabledProperty.cs" />
     <Compile Include="Data\Controller\ControllerDockedRightProperty.cs" />
     <Compile Include="Data\Controller\ControllerVidPidProperty.cs" />
     <Compile Include="Data\Controller\ControllerDeviceStatusProperty.cs" />
