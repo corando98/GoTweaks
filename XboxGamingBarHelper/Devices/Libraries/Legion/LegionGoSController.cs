@@ -184,6 +184,32 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
 
         #endregion
 
+        #region Gamepad Config Methods (per hid-lenovo-go-s.c: SET_GAMEPAD_CFG=0x04, features 0-based)
+
+        /// <summary>
+        /// Sets the auto-sleep (hibernation) timeout. 0 = never.
+        ///
+        /// HID Command: [0x04, 0x04, minutes] (SET_GAMEPAD_CFG, FEATURE_AUTO_SLEEP_TIME)
+        /// </summary>
+        public bool SetAutoSleepTime(int minutes)
+        {
+            byte min = (byte)Clamp(minutes, 0, 255);
+            return SendCommand(new byte[] { 0x04, 0x04, min });
+        }
+
+        /// <summary>
+        /// Sets the gamepad mode. NOTE: Go S values are 0-based (0=XInput, 1=DInput),
+        /// unlike the Go 2 protocol (1=XInput, 2=DInput).
+        ///
+        /// HID Command: [0x04, 0x01, mode] (SET_GAMEPAD_CFG, FEATURE_GAMEPAD_MODE)
+        /// </summary>
+        public bool SetGamepadMode(bool xinput)
+        {
+            return SendCommand(new byte[] { 0x04, 0x01, (byte)(xinput ? 0x00 : 0x01) });
+        }
+
+        #endregion
+
         #region RGB Control Methods
 
         /// <summary>

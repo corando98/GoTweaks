@@ -113,9 +113,17 @@ namespace XboxGamingBarHelper.Labs
         private const ushort LEGION_AUX_EXTRA_R3 = 0x0080;
         // Legion Go S back-button (Legion L/R) bits in byte 2.
         // Source: HHD slim const.py (extra_l1, extra_r1).
-        private const int GOS_BUTTON_BYTE = 2;
-        private const byte GOS_LEGION_L_BIT = 0x01;
-        private const byte GOS_LEGION_R_BIT = 0x02;
+        // Legion Go S button bits, cross-referenced against HHD's slim/const.py map
+        // (bit numbering there is MSB-first: mask = 0x80 >> bit). The Legion buttons
+        // ("mode"/"share") are on BYTE 0 bits 0x01/0x02 - the old byte-2 constants were
+        // actually the BACK PADDLES (extra_l1/extra_r1), so paddle presses fired the
+        // Legion L/R actions (fixed 2026-07-23).
+        private const int GOS_LEGION_BUTTON_BYTE = 0;
+        private const byte GOS_LEGION_L_BIT = 0x01;   // "mode" (left Legion button)
+        private const byte GOS_LEGION_R_BIT = 0x02;   // "share" (right Legion button)
+        private const int GOS_PADDLE_BYTE = 2;
+        private const byte GOS_PADDLE_L1_BIT = 0x01;  // extra_l1 (left back paddle)
+        private const byte GOS_PADDLE_R1_BIT = 0x02;  // extra_r1 (right back paddle)
 
         // Detected controller mode
         private bool isDetachedMode = false;
@@ -234,6 +242,10 @@ namespace XboxGamingBarHelper.Labs
         {
             var handle = hidHandle;
             if (handle == null || handle.IsInvalid || !_hasWriteAccess) return;
+            // Go 2 MCU_CONFIG frames only - the Go S has a completely different command
+            // space ([cmd][sub] with GET_VERSION=0x01 etc.), so these bytes would be
+            // protocol nonsense there (hid-lenovo-go-s.c cross-ref, 2026-07-23).
+            if (IsGoSControllerDevice()) return;
             SendOutputReport(handle, new byte[] { 0x05, 0x00, 0x03, 0x0E, 0x03 }, "get gamepad mode");
             SendOutputReport(handle, new byte[] { 0x05, 0x00, 0x03, 0x0B, 0x03 }, "get fps switch");
             SendOutputReport(handle, new byte[] { 0x05, 0x00, 0x02, 0x04, 0x01 }, "get mcu fw version");
@@ -2398,8 +2410,28 @@ namespace XboxGamingBarHelper.Labs
         /// sleep=10 as "ctrl 0x0a" (ignored). The old per-half 06:33 form is the Gen-1
         /// encoding; on Go 2 firmware Legion Space only ever uses 04 09.
         /// </summary>
+        // Go S routes sleep through its own config interface (LegionGoSController) -
+        // assigned by LegionManager once that controller connects. The Go 2 frames
+        // below are protocol nonsense on a Go S.
+        public static Func<int, bool> GoSAutoSleepWriter;
+
         public bool SetAutoSleepTime(int minutes)
         {
+            if (IsGoSControllerDevice())
+            {
+                var writer = GoSAutoSleepWriter;
+                if (writer != null)
+                {
+                    bool okGoS = false;
+                    try { okGoS = writer(minutes); }
+                    catch (Exception ex) { Logger.Warn($"SetAutoSleepTime (Go S) threw: {ex.Message}"); }
+                    Logger.Info($"LegionButtonMonitor.SetAutoSleepTime (Go S path) minutes={minutes} => {okGoS}");
+                    return okGoS;
+                }
+                Logger.Info("SetAutoSleepTime: Go S detected but no Go S config writer available");
+                return false;
+            }
+
             var handle = hidHandle;
             if (handle == null || handle.IsInvalid)
             {
@@ -3218,7 +3250,7 @@ namespace XboxGamingBarHelper.Labs
                                 }
                                 else
                                 {
-                                    byte gosButtonByte = buffer[GOS_BUTTON_BYTE];
+                                    byte gosButtonByte = buffer[GOS_LEGION_BUTTON_BYTE];
                                     legionLRawPressed = (gosButtonByte & GOS_LEGION_L_BIT) != 0;
                                     legionRRawPressed = (gosButtonByte & GOS_LEGION_R_BIT) != 0;
                                 }
@@ -3403,6 +3435,21 @@ namespace XboxGamingBarHelper.Labs
             if ((buttonByte2 & 0x80) != 0) buttons |= XINPUT_GAMEPAD_START;
             if ((buttonByte2 & 0x40) != 0) buttons |= XINPUT_GAMEPAD_BACK;
 
+            // Digital trigger flags (HHD: lt=(1,2)->0x20, rt=(1,0)->0x80). Fallback for
+            // firmware states where the analog bytes stay 0 but the digital bit fires.
+            if (leftTrigger == 0 && (buttonByte1 & 0x20) != 0) leftTrigger = 255;
+            if (rightTrigger == 0 && (buttonByte1 & 0x80) != 0) rightTrigger = 255;
+
+            // Aux buttons per HHD slim/const.py: Legion L "mode"=(0,7)->0x01,
+            // Legion R "share"=(0,6)->0x02, back paddles extra_l1/r1=(2,7)/(2,6)->0x01/0x02.
+            // Feeding these into the sample's AuxButtons runs the same ButtonEdge pipeline
+            // as Go 2 (remap, long-press, Guide routing) on the Go S.
+            ushort auxButtons = 0;
+            if ((buttonByte0 & GOS_LEGION_L_BIT) != 0) auxButtons |= LEGION_AUX_MODE;
+            if ((buttonByte0 & GOS_LEGION_R_BIT) != 0) auxButtons |= LEGION_AUX_SHARE;
+            if ((buttonByte2 & GOS_PADDLE_L1_BIT) != 0) auxButtons |= LEGION_AUX_EXTRA_L1;
+            if ((buttonByte2 & GOS_PADDLE_R1_BIT) != 0) auxButtons |= LEGION_AUX_EXTRA_R1;
+
             long sampleTimestampUtc = DateTime.UtcNow.Ticks;
             var sample = new LegionGamepadSample(
                 buttons,
@@ -3412,13 +3459,46 @@ namespace XboxGamingBarHelper.Labs
                 ScaleStickByteToXInput(leftStickYRaw, true),
                 ScaleStickByteToXInput(rightStickXRaw, false),
                 ScaleStickByteToXInput(rightStickYRaw, true),
-                0,
+                auxButtons,
                 sampleTimestampUtc);
 
             lock (_gyroSampleLock)
             {
                 _latestGamepadSample = sample;
                 _hasGamepadSample = true;
+            }
+
+            // EXPERIMENTAL (needs Go S hardware validation): the same report carries the
+            // unibody IMU per HHD - accel at bytes 14/16/18 (i16 LE, order x,z,y, scale
+            // -0.00212 m/s^2 per LSB) and gyro at bytes 20/22/24 (i16 LE, order x,z,y,
+            // scales -/+/- 0.0005325 rad/s per LSB). Converted to the deg/s + G units
+            // LegionGyroSample uses and stored to BOTH half-slots (single IMU) so every
+            // downstream consumer (VIIPER gyro forwarding) can be tested.
+            if (bytesRead >= 26)
+            {
+                const float GosGyroDegPerLsb = 0.0005325f * 57.29578f;    // rad/s -> deg/s
+                const float GosAccelGPerLsb = 0.00212f / 9.80665f;        // m/s^2 -> G
+                short aX = (short)(buffer[14] | (buffer[15] << 8));
+                short aZ = (short)(buffer[16] | (buffer[17] << 8));
+                short aY = (short)(buffer[18] | (buffer[19] << 8));
+                short gX = (short)(buffer[20] | (buffer[21] << 8));
+                short gZ = (short)(buffer[22] | (buffer[23] << 8));
+                short gY = (short)(buffer[24] | (buffer[25] << 8));
+                var imu = new LegionGyroSample(
+                    -gX * GosGyroDegPerLsb,
+                    -gY * GosGyroDegPerLsb,
+                    gZ * GosGyroDegPerLsb,
+                    -aX * GosAccelGPerLsb,
+                    -aY * GosAccelGPerLsb,
+                    -aZ * GosAccelGPerLsb,
+                    sampleTimestampUtc);
+                lock (_gyroSampleLock)
+                {
+                    _latestLeftGyroSample = imu;
+                    _latestRightGyroSample = imu;
+                    _hasLeftGyroSample = true;
+                    _hasRightGyroSample = true;
+                }
             }
 
             return true;

@@ -845,6 +845,11 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                                 isGoSControllerConnected = true;
                                 isLegionGoDetected = true;
                                 Logger.Info("Legion Go S RGB controller connected successfully");
+                                // Route the Controller Sleep card to the Go S config protocol
+                                // (SET_GAMEPAD_CFG auto-sleep) - the button monitor's Go 2
+                                // frames don't apply on this device.
+                                Labs.LegionButtonMonitor.GoSAutoSleepWriter =
+                                    (min) => goSController?.SetAutoSleepTime(min) ?? false;
                             }
                             else
                             {
