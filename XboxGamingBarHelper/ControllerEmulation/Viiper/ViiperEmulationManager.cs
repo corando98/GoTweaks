@@ -634,6 +634,22 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             }
             catch (Exception ex) { Logger.Warn($"VIIPER HidHide Enable threw: {ex.Message}"); }
 
+            // Firmware-level XInput suppression (Legion Go 2 register 04/0f): when the
+            // forwarder reads the raw vendor HID stream (LegionHid source), the stock pad's
+            // XInput endpoint is switched off at the controller itself, so games can't see
+            // it even through GameInput-brokered paths that pierce HidHide's cloak
+            // (browser gamepad testers, Win11 XInput shim). NOT done for the XInput input
+            // source - the forwarder reads the physical pad's XInput slot there, so
+            // suppressing it would starve the emulation. State is remembered by the button
+            // monitor and re-asserted on every reconnect (dock/undock PID flips).
+            // (Direct call, not UpdatePhysicalXInputSuppression: isRunning isn't set yet here.)
+            try
+            {
+                Program.legionButtonMonitor?.SetPhysicalXInputEnabled(
+                    ResolveInputSource() != ViiperInputSourceKind.LegionHid);
+            }
+            catch (Exception ex) { Logger.Warn($"VIIPER physical XInput suppress threw: {ex.Message}"); }
+
             // Sweep ghost PnP entries left over from a previous helper session.
             // Hot-swaps in libviiper detach the old USB device, but Windows keeps
             // a Present=False entry for every (VID,PID,serial) it has ever seen.
@@ -820,6 +836,24 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
         {
             try { forwarder.SetInputSource(ResolveInputSource()); }
             catch (Exception ex) { Logger.Warn($"OnInputSourceChanged threw: {ex.Message}"); }
+            // Source flips mid-run change whether firmware XInput suppression is safe:
+            // LegionHid -> suppress; XInput -> must NOT suppress (it is the input feed).
+            UpdatePhysicalXInputSuppression();
+        }
+
+        /// <summary>
+        /// Applies the correct physical-pad XInput state (Legion firmware register 04/0f)
+        /// for the current emulation/source combination: suppressed only while emulation
+        /// runs with the LegionHid input source; enabled otherwise.
+        /// </summary>
+        private void UpdatePhysicalXInputSuppression()
+        {
+            try
+            {
+                bool suppress = isRunning && ResolveInputSource() == ViiperInputSourceKind.LegionHid;
+                Program.legionButtonMonitor?.SetPhysicalXInputEnabled(!suppress);
+            }
+            catch (Exception ex) { Logger.Warn($"UpdatePhysicalXInputSuppression threw: {ex.Message}"); }
         }
 
         private ViiperGyroSourceKind ResolveGyroSource()
@@ -1091,6 +1125,13 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
                 catch (Exception ex) { Logger.Warn($"VIIPER HidHide Disable threw: {ex.Message}"); }
                 viiperOwnsSuppression = false;
             }
+
+            // Always restore the physical pad's XInput output on stop (see StartLocked).
+            try
+            {
+                Program.legionButtonMonitor?.SetPhysicalXInputEnabled(true);
+            }
+            catch (Exception ex) { Logger.Warn($"VIIPER physical XInput restore threw: {ex.Message}"); }
 
             // Detach our UDE imports first (we attach explicitly via usbip.exe on add — see
             // UsbipCli), then tear down the server side.

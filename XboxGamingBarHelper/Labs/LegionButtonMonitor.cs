@@ -218,6 +218,13 @@ namespace XboxGamingBarHelper.Labs
         // pad after brief movement - field-confirmed 2026-07-22. Reset with the other
         // per-connection flags on disconnect.
         private bool _reportStreamWoken = false;
+
+        // Desired state of the physical pad's XInput output (firmware register 04/0f).
+        // Controller emulation with the LegionHid input source suppresses it so games
+        // never see the stock pad (a firmware-level replacement for HidHide cloaking,
+        // which GameInput-brokered consumers could see through). Volatile: set from the
+        // emulation manager's thread, read by the monitor thread's per-connect init.
+        private volatile bool _physicalXInputSuppressed = false;
         private readonly object _hidLock = new object();  // Lock for HID operations to prevent race conditions
         private readonly object startStopLock = new object();  // #94: serialize Start/StartForBatteryMonitoring (see Start)
         private Thread monitorThread;
@@ -2203,10 +2210,59 @@ namespace XboxGamingBarHelper.Labs
         private static readonly byte[][] XInputCoexistenceRegisters =
         {
             new byte[] { 0x05, 0x00, 0x04, 0x11, 0x00, 0x02 },              // report format = initialized 04:00:A1
-            new byte[] { 0x05, 0x00, 0x04, 0x0F, 0x00, 0x01 },              // XInput output ON (the fix)
+            null, // placeholder: XInput output register (04/0f) - value depends on _physicalXInputSuppressed
             new byte[] { 0x05, 0x00, 0x04, 0x10, LEGION_CONTROLLER_LEFT_ID,  0x01 }, // gyro HID reporting ON, left
             new byte[] { 0x05, 0x00, 0x04, 0x10, LEGION_CONTROLLER_RIGHT_ID, 0x01 }, // gyro HID reporting ON, right
         };
+
+        // 04/0f: 0x01 = XInput ON alongside vendor stream; 0x02 = vendor-exclusive
+        // (XInput suppressed - used while controller emulation runs on LegionHid).
+        // Written to THREE addresses: 0x00 (global/receiver) plus each half. The global
+        // write alone is honored while the halves are ATTACHED, but in DETACHED mode the
+        // halves are separate wireless endpoints behind the receiver and the global write
+        // does not reach them - field report 2026-07-22: suppress while attached, detach,
+        // then disable emulation while detached left the pad dead until a controller
+        // restart. Per-half addressing matches the rest of the 04-xx family (04/10 etc.).
+        private byte[][] BuildXInputOutputRegisterCommands()
+        {
+            byte value = _physicalXInputSuppressed ? (byte)0x02 : (byte)0x01;
+            return new[]
+            {
+                new byte[] { 0x05, 0x00, 0x04, 0x0F, 0x00, value },
+                new byte[] { 0x05, 0x00, 0x04, 0x0F, LEGION_CONTROLLER_LEFT_ID,  value },
+                new byte[] { 0x05, 0x00, 0x04, 0x0F, LEGION_CONTROLLER_RIGHT_ID, value },
+            };
+        }
+
+        /// <summary>
+        /// Enables or suppresses the physical pad's XInput output via firmware register
+        /// 04/0f (latched, survives the recurring handshake). Used by controller emulation
+        /// (LegionHid source) so games can't see the stock pad while a virtual pad runs -
+        /// unlike HidHide cloaking, GameInput-brokered consumers cannot see through this.
+        /// The desired state is remembered and re-asserted by the per-connect init, so it
+        /// survives receiver re-enumerations (dock/undock, PID flips) mid-emulation.
+        /// Returns true if the register write was sent now (false = no handle yet; the
+        /// state still applies on next connect).
+        /// </summary>
+        public bool SetPhysicalXInputEnabled(bool enabled)
+        {
+            _physicalXInputSuppressed = !enabled;
+            var handle = hidHandle;
+            if (handle == null || handle.IsInvalid || !_hasWriteAccess)
+            {
+                Logger.Info($"LegionButtonMonitor: physical XInput {(enabled ? "enable" : "suppress")} deferred (no HID handle) - will apply on connect");
+                return false;
+            }
+            bool ok = true;
+            foreach (byte[] cmd in BuildXInputOutputRegisterCommands())
+            {
+                ok &= SendOutputReport(handle, cmd,
+                    enabled ? "physical XInput output ON" : "physical XInput output OFF (controller emulation)");
+                System.Threading.Thread.Sleep(20);
+            }
+            Logger.Info($"LegionButtonMonitor: physical XInput output {(enabled ? "ENABLED" : "SUPPRESSED")} via 04/0f (global+L+R) => {ok}");
+            return ok;
+        }
 
         /// <summary>
         /// Writes the XInput+vendor coexistence registers (see field above). Sent once per
@@ -2222,13 +2278,21 @@ namespace XboxGamingBarHelper.Labs
             }
             try
             {
-                int ok = 0;
-                foreach (byte[] cmd in XInputCoexistenceRegisters)
+                int ok = 0, total = 0;
+                foreach (byte[] entry in XInputCoexistenceRegisters)
                 {
-                    if (SendOutputReport(handle, cmd, "xinput-coexist")) ok++;
-                    System.Threading.Thread.Sleep(20);
+                    // The 04/0f slot honors the emulation manager's suppression request so a
+                    // mid-emulation reconnect doesn't resurrect the stock pad's XInput. It
+                    // expands to three writes (global + per half - see the builder).
+                    byte[][] cmds = entry != null ? new[] { entry } : BuildXInputOutputRegisterCommands();
+                    foreach (byte[] cmd in cmds)
+                    {
+                        total++;
+                        if (SendOutputReport(handle, cmd, "xinput-coexist")) ok++;
+                        System.Threading.Thread.Sleep(20);
+                    }
                 }
-                Logger.Info($"LegionButtonMonitor: Wrote XInput coexistence registers ({ok}/{XInputCoexistenceRegisters.Length}) - keeps the physical pad's XInput alive alongside the vendor stream");
+                Logger.Info($"LegionButtonMonitor: Wrote XInput coexistence registers ({ok}/{total}, xinput={(!_physicalXInputSuppressed ? "ON" : "SUPPRESSED (emu)")})");
             }
             catch (Exception ex)
             {
