@@ -6730,12 +6730,25 @@
                                 <!-- Separator -->
                                 <Border Height="1" Background="#33FFFFFF" Margin="0,10,0,0"/>
 
-                                <!-- Device Info -->
-                                <TextBlock x:Name="LegionControllerPidVidText"
-                                           Text="VID:PID --"
-                                           FontSize="11"
-                                           Foreground="#666666"
-                                           Margin="0,8,0,0"/>
+                                <!-- Device Info + input-mode pill (firmware-read: X-Input / D-Input / FPS) -->
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" x:Name="LegionControllerPidVidText"
+                                               Text="VID:PID --"
+                                               FontSize="11"
+                                               Foreground="#666666"
+                                               VerticalAlignment="Center"/>
+                                    <Border Grid.Column="1" x:Name="LegionInputModePill" Visibility="Collapsed" Background="#1E3A2A" CornerRadius="10" Padding="10,2,10,3"
+                                            ToolTipService.ToolTip="Controller input mode reported by the firmware. X-Input = standard gamepad; D-Input = DirectInput mode; FPS = the physical FPS switch is engaged (mouse-like right pad).">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Ellipse x:Name="LegionInputModePillDot" Width="8" Height="8" Fill="#3FB950" Margin="0,1,6,0" VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="LegionInputModePillText" Text="X-Input" FontSize="11" Foreground="#E0E0E0"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
 
                                 <!-- Controller Information (populated from b0:01 device status) -->
                                 <StackPanel x:Name="LegionControllerInfoSection" Visibility="Collapsed" Margin="0,10,0,0">
@@ -6751,6 +6764,17 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" Text="Firmware" FontSize="11" Foreground="#888888"/>
                                         <TextBlock Grid.Column="1" x:Name="LegionControllerFirmwareText"
+                                                   Text="—" FontSize="11" Foreground="#FFFFFF"
+                                                   HorizontalAlignment="Right"/>
+                                    </Grid>
+
+                                    <Grid Margin="0,4,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="MCU" FontSize="11" Foreground="#888888"/>
+                                        <TextBlock Grid.Column="1" x:Name="LegionControllerMcuFirmwareText"
                                                    Text="—" FontSize="11" Foreground="#FFFFFF"
                                                    HorizontalAlignment="Right"/>
                                     </Grid>
@@ -6835,7 +6859,19 @@
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0">
-                                            <TextBlock Text="Touchpad &amp; Vibration" Style="{StaticResource CardTitleStyle}"/>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="Touchpad &amp; Vibration" Style="{StaticResource CardTitleStyle}"/>
+                                                <!-- Shown while Reactive Haptics is enabled - mirrors the Lighting
+                                                     card's Reactive badge so the collapsed card still signals it. -->
+                                                <Border x:Name="HapticsReactiveBadge"
+                                                        Visibility="Collapsed"
+                                                        Background="#2A4A66" CornerRadius="4"
+                                                        Padding="6,1,6,2" Margin="8,2,0,0"
+                                                        VerticalAlignment="Center"
+                                                        ToolTipService.ToolTip="Reactive Haptics is enabled - the controller motors click on inputs system-wide, even outside games.">
+                                                    <TextBlock Text="Reactive" FontSize="11" Foreground="#9ED2FF"/>
+                                                </Border>
+                                            </StackPanel>
                                             <TextBlock Text="Touchpad and haptic feedback settings"
                                                        Style="{StaticResource CardCaptionStyle}"/>
                                         </StackPanel>
@@ -6930,7 +6966,7 @@
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0">
-                                            <TextBlock Text="GoTweaks Haptics" Foreground="#DDDDDD" FontSize="14"/>
+                                            <TextBlock Text="Reactive Haptics" Foreground="#DDDDDD" FontSize="14"/>
                                             <TextBlock Text="Tactile click on inputs, system-wide via the controller motors"
                                                        Foreground="#888888" FontSize="11" TextWrapping="Wrap"/>
                                         </StackPanel>
@@ -7889,16 +7925,18 @@
                                     <!-- Legion Buttons Section -->
                                     <TextBlock Text="LEGION BUTTONS" FontSize="11" FontWeight="SemiBold" Foreground="#888888" Margin="0,0,0,8"/>
 
-                                    <!-- Legion L Row -->
-                                    <Grid>
+                                    <!-- Legion L group: glyph header, then indented Click / Hold rows -->
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Image Width="20" Height="20" Margin="0,0,8,0" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/legion.svg" RasterizePixelWidth="44" RasterizePixelHeight="44"/></Image.Source></Image><TextBlock Text="Legion L:"
+                                               VerticalAlignment="Center"
+                                               FontSize="14"
+                                               Foreground="#E0E0E0"/></StackPanel>
+                                    <Grid Margin="0,6,0,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="85"/>
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
-                                        <StackPanel Orientation="Horizontal" Grid.Column="0" VerticalAlignment="Center"><Image Width="20" Height="20" Margin="0,0,8,0" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/legion.svg" RasterizePixelWidth="44" RasterizePixelHeight="44"/></Image.Source></Image><TextBlock Text="Legion L:"
-                                                   VerticalAlignment="Center"
-                                                   FontSize="14"
-                                                   Foreground="#E0E0E0"/></StackPanel>
+                                        <TextBlock Text="Click" Grid.Column="0" Margin="28,0,0,0"
+                                                   VerticalAlignment="Center" FontSize="13" Foreground="#C8C8C8"/>
                                         <ComboBox x:Name="LegionLActionComboBox" MaxWidth="200" HorizontalAlignment="Right"
                                                   Grid.Column="1"
                                                   Style="{StaticResource ModernComboBoxStyle}">
@@ -7947,10 +7985,10 @@
                                          ~0.8s. Short press then fires on RELEASE instead of press. -->
                                     <Grid Margin="0,8,0,0">
                                         <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="115"/>
+                                            <ColumnDefinition Width="85"/>
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Text="Legion L (hold):" Grid.Column="0"
+                                        <TextBlock Text="Hold" Grid.Column="0" Margin="28,0,0,0"
                                                    VerticalAlignment="Center" FontSize="13" Foreground="#C8C8C8"/>
                                         <ComboBox x:Name="LegionLLongActionComboBox" MaxWidth="200" HorizontalAlignment="Right"
                                                   Grid.Column="1"
@@ -7993,16 +8031,18 @@
                                                 Click="LegionLLongCommandApplyButton_Click"/>
                                     </Grid>
 
-                                    <!-- Legion R Row -->
-                                    <Grid Margin="0,12,0,0">
+                                    <!-- Legion R group: glyph header, then indented Click / Hold rows -->
+                                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0" VerticalAlignment="Center"><Image Width="20" Height="20" Margin="0,0,8,0" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/qam.svg" RasterizePixelWidth="44" RasterizePixelHeight="44"/></Image.Source></Image><TextBlock Text="Legion R:"
+                                               VerticalAlignment="Center"
+                                               FontSize="14"
+                                               Foreground="#E0E0E0"/></StackPanel>
+                                    <Grid Margin="0,6,0,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="85"/>
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
-                                        <StackPanel Orientation="Horizontal" Grid.Column="0" VerticalAlignment="Center"><Image Width="20" Height="20" Margin="0,0,8,0" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/qam.svg" RasterizePixelWidth="44" RasterizePixelHeight="44"/></Image.Source></Image><TextBlock Text="Legion R:"
-                                                   VerticalAlignment="Center"
-                                                   FontSize="14"
-                                                   Foreground="#E0E0E0"/></StackPanel>
+                                        <TextBlock Text="Click" Grid.Column="0" Margin="28,0,0,0"
+                                                   VerticalAlignment="Center" FontSize="13" Foreground="#C8C8C8"/>
                                         <ComboBox x:Name="LegionRActionComboBox" MaxWidth="200" HorizontalAlignment="Right"
                                                   Grid.Column="1"
                                                   Style="{StaticResource ModernComboBoxStyle}">
@@ -8051,10 +8091,10 @@
                                          ~0.8s. Short press then fires on RELEASE instead of press. -->
                                     <Grid Margin="0,8,0,0">
                                         <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="115"/>
+                                            <ColumnDefinition Width="85"/>
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Text="Legion R (hold):" Grid.Column="0"
+                                        <TextBlock Text="Hold" Grid.Column="0" Margin="28,0,0,0"
                                                    VerticalAlignment="Center" FontSize="13" Foreground="#C8C8C8"/>
                                         <ComboBox x:Name="LegionRLongActionComboBox" MaxWidth="200" HorizontalAlignment="Right"
                                                   Grid.Column="1"

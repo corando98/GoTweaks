@@ -905,6 +905,8 @@ namespace XboxGamingBar
         private readonly ControllerConnectedRightProperty controllerConnectedRight;
         private readonly ControllerDockedLeftProperty controllerDockedLeft;
         private readonly ControllerDockedRightProperty controllerDockedRight;
+        private readonly LegionControllerInputModeProperty legionControllerInputMode;
+        private readonly LegionMcuFirmwareVersionProperty legionMcuFirmwareVersion;
         private readonly ControllerVidPidProperty controllerVidPid;
         private readonly ControllerDeviceStatusProperty controllerDeviceStatus;
 
@@ -1601,6 +1603,8 @@ namespace XboxGamingBar
             controllerConnectedRight = new ControllerConnectedRightProperty();
             controllerDockedLeft = new ControllerDockedLeftProperty();
             controllerDockedRight = new ControllerDockedRightProperty();
+            legionControllerInputMode = new LegionControllerInputModeProperty();
+            legionMcuFirmwareVersion = new LegionMcuFirmwareVersionProperty();
             controllerVidPid = new ControllerVidPidProperty();
             controllerDeviceStatus = new ControllerDeviceStatusProperty();
 
@@ -2009,6 +2013,8 @@ namespace XboxGamingBar
                 controllerConnectedRight,
                 controllerDockedLeft,
                 controllerDockedRight,
+                legionControllerInputMode,
+                legionMcuFirmwareVersion,
                 controllerVidPid,
                 controllerDeviceStatus,
                 // Device capability properties (for UI visibility)
@@ -2387,6 +2393,24 @@ namespace XboxGamingBar
             {
                 controllerDockedLeft.PropertyChanged += LegionControllerBattery_PropertyChanged;
             }
+            if (legionControllerInputMode != null)
+            {
+                legionControllerInputMode.PropertyChanged += (s2, e2) => UpdateLegionInputModePill();
+            }
+            if (legionMcuFirmwareVersion != null)
+            {
+                legionMcuFirmwareVersion.PropertyChanged += async (s2, e2) =>
+                {
+                    await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
+                    {
+                        if (LegionControllerMcuFirmwareText != null)
+                        {
+                            string fw = legionMcuFirmwareVersion?.Value;
+                            LegionControllerMcuFirmwareText.Text = string.IsNullOrEmpty(fw) ? "\u2014" : fw;
+                        }
+                    });
+                };
+            }
             if (controllerDockedRight != null)
             {
                 controllerDockedRight.PropertyChanged += LegionControllerBattery_PropertyChanged;
@@ -2426,6 +2450,38 @@ namespace XboxGamingBar
                 UpdateLegionControllerBatteryDisplay();
                 // Also refresh VID:PID in case it was missed during initial sync
                 UpdateLegionControllerVidPidDisplay();
+            });
+        }
+
+        /// <summary>
+        /// Renders the Legion-tab input-mode pill from Function.LegionControllerInputMode
+        /// (0 unknown/hidden, 1 X-Input green, 2 D-Input blue, 3 FPS orange).
+        /// </summary>
+        private async void UpdateLegionInputModePill()
+        {
+            await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
+            {
+                if (LegionInputModePill == null || LegionInputModePillText == null || LegionInputModePillDot == null)
+                {
+                    return;
+                }
+                int mode = legionControllerInputMode?.Value ?? 0;
+                if (mode <= 0 || mode > 3)
+                {
+                    LegionInputModePill.Visibility = Visibility.Collapsed;
+                    return;
+                }
+                string text; Windows.UI.Color dot, bg;
+                switch (mode)
+                {
+                    case 2:  text = "D-Input"; dot = Windows.UI.Color.FromArgb(255, 0x58, 0xA6, 0xFF); bg = Windows.UI.Color.FromArgb(255, 0x1E, 0x2A, 0x3A); break;
+                    case 3:  text = "FPS Mode"; dot = Windows.UI.Color.FromArgb(255, 0xF0, 0x88, 0x3E); bg = Windows.UI.Color.FromArgb(255, 0x3A, 0x2A, 0x1E); break;
+                    default: text = "X-Input"; dot = Windows.UI.Color.FromArgb(255, 0x3F, 0xB9, 0x50); bg = Windows.UI.Color.FromArgb(255, 0x1E, 0x3A, 0x2A); break;
+                }
+                LegionInputModePillText.Text = text;
+                LegionInputModePillDot.Fill = new Windows.UI.Xaml.Media.SolidColorBrush(dot);
+                LegionInputModePill.Background = new Windows.UI.Xaml.Media.SolidColorBrush(bg);
+                LegionInputModePill.Visibility = Visibility.Visible;
             });
         }
 
@@ -3624,7 +3680,7 @@ namespace XboxGamingBar
                 }
 
                 if (LegionControllerVibrationText != null)
-                    LegionControllerVibrationText.Text = VibrationLabel(vibration);
+                    LegionControllerVibrationText.Text = VibrationLabel(vibration) + VibrationModeSuffix();
                 if (LegionControllerTouchpadText != null)
                     LegionControllerTouchpadText.Text = touchpad ? "On" : "Off";
 
@@ -3669,6 +3725,26 @@ namespace XboxGamingBar
                 case 3: return "Medium";
                 case 4: return "Strong";
                 default: return $"Level {raw}";
+            }
+        }
+
+        /// <summary>
+        /// Rumble-mode suffix for the Vibration info row, e.g. " (SPG)". Mode names per
+        /// the hid-lenovo-go.c rumble_mode enum (1=FPS 2=Racing 3=Standard 4=SPG 5=RPG),
+        /// sourced from the user's LegionVibrationMode setting.
+        /// </summary>
+        private string VibrationModeSuffix()
+        {
+            int m = 0;
+            try { m = Convert.ToInt32(legionVibrationMode?.Value ?? 0); } catch { }
+            switch (m)
+            {
+                case 1: return " (FPS)";
+                case 2: return " (Racing)";
+                case 3: return " (Standard)";
+                case 4: return " (SPG)";
+                case 5: return " (RPG)";
+                default: return "";
             }
         }
 

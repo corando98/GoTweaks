@@ -586,5 +586,15 @@
         // linked-but-undocked = "Detached", not linked = "Disconnected".
         ControllerDockedLeft,       // bool - left half physically docked
         ControllerDockedRight,      // bool - right half physically docked
+
+        // Controller input mode, read from firmware (GET_FEATURE 0x0e gamepad mode +
+        // 0x0b FPS switch, per the hid-lenovo-go.c protocol): 0=unknown, 1=XInput,
+        // 2=DInput, 3=FPS (physical switch engaged - overrides the mode display).
+        LegionControllerInputMode,  // int - 0 unknown / 1 xinput / 2 dinput / 3 fps
+
+        // Receiver/MCU firmware version string (e.g. "0260422A"), read via
+        // GET_VERSION_DATA(firmware, USB_MCU). Shown under the controller firmware
+        // in the Controller Information card.
+        LegionMcuFirmwareVersion,   // string
     }
 }

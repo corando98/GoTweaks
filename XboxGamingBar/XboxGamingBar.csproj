@@ -240,6 +240,8 @@
     <Compile Include="Data\Controller\ControllerConnectedLeftProperty.cs" />
     <Compile Include="Data\Controller\ControllerConnectedRightProperty.cs" />
     <Compile Include="Data\Controller\ControllerDockedLeftProperty.cs" />
+    <Compile Include="Data\Controller\LegionControllerInputModeProperty.cs" />
+    <Compile Include="Data\Controller\LegionMcuFirmwareVersionProperty.cs" />
     <Compile Include="Data\Controller\ControllerDockedRightProperty.cs" />
     <Compile Include="Data\Controller\ControllerVidPidProperty.cs" />
     <Compile Include="Data\Controller\ControllerDeviceStatusProperty.cs" />

@@ -219,6 +219,26 @@ namespace XboxGamingBarHelper.Labs
         // per-connection flags on disconnect.
         private bool _reportStreamWoken = false;
 
+        // Input-mode pill state (see Function.LegionControllerInputMode): raw values from
+        // GET_FEATURE responses parsed in the read loop, display value pushed via the
+        // static event so Program can route it into LegionManager's property.
+        private byte _lastGamepadMode = 0;   // 1=xinput 2=dinput
+        private byte _lastFpsSwitch = 0;     // 1=gamepad 2=fps
+        private int _lastReportedInputMode = 0;
+        private string _lastMcuFirmware = "";
+        public static Action<int> InputModeUpdated;
+        public static Action<string> McuFirmwareUpdated;
+
+        /// <summary>Queries gamepad mode + FPS switch; responses land in the read loop.</summary>
+        public void QueryInputMode()
+        {
+            var handle = hidHandle;
+            if (handle == null || handle.IsInvalid || !_hasWriteAccess) return;
+            SendOutputReport(handle, new byte[] { 0x05, 0x00, 0x03, 0x0E, 0x03 }, "get gamepad mode");
+            SendOutputReport(handle, new byte[] { 0x05, 0x00, 0x03, 0x0B, 0x03 }, "get fps switch");
+            SendOutputReport(handle, new byte[] { 0x05, 0x00, 0x02, 0x04, 0x01 }, "get mcu fw version");
+        }
+
         // Desired state of the physical pad's XInput output (firmware register 04/0f).
         // Controller emulation with the LegionHid input source suppresses it so games
         // never see the stock pad (a firmware-level replacement for HidHide cloaking,
@@ -2173,6 +2193,10 @@ namespace XboxGamingBarHelper.Labs
                 {
                     ReplayLegionSpaceInit(handle);
                     _reportStreamWoken = true;
+                    // Fresh connection (incl. mode-switch/FPS-flip re-enumerations, which
+                    // change the receiver PID): query the mode registers so the widget
+                    // pill updates immediately rather than on the next poll.
+                    QueryInputMode();
                 }
 
                 return true;
@@ -2362,10 +2386,17 @@ namespace XboxGamingBarHelper.Labs
         }
 
         /// <summary>
-        /// Set the controllers' auto-sleep (idle power-off) time. minutes==0 requests "never".
-        /// Protocol (RE doc legion_go_hid_protocol_complete): SET = 05 00 04 09 [min] 01, where
-        /// [min] is the timeout as a raw byte (0x05=5, 0x0A=10, 0x0F=15, 0x14=20, 0x1E=30).
-        /// Global command (not per-controller). Verified accepted (ok=True) on Legion Go 2.
+        /// Set the controllers' auto-sleep / hibernation (idle power-off) time.
+        /// minutes==0 requests "never".
+        ///
+        /// Wire format captured from Legion Space adjusting its Hibernation slider
+        /// (legion_space_fullinit_and_controller_hibernation.pcapng, 2026-07-22):
+        ///   05 00 04 09 [ctrl] [minutes]   per half, ctrl 0x03=left / 0x04=right,
+        ///   minutes raw (0x0a=10, 0x1e=30, 0x2d=45), 0 = off.
+        /// The PREVIOUS GoTweaks form (05 00 04 09 [min] 01) had the minutes byte in
+        /// the CONTROLLER slot - e.g. sleep=3 parsed as "left half, 1 minute" and
+        /// sleep=10 as "ctrl 0x0a" (ignored). The old per-half 06:33 form is the Gen-1
+        /// encoding; on Go 2 firmware Legion Space only ever uses 04 09.
         /// </summary>
         public bool SetAutoSleepTime(int minutes)
         {
@@ -2381,22 +2412,11 @@ namespace XboxGamingBarHelper.Labs
 
             lock (_hidLock)
             {
-                bool ok = SendOutputReport(handle, new byte[] { 0x05, 0x00, 0x04, 0x09, min, 0x01 }, $"auto-sleep set {minutes}min");
+                bool okLeft = SendOutputReport(handle, new byte[] { 0x05, 0x00, 0x04, 0x09, LEGION_CONTROLLER_LEFT_ID, min }, $"auto-sleep left {minutes}min");
+                bool okRight = SendOutputReport(handle, new byte[] { 0x05, 0x00, 0x04, 0x09, LEGION_CONTROLLER_RIGHT_ID, min }, $"auto-sleep right {minutes}min");
 
-                // The 04:09 write above is receiver-scoped (no controller byte) and only
-                // reliably reaches halves that are awake and linked when it lands - the
-                // sleep timer is stored PER HALF in firmware, so a half that misses the
-                // write keeps its old value and powers off on a different schedule than
-                // its twin (field report: one half dies first, flipping the receiver to
-                // dual-dinput mid-session). Follow with the per-half 06:33 sleep-timer
-                // command to each half explicitly, mirroring the per-half gyro config
-                // pattern. 06:33 documented range is 0-60 minutes.
-                byte minPerHalf = min > 60 ? (byte)60 : min;
-                bool okLeft = SendOutputReport(handle, new byte[] { 0x05, 0x06, 0x33, 0x01, LEGION_CONTROLLER_LEFT_ID, minPerHalf, 0x01 }, "auto-sleep set left");
-                bool okRight = SendOutputReport(handle, new byte[] { 0x05, 0x06, 0x33, 0x01, LEGION_CONTROLLER_RIGHT_ID, minPerHalf, 0x01 }, "auto-sleep set right");
-
-                Logger.Info($"LegionButtonMonitor.SetAutoSleepTime minutes={minutes} receiver={ok} left={okLeft} right={okRight}");
-                return ok && okLeft && okRight;
+                Logger.Info($"LegionButtonMonitor.SetAutoSleepTime minutes={minutes} left={okLeft} right={okRight} (LS 04 09 per-half encoding)");
+                return okLeft && okRight;
             }
         }
 
@@ -3019,10 +3039,42 @@ namespace XboxGamingBarHelper.Labs
                                     {
                                         SendOutputReport(h, new byte[] { 0x05, 0x00, 0xB0, 0x01, 0x00 }, "b0:01 status req");
                                     }
+                                    // Piggyback the input-mode/FPS-switch poll on the same cadence
+                                    // so the widget pill tracks mode switches and the physical
+                                    // FPS slider without a dedicated timer.
+                                    QueryInputMode();
                                 }
                                 if (bytesRead >= 32 && buffer[0] == 0x04 && buffer[1] == 0x00 && buffer[2] == 0xB0)
                                 {
                                     RaiseDeviceStatus(buffer);
+                                }
+
+                                // GET_FEATURE responses (04 00 03 [feature] [dev] [value]) for the
+                                // input-mode pill: 0x0e = gamepad mode (1=xinput 2=dinput),
+                                // 0x0b = FPS switch (1=gamepad 2=fps). Queried by QueryInputMode().
+                                // GET_VERSION_DATA(firmware) response for the MCU (04 00 02 04 01 [b b b b]).
+                                if (bytesRead >= 9 && buffer[0] == 0x04 && buffer[1] == 0x00 && buffer[2] == 0x02 && buffer[3] == 0x04 && buffer[4] == 0x01)
+                                {
+                                    string mcuFw = $"{buffer[5]:X2}{buffer[6]:X2}{buffer[7]:X2}{buffer[8]:X2}";
+                                    if (mcuFw != _lastMcuFirmware)
+                                    {
+                                        _lastMcuFirmware = mcuFw;
+                                        Logger.Info($"LegionButtonMonitor: MCU firmware version {mcuFw}");
+                                        try { McuFirmwareUpdated?.Invoke(mcuFw); } catch { }
+                                    }
+                                }
+
+                                if (bytesRead >= 6 && buffer[0] == 0x04 && buffer[1] == 0x00 && buffer[2] == 0x03)
+                                {
+                                    if (buffer[3] == 0x0E) _lastGamepadMode = buffer[5];
+                                    else if (buffer[3] == 0x0B) _lastFpsSwitch = buffer[5];
+                                    int display = _lastFpsSwitch == 2 ? 3 : _lastGamepadMode; // FPS overrides
+                                    if (display != _lastReportedInputMode && display != 0)
+                                    {
+                                        _lastReportedInputMode = display;
+                                        Logger.Info($"LegionButtonMonitor: input mode -> {(display == 1 ? "XInput" : display == 2 ? "DInput" : "FPS")} (mode={_lastGamepadMode}, fps={_lastFpsSwitch})");
+                                        try { InputModeUpdated?.Invoke(display); } catch { }
+                                    }
                                 }
                             }
 

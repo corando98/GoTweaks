@@ -241,6 +241,17 @@ namespace XboxGamingBar
 
         // --- Haptics ------------------------------------------------------------------------
 
+        // Card-header badge mirroring the Lighting card's Reactive chip: visible while
+        // Reactive Haptics is enabled so the collapsed card still signals it.
+        private void UpdateHapticsReactiveBadge()
+        {
+            if (HapticsReactiveBadge != null)
+            {
+                HapticsReactiveBadge.Visibility =
+                    (GoTweaksHapticsMasterToggle?.IsOn ?? false) ? Visibility.Visible : Visibility.Collapsed;
+            }
+        }
+
         private void GoTweaksHaptics_Changed(object sender, object e)
         {
             if (GoTweaksHapticsGroupsPanel != null && GoTweaksHapticsMasterToggle != null)
@@ -248,6 +259,7 @@ namespace XboxGamingBar
                 GoTweaksHapticsGroupsPanel.Visibility =
                     GoTweaksHapticsMasterToggle.IsOn ? Visibility.Visible : Visibility.Collapsed;
             }
+            UpdateHapticsReactiveBadge();
             if (_goTweaksSyncing) return;
             SendHapticsConfig();
         }
@@ -457,6 +469,7 @@ namespace XboxGamingBar
                 GoTweaksHapticsGroupsPanel.Visibility =
                     GoTweaksHapticsMasterToggle.IsOn ? Visibility.Visible : Visibility.Collapsed;
             }
+            UpdateHapticsReactiveBadge();
         }
 
         private static void SetGroupUi(ToggleSwitch toggle, Slider slider, bool on, int intensity)

@@ -1,4 +1,4 @@
-using NLog;
+﻿using NLog;
 using Shared.Data;
 using Shared.Enums;
 using System;
@@ -1561,6 +1561,36 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         }
 
         public void SetValueAndSync(bool value)
+        {
+            SetValue((object)value);
+            SyncToRemote();
+        }
+    }
+
+    // Receiver/MCU firmware version string, read once per connect via GET_VERSION_DATA.
+    internal class LegionMcuFirmwareVersionProperty : HelperProperty<string, LegionManager>
+    {
+        public LegionMcuFirmwareVersionProperty(string initialValue, LegionManager inManager) : base(initialValue, null, Function.LegionMcuFirmwareVersion, inManager)
+        {
+        }
+
+        public void SetValueAndSync(string value)
+        {
+            SetValue((object)value);
+            SyncToRemote();
+        }
+    }
+
+    // Controller input mode read from firmware (0=unknown, 1=XInput, 2=DInput, 3=FPS).
+    // Fed by LegionButtonMonitor's GET_FEATURE(gamepad mode / FPS switch) responses;
+    // rendered as a pill on the widget's Legion tab.
+    internal class LegionControllerInputModeProperty : HelperProperty<int, LegionManager>
+    {
+        public LegionControllerInputModeProperty(int initialValue, LegionManager inManager) : base(initialValue, null, Function.LegionControllerInputMode, inManager)
+        {
+        }
+
+        public void SetValueAndSync(int value)
         {
             SetValue((object)value);
             SyncToRemote();

@@ -301,6 +301,13 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                 ControllerConnectedRight.ForceSetValue(rightControllerConnected);
                 ControllerDockedLeft.ForceSetValue(leftControllerDocked);
                 ControllerDockedRight.ForceSetValue(rightControllerDocked);
+                // Input-mode pill + MCU firmware row: also change-pushed only (the button
+                // monitor raises their events once per change), so a widget that reconnects
+                // after the first session would otherwise never receive them - "pill stopped
+                // showing after a couple open/close cycles" (field report 2026-07-23).
+                // Re-push their own current values through the equality-skip bypass.
+                LegionControllerInputMode.ForceSetValue(LegionControllerInputMode.Value);
+                LegionMcuFirmwareVersion.ForceSetValue(LegionMcuFirmwareVersion.Value);
                 Logger.Info($"Controller status resynced to widget: L={leftControllerBattery}% (conn={leftControllerConnected}) R={rightControllerBattery}% (conn={rightControllerConnected})");
             }
             catch (Exception ex)

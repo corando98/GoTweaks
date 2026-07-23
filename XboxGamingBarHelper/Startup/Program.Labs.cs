@@ -1,4 +1,4 @@
-using NLog;
+﻿using NLog;
 using Shared.Constants;
 using Shared.Data;
 using Shared.IPC;
@@ -767,6 +767,17 @@ namespace XboxGamingBarHelper
                     // toggle + Touch Keyboard) - the monitor invokes these on press.
                     LegionButtonMonitor.OnToggleDesktopControlsRequested = () => ToggleDesktopControls();
                     LegionButtonMonitor.OnTouchKeyboardRequested = () => OpenOnScreenKeyboard();
+                    // Input-mode pill: route firmware mode/FPS-switch reads into the synced property.
+                    LegionButtonMonitor.InputModeUpdated = (mode) =>
+                    {
+                        try { legionManager?.LegionControllerInputMode?.SetValueAndSync(mode); }
+                        catch (Exception ex) { Logger.Warn($"InputModeUpdated sync threw: {ex.Message}"); }
+                    };
+                    LegionButtonMonitor.McuFirmwareUpdated = (fw) =>
+                    {
+                        try { legionManager?.LegionMcuFirmwareVersion?.SetValueAndSync(fw); }
+                        catch (Exception ex) { Logger.Warn($"McuFirmwareUpdated sync threw: {ex.Message}"); }
+                    };
                     Logger.Info("Labs: Created unified Legion button monitor with battery support");
                 }
 
