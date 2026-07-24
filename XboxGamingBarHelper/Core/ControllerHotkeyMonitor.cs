@@ -252,18 +252,13 @@ namespace XboxGamingBarHelper.Core
 
                             combinedXInput |= state.Gamepad.wButtons;
 
-                            // Process if state changed for this controller
-                            if (state.dwPacketNumber != lastPacketNumbers[i])
-                            {
-                                lastPacketNumbers[i] = state.dwPacketNumber;
-
-                                // Only process if there are actual button presses
-                                // This filters out virtual controllers with no input
-                                if (state.Gamepad.wButtons != 0 || _lastButtons != 0)
-                                {
-                                    ProcessButtonState(state.Gamepad.wButtons);
-                                }
-                            }
+                            // Packet bookkeeping only - combo processing runs ONCE per
+                            // pass on the COMBINED state below. Per-slot ProcessButtonState
+                            // calls interleaved with the vendor-stream merge fed the combo
+                            // state machine two slightly out-of-phase snapshots, restarting
+                            // the 50ms hold timer forever ("starting hold timer" spam,
+                            // hotkeys never fired - field report 2026-07-23).
+                            lastPacketNumbers[i] = state.dwPacketNumber;
                         }
                         else if (result == ERROR_DEVICE_NOT_CONNECTED && wasConnected[i])
                         {
@@ -286,17 +281,20 @@ namespace XboxGamingBarHelper.Core
                             && (DateTime.UtcNow.Ticks - vendorSample.TimestampTicksUtc) < TimeSpan.TicksPerSecond)
                         {
                             combinedXInput |= vendorSample.Buttons;
-                            if (vendorSample.Buttons != _lastVendorButtons)
-                            {
-                                _lastVendorButtons = vendorSample.Buttons;
-                                if (vendorSample.Buttons != 0 || _lastButtons != 0)
-                                {
-                                    ProcessButtonState(vendorSample.Buttons);
-                                }
-                            }
                         }
                     }
                     catch { }
+
+                    // Single combo-processing call per pass on the union of every source
+                    // (XInput slots + vendor stream). Sources are OR-ed, so a button held
+                    // per either view stays held - no cross-source flicker. Called every
+                    // pass while anything is held (not only on change): combo COMPLETION
+                    // is evaluated inside CheckAndTriggerCombo on repeat calls, so a
+                    // steadily-held combo must keep pumping to reach COMBO_HOLD_MS.
+                    if (combinedXInput != 0 || _lastButtons != 0)
+                    {
+                        ProcessButtonState(combinedXInput);
+                    }
 
                     // Quick-tile combos are evaluated every pass (not gated on XInput packet
                     // changes) so all-paddle combos and the hold timer still work when the

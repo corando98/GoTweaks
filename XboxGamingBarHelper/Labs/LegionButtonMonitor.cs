@@ -346,6 +346,18 @@ namespace XboxGamingBarHelper.Labs
 
         // Track when output reports are sent to skip button detection (prevents false triggers)
         private DateTime _lastOutputReportTime = DateTime.MinValue;
+
+        // Watchdog: the read loop can wedge INSIDE a synchronous HID call (HidD_SetOutputReport
+        // has no timeout; ReadFile/CancelIo can hang) if the device is yanked out from under it -
+        // e.g. USBPcap detaching when Wireshark is closed while capturing, or a controller glitch.
+        // The in-loop timeout can't help then (the loop is blocked inside the call), and the thread
+        // neither crashes nor exits, so it sits dead forever ("PollDeviceStatus: monitor inactive",
+        // sticks frozen at their last value - field report 2026-07-24). A separate watchdog thread
+        // closes the HID handle after prolonged read silence, which UNBLOCKS the wedged call so the
+        // read loop errors out and reconnects at its top.
+        private long _lastReadTicks;
+        private Thread _watchdogThread;
+        private const int WatchdogSilenceMs = 4000;   // no reads this long => force-recover
         private const int OUTPUT_REPORT_IGNORE_MS = 100;  // Ignore button reads for 100ms after output
 
         // Detected device info
@@ -1323,12 +1335,14 @@ namespace XboxGamingBarHelper.Labs
             }
 
             // Start monitoring thread - it will handle reconnection if controller not found
+            _lastReadTicks = DateTime.UtcNow.Ticks;
             monitorThread = new Thread(MonitorLoop)
             {
                 IsBackground = true,
                 Name = "LegionButtonMonitor"
             };
             monitorThread.Start();
+            StartWatchdog();
 
             // Start scroll wheel thread if any scroll action is configured
             // Uses Raw Input API to capture mouse events from Legion Go mi_01/col02 interface
@@ -2874,6 +2888,46 @@ namespace XboxGamingBarHelper.Labs
             }
         }
 
+        private void StartWatchdog()
+        {
+            if (_watchdogThread != null && _watchdogThread.IsAlive) return;
+            _watchdogThread = new Thread(WatchdogLoop) { IsBackground = true, Name = "LegionButtonMonitorWatchdog" };
+            _watchdogThread.Start();
+        }
+
+        private void WatchdogLoop()
+        {
+            while (isRunning)
+            {
+                try
+                {
+                    Thread.Sleep(1000);
+                    if (!isRunning) break;
+                    var handle = hidHandle;
+                    // Only act once a handle exists (the loop is supposed to be reading). If reads
+                    // have been silent past the threshold, the read loop is wedged inside a
+                    // synchronous HID call - close the handle to unblock it. The next loop iteration
+                    // fails and reconnects at the top (reopen + re-init the device).
+                    if (handle != null && !handle.IsInvalid && _hasWriteAccess)
+                    {
+                        long silentMs = (DateTime.UtcNow.Ticks - _lastReadTicks) / TimeSpan.TicksPerMillisecond;
+                        if (silentMs >= WatchdogSilenceMs)
+                        {
+                            Logger.Warn($"LegionButtonMonitor: watchdog - no HID reads for {silentMs}ms, read loop wedged (device yanked? USBPcap detach?). Closing handle to force reconnect.");
+                            _lastReadTicks = DateTime.UtcNow.Ticks; // avoid re-firing every second while it recovers
+                            try { CancelIoEx(handle, IntPtr.Zero); } catch { }
+                            try { handle.Close(); } catch { }
+                            // Do NOT null hidHandle here - the read loop owns that field and will
+                            // observe the closed handle, error out, and reconnect. Nulling it from
+                            // two threads races; closing is enough to unblock the wedged call.
+                        }
+                    }
+                }
+                catch (Exception ex) { Logger.Debug($"LegionButtonMonitor watchdog: {ex.Message}"); }
+            }
+            Logger.Info("LegionButtonMonitor: watchdog thread exited");
+        }
+
         private void MonitorLoop()
         {
             Logger.Info("LegionButtonMonitor: Monitor thread started (unified L+R)");
@@ -2940,9 +2994,12 @@ namespace XboxGamingBarHelper.Labs
                     loopIteration++;
                     try
                     {
-                        // If no valid handle, try to reconnect
-                        if (hidHandle == null || hidHandle.IsInvalid)
+                        // If no valid handle, try to reconnect. IsClosed catches a handle the
+                        // watchdog closed out from under us to break a wedged read (IsInvalid
+                        // stays false after Close(), so it must be checked explicitly).
+                        if (hidHandle == null || hidHandle.IsInvalid || hidHandle.IsClosed)
                         {
+                            if (hidHandle != null) { hidHandle = null; }
                             if (TryReconnect())
                             {
                                 consecutiveFailures = 0;
@@ -3094,6 +3151,7 @@ namespace XboxGamingBarHelper.Labs
                         {
                             consecutiveFailures = 0; // Reset on successful read
                             consecutiveReadTimeouts = 0; // reports flowing again — clear the starvation counter
+                            _lastReadTicks = DateTime.UtcNow.Ticks; // watchdog liveness marker
 
                             // Diagnostic: measure actual HID report arrival rate.
                             // Counts every successful ReadFile completion and emits

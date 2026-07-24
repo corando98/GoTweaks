@@ -6878,7 +6878,7 @@
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                         <TextBlock Text="Disable OS Reporting" Foreground="#DDDDDD" FontSize="14"/>
-                                        <TextBlock Text="Hide the controller from games and the OS (GoTweaks features keep working). Applied automatically during controller emulation."
+                                        <TextBlock Text="Hide the controller from games and the OS (GoTweaks features keep working). Note: also disables Desktop Controls and the stock Legion/Page shortcuts while on."
                                                    FontSize="11" Foreground="#888888" TextWrapping="Wrap"/>
                                     </StackPanel>
                                     <ToggleSwitch x:Name="LegionOsReportingToggle" Grid.Column="1"

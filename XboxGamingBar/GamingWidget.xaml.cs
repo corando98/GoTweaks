@@ -3309,9 +3309,14 @@ namespace XboxGamingBar
                     else
                     {
                         int mb = mapping.MouseButton;
-                        string[] mouseLabels = { "Mouse", "Left Click", "Right Click", "Middle Click",
+                        // MouseButton is 0-based (0=Left, 1=Right, 2=Middle, 3=ScrollUp...) - the
+                        // same convention the editor and the helper (mouseButton+1 -> HID code)
+                        // use. The old array had a spurious leading "Mouse" entry, so every label
+                        // was shifted by one: Right Click (mb=1) showed as "Left Click" while the
+                        // pad actually right-clicked (field report 2026-07-24).
+                        string[] mouseLabels = { "Left Click", "Right Click", "Middle Click",
                                                  "Scroll Up", "Scroll Down", "Scroll Left", "Scroll Right" };
-                        desc = mb > 0 && mb < mouseLabels.Length ? mouseLabels[mb] : "Mouse";
+                        desc = mb >= 0 && mb < mouseLabels.Length ? mouseLabels[mb] : "Mouse";
                     }
                     if (desc == null) continue;
                     int delIdx = i;
