@@ -231,7 +231,7 @@ namespace XboxGamingBar
                     label = currentGameName;
                 else
                     label = "Global";
-                ButtonRemappingOverlayHint.Text = $"Editing: {label}";
+                ButtonRemappingOverlayHint.Text = label;
             }
             catch (Exception ex)
             {

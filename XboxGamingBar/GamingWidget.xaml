@@ -7473,6 +7473,32 @@
                                               Checked="ProfileSettingsCheckBox_Changed"
                                               Unchecked="ProfileSettingsCheckBox_Changed"/>
                                 </StackPanel>
+
+                                <!-- Desktop Controls toggle - shares this card with the per-game
+                                     profile toggle (was a standalone card), divider-separated like
+                                     the Performance tab's Per-Game / Power Source pairing. -->
+                                <StackPanel>
+                                    <Border Height="1" Background="#33FFFFFF" Margin="0,10,0,10"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                            <TextBlock Text="Desktop Controls"
+                                                       FontSize="13"
+                                                       Foreground="#FFFFFF"/>
+                                            <TextBlock Text="A separate mouse/keyboard layout for desktop use. Remaps you make while it's on are saved to Desktop Controls and restored next time (Ctrl+Shift+D)."
+                                                       FontSize="11"
+                                                       Foreground="#888888"
+                                                       TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <ToggleSwitch x:Name="LegionDesktopControlsToggle"
+                                                      Grid.Column="1"
+                                                      Style="{StaticResource ModernToggleStyle}"
+                                                      IsOn="False"/>
+                                    </Grid>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
 
@@ -7485,12 +7511,21 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0">
-                                        <TextBlock Text="Button Remapping" Style="{StaticResource CardTitleStyle}"/>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="Button Remapping" Style="{StaticResource CardTitleStyle}"/>
+                                            <!-- Which profile the remaps are being edited into (Global / a game /
+                                                 Desktop Controls), as a pill matching the Lighting & Haptics
+                                                 "Reactive" badges. -->
+                                            <Border x:Name="ButtonRemappingOverlayBadge"
+                                                    Background="#2A4A66" CornerRadius="4"
+                                                    Padding="6,1,6,2" Margin="8,2,0,0"
+                                                    VerticalAlignment="Center"
+                                                    ToolTipService.ToolTip="The profile these remaps are saved to. Switches to Desktop Controls while Desktop Mode is on, or the active per-game profile.">
+                                                <TextBlock x:Name="ButtonRemappingOverlayHint" Text="Global" FontSize="11" Foreground="#9ED2FF"/>
+                                            </Border>
+                                        </StackPanel>
                                         <TextBlock Text="Map buttons to gamepad, keyboard, or mouse"
                                                    Style="{StaticResource CardCaptionStyle}"/>
-                                        <TextBlock x:Name="ButtonRemappingOverlayHint" Text="Editing: Global"
-                                                   Style="{StaticResource CardCaptionStyle}"
-                                                   Foreground="#7BC8FF" Margin="0,2,0,0"/>
                                     </StackPanel>
                                     <ToggleButton x:Name="ButtonRemappingExpandToggle"
                                                   Grid.Column="1"
@@ -8366,25 +8401,6 @@
                                                Style="{StaticResource CardCaptionStyle}"/>
                                 </StackPanel>
                                 <ToggleSwitch x:Name="LegionNintendoLayoutToggle"
-                                              Grid.Column="1"
-                                              Style="{StaticResource ModernToggleStyle}"
-                                              IsOn="False"/>
-                            </Grid>
-                        </Border>
-
-                        <!-- Desktop Controls Card -->
-                        <Border Style="{StaticResource CardStyle}">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                    <TextBlock Text="Desktop Controls" Style="{StaticResource CardTitleStyle}"/>
-                                    <TextBlock Text="A separate mouse/keyboard layout for desktop use. Remaps you make while it's on are saved to Desktop Controls and restored next time (Ctrl+Shift+D)."
-                                               Style="{StaticResource CardCaptionStyle}" TextWrapping="Wrap"/>
-                                </StackPanel>
-                                <ToggleSwitch x:Name="LegionDesktopControlsToggle"
                                               Grid.Column="1"
                                               Style="{StaticResource ModernToggleStyle}"
                                               IsOn="False"/>

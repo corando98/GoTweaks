@@ -63,8 +63,11 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
         private DateTime guideOnlyLastRumbleLog = DateTime.MinValue;
         private const ushort LegionVendorIdShort = 0x17EF;
 
+        private readonly LegionManager legionManager;
+
         public ViiperEmulationManager(SettingsManager inSettingsManager, ControllerEmulationManager inLegacyManager, LegionManager inLegionManager)
         {
+            legionManager = inLegionManager;
             settingsManager = inSettingsManager;
             legacyManager = inLegacyManager;
             forwarder = new ViiperInputForwarder(service, inLegionManager);
@@ -334,6 +337,20 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
         {
             try { ReapplyMode(); }
             catch (Exception ex) { Logger.Warn($"ViiperEmulationManager.OnGuideRouteChanged threw: {ex.Message}"); }
+        }
+
+        /// <summary>
+        /// Neutralize the emulated pad's input while Desktop Controls is active (the physical
+        /// stick/buttons drive the mouse/keyboard, so the game must not also see them). No-op
+        /// unless full emulation is running - guide-only mode has no forwarded input to pause.
+        /// Called from LegionManager when the Desktop Controls state changes.
+        /// </summary>
+        public static void SetDesktopControlsActive(bool active)
+        {
+            var inst = activeInstance;
+            if (inst == null) return;
+            try { inst.forwarder?.SetDesktopControlsActive(active); }
+            catch (Exception ex) { Logger.Warn($"SetDesktopControlsActive threw: {ex.Message}"); }
         }
 
         /// <summary>True when the minimal guide-only xbox360 pad is plugged.</summary>
@@ -754,6 +771,10 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
                 settingsManager?.ViiperGyroAxisMapZ?.Value ?? "Z");
             forwarder.SetStickTriggerConfig(StickTriggerConfigBundle.Deserialize(
                 settingsManager?.ViiperStickTriggerConfig?.Value ?? string.Empty));
+            // Re-assert Desktop Controls neutralization for the fresh forwarder: if Desktop
+            // Controls was already ON when emulation started, the property-change hook never
+            // fired for this forwarder instance.
+            forwarder.SetDesktopControlsActive(legionManager?.LegionDesktopControls?.Value ?? false);
             forwarder.Start(xinputIdx, activeBusId, activeDeviceId, activeDeviceType);
             forwarder.SetSecondaryDevice(activeSecondaryDeviceId);
 

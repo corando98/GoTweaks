@@ -70,7 +70,6 @@ namespace XboxGamingBarHelper.Core
 
         // Combo detection
         private ushort _lastButtons = 0;
-        private ushort _lastVendorButtons;
         private uint _lastPacketNumber = 0;
         private DateTime _comboStartTime = DateTime.MinValue;
         private ushort _comboModifier = 0;

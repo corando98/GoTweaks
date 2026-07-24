@@ -1470,8 +1470,14 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         {
             base.NotifyPropertyChanged(propertyName);
             Logger.Info($"LegionDesktopControls changed to {Value}");
-            // Note: Actual application happens through JoystickAsMouseMode and GamepadButtonMapping
-            // properties, so this property mainly serves as state tracking for the UI toggle
+            // The button mapping / joystick-as-mouse application happens through their own
+            // properties. Here we additionally neutralize the emulated pad while Desktop
+            // Controls is on: with controller emulation running, the physical stick/buttons
+            // drive the mouse/keyboard, and the emulated pad must not ALSO receive them (the
+            // game would see the stick move as the user moves the cursor). No-op when
+            // emulation isn't running.
+            try { XboxGamingBarHelper.ControllerEmulation.Viiper.ViiperEmulationManager.SetDesktopControlsActive(Value); }
+            catch (Exception ex) { Logger.Warn($"Desktop-controls emu neutralize threw: {ex.Message}"); }
         }
     }
 

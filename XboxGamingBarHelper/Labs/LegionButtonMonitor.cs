@@ -1457,12 +1457,14 @@ namespace XboxGamingBarHelper.Labs
             }
 
             // Start monitoring thread - it will handle reconnection if controller not found
+            _lastReadTicks = DateTime.UtcNow.Ticks;
             monitorThread = new Thread(MonitorLoop)
             {
                 IsBackground = true,
                 Name = "LegionButtonMonitor"
             };
             monitorThread.Start();
+            StartWatchdog();
 
             if (controllerFound)
             {

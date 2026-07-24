@@ -1418,21 +1418,28 @@ namespace XboxGamingBar
                         LegionRightTriggerEndValue.Text = $"{profile.RightTriggerEnd}%";
                 }
 
-                // Apply joystick as mouse settings
+                // Apply joystick as mouse settings.
+                // Joystick-as-mouse (right stick -> mouse) is a DESKTOP-CONTROLS-only feature
+                // and is a LATCHED firmware mode (persists across reboot until explicitly
+                // disabled). It must never come from a non-Desktop profile: a leaked value in
+                // the Global/per-game profile re-enabled it on every apply/startup with no way
+                // to turn it off ("joy-to-mouse on permanently" - field report 0.3.2730). Force
+                // 0 for any non-Desktop profile so a stale/leaked value is actively cleared.
+                int effectiveJoyMouse = profile.DesktopControlsEnabled ? profile.JoystickAsMouseMode : 0;
                 if (LegionJoystickAsMouseComboBox != null)
                 {
                     // Set UI first
-                    if (LegionJoystickAsMouseComboBox.Items.Count > profile.JoystickAsMouseMode)
+                    if (LegionJoystickAsMouseComboBox.Items.Count > effectiveJoyMouse)
                     {
-                        LegionJoystickAsMouseComboBox.SelectedIndex = profile.JoystickAsMouseMode;
+                        LegionJoystickAsMouseComboBox.SelectedIndex = effectiveJoyMouse;
                     }
                     // Show/hide sensitivity grid based on mode
                     if (LegionJoystickMouseSensGrid != null)
-                        LegionJoystickMouseSensGrid.Visibility = profile.JoystickAsMouseMode > 0
+                        LegionJoystickMouseSensGrid.Visibility = effectiveJoyMouse > 0
                             ? Windows.UI.Xaml.Visibility.Visible
                             : Windows.UI.Xaml.Visibility.Collapsed;
                     // Send value to helper (SetValue instead of SetValueSilent)
-                    legionJoystickAsMouseMode?.SetValue(profile.JoystickAsMouseMode);
+                    legionJoystickAsMouseMode?.SetValue(effectiveJoyMouse);
                 }
                 if (LegionJoystickMouseSensSlider != null)
                 {
@@ -1592,7 +1599,9 @@ namespace XboxGamingBar
                 RightTriggerEnd = (int)(LegionRightTriggerEndSlider?.Value ?? 0),
                 HairTriggers = LegionHairTriggersToggle?.IsOn ?? false,
                 // Joystick as mouse
-                JoystickAsMouseMode = LegionJoystickAsMouseComboBox?.SelectedIndex ?? 0,
+                // Only capture joy-mouse into the profile while Desktop Mode is active; it is a
+                // Desktop-Controls-only latched feature and must not leak into Global/per-game.
+                JoystickAsMouseMode = isDesktopModeActive ? (LegionJoystickAsMouseComboBox?.SelectedIndex ?? 0) : 0,
                 JoystickMouseSens = (int)(LegionJoystickMouseSensSlider?.Value ?? 50),
                 // Gamepad button mappings
                 GamepadButtonMappings = gamepadButtonMappings.ToDictionary(

@@ -907,6 +907,20 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             Logger.Info($"VIIPER forwarder paused -> {paused}");
         }
 
+        // Desktop Controls active: the physical stick/buttons are driving the mouse/keyboard,
+        // so the emulated pad must NOT also receive them (else the game sees the stick move
+        // while the user moves the cursor). Distinct from `paused` (hot-swap gating) so the two
+        // can't clobber each other. While set, the poll loop sends a NEUTRAL frame instead of
+        // the real input, so the emulated pad reads centered/no-button rather than freezing at
+        // whatever it held when Desktop Controls turned on.
+        private volatile bool desktopControlsActive;
+        public void SetDesktopControlsActive(bool active)
+        {
+            if (desktopControlsActive == active) return;
+            desktopControlsActive = active;
+            Logger.Info($"VIIPER forwarder desktop-controls neutralize -> {active}");
+        }
+
         public void SetInputSource(ViiperInputSourceKind kind)
         {
             if (inputSource == kind) return;
@@ -1636,6 +1650,16 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
                     if (paused)
                     {
                         Thread.Sleep(10);
+                        continue;
+                    }
+                    if (desktopControlsActive)
+                    {
+                        // Keep the pad alive but neutral while Desktop Controls owns the
+                        // physical inputs. default(ViiperXInputGamepad) is fully centered /
+                        // no buttons; BuildDeviceInput renders it correctly for every target.
+                        byte[] neutral = BuildDeviceInput(default(ViiperXInputGamepad));
+                        if (neutral != null && neutral.Length > 0) EmitDeviceFrame(neutral);
+                        Thread.Sleep(16);
                         continue;
                     }
                     if (inputSource == ViiperInputSourceKind.LegionHid)
