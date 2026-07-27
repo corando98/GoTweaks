@@ -4345,6 +4345,139 @@
                                             <ComboBoxItem Content="Handheld (device IMU)" Tag="Handheld"/>
                                         </ComboBox>
 
+                                        <!-- Gyro Tuning — per-sensor axis remap for the emulated device's IMU.
+                                             Gyroscope and accelerometer are tuned independently, each with an
+                                             Invert X/Y/Z row and a Matrix X/Y/Z source-axis mapping. Default is
+                                             identity (X→X, Y→Y, Z→Z, no invert) which is a no-op over the
+                                             hardcoded per-target frame, so leaving it untouched changes nothing.
+                                             Values are packed "mapX,mapY,mapZ,invX,invY,invZ" and pushed on the
+                                             Viiper_GyroTuning / Viiper_AccelTuning properties. -->
+                                        <muxc:Expander x:Name="ViiperGyroTuningExpander"
+                                                       Margin="0,12,0,0"
+                                                       HorizontalAlignment="Stretch"
+                                                       HorizontalContentAlignment="Stretch"
+                                                       IsExpanded="False">
+                                            <muxc:Expander.Header>
+                                                <TextBlock Text="Gyro Tuning" FontSize="13" Foreground="#CCCCCC"/>
+                                            </muxc:Expander.Header>
+                                            <StackPanel>
+                                                <TextBlock Text="Remap the emulated motion sensor axes. Leave as X/Y/Z with inverts off unless a game's gyro moves the wrong way."
+                                                           FontSize="11" Foreground="#808080" TextWrapping="Wrap" Margin="0,0,0,4"/>
+                                                <TextBlock Text="Tuning is saved separately per gyro source. Switch the Gyro source above to tune each one."
+                                                           FontSize="11" Foreground="#808080" TextWrapping="Wrap" Margin="0,0,0,4"/>
+                                                <TextBlock x:Name="ViiperGyroTuningSourceLabel" Text="Editing tuning for: Left controller"
+                                                           FontSize="12" Foreground="#9ED2FF" FontWeight="SemiBold" Margin="0,2,0,0"/>
+
+                                                <!-- Gyroscope section -->
+                                                <TextBlock Text="Gyroscope" FontSize="12" Foreground="#FFFFFF" FontWeight="SemiBold" Margin="0,8,0,4"/>
+                                                <TextBlock Text="Invert" FontSize="11" Foreground="#AAAAAA" Margin="0,0,0,2"/>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                                        <TextBlock Text="X" FontSize="11" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                        <ToggleSwitch x:Name="ViiperGyroInvertXToggle" MinWidth="0" OnContent="" OffContent="" Style="{StaticResource ModernToggleStyle}" IsOn="False"/>
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                                        <TextBlock Text="Y" FontSize="11" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                        <ToggleSwitch x:Name="ViiperGyroInvertYToggle" MinWidth="0" OnContent="" OffContent="" Style="{StaticResource ModernToggleStyle}" IsOn="False"/>
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                                        <TextBlock Text="Z" FontSize="11" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                        <ToggleSwitch x:Name="ViiperGyroInvertZToggle" MinWidth="0" OnContent="" OffContent="" Style="{StaticResource ModernToggleStyle}" IsOn="False"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                                <TextBlock Text="Matrix (output ← source axis)" FontSize="11" Foreground="#AAAAAA" Margin="0,8,0,2"/>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" Text="X←" FontSize="11" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                    <ComboBox x:Name="ViiperGyroMatrixXComboBox" Grid.Column="1" HorizontalAlignment="Stretch" Margin="0,0,6,0" FontSize="12">
+                                                        <ComboBoxItem Content="X" Tag="X"/>
+                                                        <ComboBoxItem Content="Y" Tag="Y"/>
+                                                        <ComboBoxItem Content="Z" Tag="Z"/>
+                                                    </ComboBox>
+                                                    <TextBlock Grid.Column="2" Text="Y←" FontSize="11" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                    <ComboBox x:Name="ViiperGyroMatrixYComboBox" Grid.Column="3" HorizontalAlignment="Stretch" Margin="0,0,6,0" FontSize="12">
+                                                        <ComboBoxItem Content="X" Tag="X"/>
+                                                        <ComboBoxItem Content="Y" Tag="Y"/>
+                                                        <ComboBoxItem Content="Z" Tag="Z"/>
+                                                    </ComboBox>
+                                                    <TextBlock Grid.Column="4" Text="Z←" FontSize="11" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                    <ComboBox x:Name="ViiperGyroMatrixZComboBox" Grid.Column="5" HorizontalAlignment="Stretch" FontSize="12">
+                                                        <ComboBoxItem Content="X" Tag="X"/>
+                                                        <ComboBoxItem Content="Y" Tag="Y"/>
+                                                        <ComboBoxItem Content="Z" Tag="Z"/>
+                                                    </ComboBox>
+                                                </Grid>
+
+                                                <!-- Accelerometer section -->
+                                                <TextBlock Text="Accelerometer" FontSize="12" Foreground="#FFFFFF" FontWeight="SemiBold" Margin="0,14,0,4"/>
+                                                <TextBlock Text="Invert" FontSize="11" Foreground="#AAAAAA" Margin="0,0,0,2"/>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                                        <TextBlock Text="X" FontSize="11" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                        <ToggleSwitch x:Name="ViiperAccelInvertXToggle" MinWidth="0" OnContent="" OffContent="" Style="{StaticResource ModernToggleStyle}" IsOn="False"/>
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                                        <TextBlock Text="Y" FontSize="11" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                        <ToggleSwitch x:Name="ViiperAccelInvertYToggle" MinWidth="0" OnContent="" OffContent="" Style="{StaticResource ModernToggleStyle}" IsOn="False"/>
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                                        <TextBlock Text="Z" FontSize="11" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                        <ToggleSwitch x:Name="ViiperAccelInvertZToggle" MinWidth="0" OnContent="" OffContent="" Style="{StaticResource ModernToggleStyle}" IsOn="False"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                                <TextBlock Text="Matrix (output ← source axis)" FontSize="11" Foreground="#AAAAAA" Margin="0,8,0,2"/>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" Text="X←" FontSize="11" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                    <ComboBox x:Name="ViiperAccelMatrixXComboBox" Grid.Column="1" HorizontalAlignment="Stretch" Margin="0,0,6,0" FontSize="12">
+                                                        <ComboBoxItem Content="X" Tag="X"/>
+                                                        <ComboBoxItem Content="Y" Tag="Y"/>
+                                                        <ComboBoxItem Content="Z" Tag="Z"/>
+                                                    </ComboBox>
+                                                    <TextBlock Grid.Column="2" Text="Y←" FontSize="11" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                    <ComboBox x:Name="ViiperAccelMatrixYComboBox" Grid.Column="3" HorizontalAlignment="Stretch" Margin="0,0,6,0" FontSize="12">
+                                                        <ComboBoxItem Content="X" Tag="X"/>
+                                                        <ComboBoxItem Content="Y" Tag="Y"/>
+                                                        <ComboBoxItem Content="Z" Tag="Z"/>
+                                                    </ComboBox>
+                                                    <TextBlock Grid.Column="4" Text="Z←" FontSize="11" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                    <ComboBox x:Name="ViiperAccelMatrixZComboBox" Grid.Column="5" HorizontalAlignment="Stretch" FontSize="12">
+                                                        <ComboBoxItem Content="X" Tag="X"/>
+                                                        <ComboBoxItem Content="Y" Tag="Y"/>
+                                                        <ComboBoxItem Content="Z" Tag="Z"/>
+                                                    </ComboBox>
+                                                </Grid>
+
+                                                <Button x:Name="ViiperGyroTuningResetButton" Content="Reset this source"
+                                                        Click="ViiperGyroTuningResetButton_Click"
+                                                        Margin="0,12,0,0" FontSize="12"/>
+                                            </StackPanel>
+                                        </muxc:Expander>
+
                                         <!-- Sony-target gyro sign mode. Default off = TOTK-correct
                                              (yaw=+gz, roll=-gy). When on, reverts to the upstream pattern
                                              (yaw=-gz, roll=+gy) which Steam Input's gyro-to-mouse mapping

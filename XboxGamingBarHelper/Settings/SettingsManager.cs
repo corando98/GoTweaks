@@ -210,6 +210,19 @@ namespace XboxGamingBarHelper.Settings
             get { return viiperGyroAxisMapZ; }
         }
 
+        // Gyro Tuning: separate packed tuning strings for gyro and accel.
+        private readonly ViiperTuningProperty viiperGyroTuning;
+        public ViiperTuningProperty ViiperGyroTuning
+        {
+            get { return viiperGyroTuning; }
+        }
+
+        private readonly ViiperTuningProperty viiperAccelTuning;
+        public ViiperTuningProperty ViiperAccelTuning
+        {
+            get { return viiperAccelTuning; }
+        }
+
         // Profile Detection Settings
         private readonly ProfileMatchByExeProperty profileMatchByExe;
         public ProfileMatchByExeProperty ProfileMatchByExe
@@ -268,6 +281,8 @@ namespace XboxGamingBarHelper.Settings
             viiperGyroAxisMapX = new ViiperGyroAxisMapProperty(this, Shared.Enums.Function.Viiper_GyroAxisMapX, "ViiperGyroAxisMapX", "X");
             viiperGyroAxisMapY = new ViiperGyroAxisMapProperty(this, Shared.Enums.Function.Viiper_GyroAxisMapY, "ViiperGyroAxisMapY", "Y");
             viiperGyroAxisMapZ = new ViiperGyroAxisMapProperty(this, Shared.Enums.Function.Viiper_GyroAxisMapZ, "ViiperGyroAxisMapZ", "Z");
+            viiperGyroTuning = new ViiperTuningProperty(this, Shared.Enums.Function.Viiper_GyroTuning, "ViiperGyroTuning");
+            viiperAccelTuning = new ViiperTuningProperty(this, Shared.Enums.Function.Viiper_AccelTuning, "ViiperAccelTuning");
             // Profile Detection Settings
             profileMatchByExe = new ProfileMatchByExeProperty(this);
             profileCustomGamePath = new ProfileCustomGamePathProperty(this);

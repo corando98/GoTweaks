@@ -152,6 +152,14 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
                 {
                     settingsManager.ViiperGyroAxisMapZ.PropertyChanged += OnGyroAxisMapChanged;
                 }
+                if (settingsManager.ViiperGyroTuning != null)
+                {
+                    settingsManager.ViiperGyroTuning.PropertyChanged += OnGyroTuningChanged;
+                }
+                if (settingsManager.ViiperAccelTuning != null)
+                {
+                    settingsManager.ViiperAccelTuning.PropertyChanged += OnGyroTuningChanged;
+                }
                 if (settingsManager.ViiperStickTriggerConfig != null)
                 {
                     settingsManager.ViiperStickTriggerConfig.PropertyChanged += OnStickTriggerConfigChanged;
@@ -351,6 +359,20 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             if (inst == null) return;
             try { inst.forwarder?.SetDesktopControlsActive(active); }
             catch (Exception ex) { Logger.Warn($"SetDesktopControlsActive threw: {ex.Message}"); }
+        }
+
+        /// <summary>
+        /// Route system sleep/resume into the forwarder so it stops emitting while suspended
+        /// (a flooding virtual gyro can wake the device — HC #541) and clears any latched
+        /// input + rumble on both edges (HC aade204f9). Wired from SystemManager in Program.
+        /// No-op unless full emulation is running.
+        /// </summary>
+        public static void SetSystemSuspended(bool suspended)
+        {
+            var inst = activeInstance;
+            if (inst == null) return;
+            try { inst.forwarder?.SetSystemSuspended(suspended); }
+            catch (Exception ex) { Logger.Warn($"SetSystemSuspended threw: {ex.Message}"); }
         }
 
         /// <summary>True when the minimal guide-only xbox360 pad is plugged.</summary>
@@ -769,6 +791,7 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
                 settingsManager?.ViiperGyroAxisMapX?.Value ?? "X",
                 settingsManager?.ViiperGyroAxisMapY?.Value ?? "Y",
                 settingsManager?.ViiperGyroAxisMapZ?.Value ?? "Z");
+            ApplyTuningForActiveSource();
             forwarder.SetStickTriggerConfig(StickTriggerConfigBundle.Deserialize(
                 settingsManager?.ViiperStickTriggerConfig?.Value ?? string.Empty));
             // Re-assert Desktop Controls neutralization for the fresh forwarder: if Desktop
@@ -919,7 +942,13 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
 
         private void OnGyroSourceChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
-            try { forwarder.SetGyroSource(ResolveGyroSource()); }
+            try
+            {
+                forwarder.SetGyroSource(ResolveGyroSource());
+                // The active source changed, so the per-source tuning entry that applies
+                // changed too — re-resolve and push it.
+                ApplyTuningForActiveSource();
+            }
             catch (Exception ex) { Logger.Warn($"OnGyroSourceChanged threw: {ex.Message}"); }
         }
 
@@ -999,6 +1028,45 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
                     settingsManager?.ViiperGyroAxisMapZ?.Value ?? "Z");
             }
             catch (Exception ex) { Logger.Warn($"OnGyroAxisMapChanged threw: {ex.Message}"); }
+        }
+
+        private void OnGyroTuningChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            try { ApplyTuningForActiveSource(); }
+            catch (Exception ex) { Logger.Warn($"OnGyroTuningChanged threw: {ex.Message}"); }
+        }
+
+        // Gyro Tuning is stored per gyro source (Left/Right/Mixed/Handheld) because the two
+        // Legion halves have physically mirrored IMUs, so each source can need its own axis
+        // map. Both the gyro and accel properties hold a bundle string
+        // "Left=csv|Right=csv|Mixed=csv|Handheld=csv"; here we pull the entry matching the
+        // currently-selected source and push it (as a single "mapX,mapY,mapZ,invX,invY,invZ"
+        // csv) to the forwarder, which only ever emulates one source at a time.
+        private void ApplyTuningForActiveSource()
+        {
+            if (forwarder == null) return;
+            var source = settingsManager?.ViiperGyroSource?.Value ?? "None";
+            forwarder.SetGyroTuning(ExtractTuningForSource(settingsManager?.ViiperGyroTuning?.Value, source));
+            forwarder.SetAccelTuning(ExtractTuningForSource(settingsManager?.ViiperAccelTuning?.Value, source));
+        }
+
+        // Parse "Left=csv|Right=csv|..." and return the csv for the given source, or identity
+        // if the bundle is empty / has no entry for that source.
+        private static string ExtractTuningForSource(string bundle, string source)
+        {
+            const string identity = "X,Y,Z,0,0,0";
+            if (string.IsNullOrWhiteSpace(bundle) || string.IsNullOrWhiteSpace(source)) return identity;
+            foreach (var entry in bundle.Split('|'))
+            {
+                int eq = entry.IndexOf('=');
+                if (eq <= 0) continue;
+                if (string.Equals(entry.Substring(0, eq).Trim(), source, StringComparison.OrdinalIgnoreCase))
+                {
+                    var csv = entry.Substring(eq + 1).Trim();
+                    return string.IsNullOrWhiteSpace(csv) ? identity : csv;
+                }
+            }
+            return identity;
         }
 
         private System.Threading.Timer _deviceConfigDebounceTimer;
@@ -1269,6 +1337,14 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
                     if (settingsManager.ViiperStickTriggerPreviewEnabled != null)
                     {
                         settingsManager.ViiperStickTriggerPreviewEnabled.PropertyChanged -= OnStickTriggerPreviewEnabledChanged;
+                    }
+                    if (settingsManager.ViiperGyroTuning != null)
+                    {
+                        settingsManager.ViiperGyroTuning.PropertyChanged -= OnGyroTuningChanged;
+                    }
+                    if (settingsManager.ViiperAccelTuning != null)
+                    {
+                        settingsManager.ViiperAccelTuning.PropertyChanged -= OnGyroTuningChanged;
                     }
                 }
                 Stop();

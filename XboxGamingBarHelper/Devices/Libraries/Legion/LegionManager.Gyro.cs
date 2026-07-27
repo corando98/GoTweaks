@@ -248,29 +248,35 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         /// </summary>
         private void ApplyAdvancedGyroSetting(string settingName, int value, Func<LegionGoController, bool> applyAction)
         {
-            try
+            // Debounced (keyed per setting) so dragging a gyro deadzone/sensitivity slider
+            // doesn't open a fresh HID connection + MCU write on every tick — see
+            // DebounceFirmwareWrite in LegionManager.FirmwareWriteDebounce.cs.
+            DebounceFirmwareWrite($"Gyro:{settingName}", () =>
             {
-                using var controller = new LegionGoController();
-                if (!controller.Connect())
+                try
                 {
-                    Logger.Warn($"Cannot apply gyro {settingName}: controller not connected");
-                    return;
-                }
+                    using var controller = new LegionGoController();
+                    if (!controller.Connect())
+                    {
+                        Logger.Warn($"Cannot apply gyro {settingName}: controller not connected");
+                        return;
+                    }
 
-                bool success = applyAction(controller);
-                if (success)
-                {
-                    Logger.Info($"Gyro {settingName} set to {value}");
+                    bool success = applyAction(controller);
+                    if (success)
+                    {
+                        Logger.Info($"Gyro {settingName} set to {value}");
+                    }
+                    else
+                    {
+                        Logger.Error($"Failed to set gyro {settingName} to {value}");
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    Logger.Error($"Failed to set gyro {settingName} to {value}");
+                    Logger.Error($"Error applying gyro {settingName}: {ex.Message}");
                 }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Error applying gyro {settingName}: {ex.Message}");
-            }
+            });
         }
 
     }

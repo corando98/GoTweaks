@@ -40,9 +40,23 @@ namespace XboxGamingBarHelper
     internal partial class Program
     {
 
+        private static void SystemManager_SuspendingToSleep(object sender)
+        {
+            // Quiesce the VIIPER emulation before sleep: stop pumping the virtual pad so its
+            // continuous gyro reports can't flood USB and wake the device back up, and clear
+            // any latched input/rumble (HC #541 + aade204f9). No-op if emulation isn't running.
+            try { ControllerEmulation.Viiper.ViiperEmulationManager.SetSystemSuspended(true); }
+            catch (Exception ex) { Logger.Warn($"Suspend quiesce (VIIPER) threw: {ex.Message}"); }
+        }
+
         private static void SystemManager_ResumeFromSleep(object sender)
         {
             Logger.Info("System resumed from sleep/hibernation, refreshing hardware sensors and re-applying profile.");
+
+            // Resume the VIIPER emulation and clear any input/rumble that may have latched
+            // across the sleep cycle (HC aade204f9).
+            try { ControllerEmulation.Viiper.ViiperEmulationManager.SetSystemSuspended(false); }
+            catch (Exception ex) { Logger.Warn($"Resume (VIIPER) threw: {ex.Message}"); }
 
             // Re-arm the idle-to-hibernate monitor so a fresh sleep/hibernate cycle doesn't
             // immediately re-trigger on stale pre-sleep idle timestamps.

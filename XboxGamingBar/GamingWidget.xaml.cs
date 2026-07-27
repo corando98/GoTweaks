@@ -995,6 +995,8 @@ namespace XboxGamingBar
         private readonly ViiperStringComboProperty viiperGyroAxisMapX;
         private readonly ViiperStringComboProperty viiperGyroAxisMapY;
         private readonly ViiperStringComboProperty viiperGyroAxisMapZ;
+        private readonly Data.ViiperTuningProperty viiperGyroTuning;
+        private readonly Data.ViiperTuningProperty viiperAccelTuning;
         private readonly ViiperStickTriggerConfigProperty viiperStickTriggerConfig;
         private readonly ViiperStickTriggerPreviewEnabledProperty viiperStickTriggerPreviewEnabled;
         private readonly ViiperStickTriggerLiveSampleProperty viiperStickTriggerLiveSample;
@@ -1704,10 +1706,13 @@ namespace XboxGamingBar
             viiperGyroAxisMapX = new ViiperStringComboProperty("X", Shared.Enums.Function.Viiper_GyroAxisMapX, ViiperGyroAxisMapXComboBox, this);
             viiperGyroAxisMapY = new ViiperStringComboProperty("Y", Shared.Enums.Function.Viiper_GyroAxisMapY, ViiperGyroAxisMapYComboBox, this);
             viiperGyroAxisMapZ = new ViiperStringComboProperty("Z", Shared.Enums.Function.Viiper_GyroAxisMapZ, ViiperGyroAxisMapZComboBox, this);
+            viiperGyroTuning = new Data.ViiperTuningProperty(Shared.Enums.Function.Viiper_GyroTuning, Data.ViiperTuningProperty.Identity);
+            viiperAccelTuning = new Data.ViiperTuningProperty(Shared.Enums.Function.Viiper_AccelTuning, Data.ViiperTuningProperty.Identity);
             viiperStickTriggerConfig = new ViiperStickTriggerConfigProperty(string.Empty);
             viiperStickTriggerPreviewEnabled = new ViiperStickTriggerPreviewEnabledProperty();
             viiperStickTriggerLiveSample = new ViiperStickTriggerLiveSampleProperty();
             InitStickTriggerControls();
+            InitGyroTuningControls();
             InitStickTriggerPreview();
             // Keep the "nn%" label in sync as the user drags.
             if (ViiperRumbleIntensitySlider != null)
@@ -1979,6 +1984,8 @@ namespace XboxGamingBar
                 viiperGyroAxisMapX,
                 viiperGyroAxisMapY,
                 viiperGyroAxisMapZ,
+                viiperGyroTuning,
+                viiperAccelTuning,
                 viiperStickTriggerConfig,
                 viiperStickTriggerPreviewEnabled,
                 viiperStickTriggerLiveSample,

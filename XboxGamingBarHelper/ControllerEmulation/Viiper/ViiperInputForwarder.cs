@@ -224,6 +224,14 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
         private volatile int axisMapYSrc = 1, axisMapYSign = 1;
         private volatile int axisMapZSrc = 2, axisMapZSign = 1;
 
+        // Gyro Tuning: SEPARATE per-axis remap (matrix source + invert sign) for gyro and
+        // accelerometer, applied AFTER the hardcoded per-target frame. Default is identity
+        // (output[i] = +source[i]) so untuned emulation is byte-for-byte unchanged. Parsed
+        // from the packed "mapX,mapY,mapZ,invX,invY,invZ" strings (map letters X/Y/Z -> 0/1/2,
+        // inv 0/1). See SetGyroTuning / SetAccelTuning.
+        private volatile int gyroMapXSrc = 0, gyroMapXSign = 1, gyroMapYSrc = 1, gyroMapYSign = 1, gyroMapZSrc = 2, gyroMapZSign = 1;
+        private volatile int accelMapXSrc = 0, accelMapXSign = 1, accelMapYSrc = 1, accelMapYSign = 1, accelMapZSrc = 2, accelMapZSign = 1;
+
         // Synthesizes a right-stick override from gyro for target types whose wire
         // format has no native motion field (xbox360, xboxelite2, switchpro family).
         // For DS4 / DSE the wire format already carries IMU bytes via TryBuildImuCounts,
@@ -921,6 +929,50 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             Logger.Info($"VIIPER forwarder desktop-controls neutralize -> {active}");
         }
 
+        // System sleep state. While suspended the poll loop stops emitting entirely: a
+        // virtual pad that keeps pushing continuous gyro deltas at ~125Hz floods the
+        // emulated USB device and can WAKE the machine back up from sleep (ported from
+        // HandheldCompanion #541). Distinct from `paused` / `desktopControlsActive`.
+        private volatile bool systemSuspended;
+        public void SetSystemSuspended(bool suspended)
+        {
+            if (systemSuspended == suspended) return;
+            systemSuspended = suspended;
+            Logger.Info($"VIIPER forwarder system-suspended -> {suspended}");
+            // Clear latched input + rumble on both edges so nothing survives the
+            // suspend/resume cycle (HC aade204f9). The neutral emit inside is skipped
+            // while suspended (see ClearInputState) to keep us silent during sleep.
+            ClearInputState();
+        }
+
+        /// <summary>
+        /// Resets all latched input and stops rumble so no stick/button/vibration survives
+        /// a suspend/resume cycle or a fresh (re)connect. Mirrors HandheldCompanion's
+        /// IController.ClearInputState: clears the Guide latch, zeroes physical rumble, and
+        /// pushes one fully-neutral frame so a stuck stick/button on the virtual pad is
+        /// released. The neutral emit is skipped while suspended so we stay silent (and
+        /// don't wake the device) during sleep.
+        /// </summary>
+        public void ClearInputState()
+        {
+            labsGuideHeld = false; // drop any held Guide latch
+            try
+            {
+                var zero = new ViiperXInputVibration();
+                ViiperXInput.SetState(physicalIndex, ref zero);
+            }
+            catch { }
+            if (running && !systemSuspended)
+            {
+                try
+                {
+                    byte[] neutral = BuildDeviceInput(default(ViiperXInputGamepad));
+                    if (neutral != null && neutral.Length > 0) EmitDeviceFrame(neutral);
+                }
+                catch (Exception ex) { Logger.Debug($"ClearInputState neutral emit failed: {ex.Message}"); }
+            }
+        }
+
         public void SetInputSource(ViiperInputSourceKind kind)
         {
             if (inputSource == kind) return;
@@ -1223,13 +1275,44 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
         /// <summary>Sets the IMU axis remap. Each arg is "X", "Y", "Z", "-X", "-Y", or "-Z".</summary>
         public void SetGyroAxisMapping(string mapX, string mapY, string mapZ)
         {
-            // The per-target gyro/accel frame is now hardcoded in the wire builders
-            // (SteamDeck + all Sony targets, verified 2026-05-28), and the manual IMU
-            // axis-mapping UI is hidden. Force identity here so any value persisted by an
-            // older build can't silently compound with the hardcoded frame and re-break axes.
+            // Legacy single-map path retired: the per-target frame is hardcoded in the wire
+            // builders and gyro/accel tuning is now the separate Gyro Tuning UI below. Keep
+            // this identity so any value persisted by an older build can't re-break axes.
             axisMapXSrc = 0; axisMapXSign = 1;
             axisMapYSrc = 1; axisMapYSign = 1;
             axisMapZSrc = 2; axisMapZSign = 1;
+        }
+
+        // Packed tuning string: "mapX,mapY,mapZ,invX,invY,invZ" where map is X|Y|Z and inv is
+        // 0|1. Empty/invalid -> identity. Used by both SetGyroTuning and SetAccelTuning.
+        private static bool TryParseTuning(string s,
+            out int xSrc, out int xSign, out int ySrc, out int ySign, out int zSrc, out int zSign)
+        {
+            xSrc = 0; xSign = 1; ySrc = 1; ySign = 1; zSrc = 2; zSign = 1; // identity default
+            if (string.IsNullOrWhiteSpace(s)) return false;
+            var p = s.Split(',');
+            if (p.Length < 6) return false;
+            int Map(string a) => a?.Trim().ToUpperInvariant() switch { "X" => 0, "Y" => 1, "Z" => 2, _ => -1 };
+            int Sign(string a) => a?.Trim() == "1" ? -1 : 1; // inv flag 1 -> negate
+            int mx = Map(p[0]), my = Map(p[1]), mz = Map(p[2]);
+            if (mx < 0 || my < 0 || mz < 0) return false;
+            xSrc = mx; ySrc = my; zSrc = mz;
+            xSign = Sign(p[3]); ySign = Sign(p[4]); zSign = Sign(p[5]);
+            return true;
+        }
+
+        public void SetGyroTuning(string packed)
+        {
+            TryParseTuning(packed, out int xs, out int xg, out int ys, out int yg, out int zs, out int zg);
+            gyroMapXSrc = xs; gyroMapXSign = xg; gyroMapYSrc = ys; gyroMapYSign = yg; gyroMapZSrc = zs; gyroMapZSign = zg;
+            Logger.Info($"VIIPER gyro tuning -> map=({xs},{ys},{zs}) sign=({xg},{yg},{zg})");
+        }
+
+        public void SetAccelTuning(string packed)
+        {
+            TryParseTuning(packed, out int xs, out int xg, out int ys, out int yg, out int zs, out int zg);
+            accelMapXSrc = xs; accelMapXSign = xg; accelMapYSrc = ys; accelMapYSign = yg; accelMapZSrc = zs; accelMapZSign = zg;
+            Logger.Info($"VIIPER accel tuning -> map=({xs},{ys},{zs}) sign=({xg},{yg},{zg})");
         }
 
 
@@ -1451,18 +1534,17 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             short aY = SaturateToShort(aYg * AccelGToRawCounts);
             short aZ = SaturateToShort(aZg * AccelGToRawCounts);
 
-            // Apply user-selectable axis remap. Each output channel pulls from source[src]
-            // and optionally flips sign. Accel tracks the same map as gyro so the vectors
-            // stay coherent (matches the reference VIIPER Controller app behavior).
-            int xSrc = axisMapXSrc, xSign = axisMapXSign;
-            int ySrc = axisMapYSrc, ySign = axisMapYSign;
-            int zSrc = axisMapZSrc, zSign = axisMapZSign;
-            gyroXRaw = SignedClampToShort(PickAxis(gX, gY, gZ, xSrc) * xSign);
-            gyroYRaw = SignedClampToShort(PickAxis(gX, gY, gZ, ySrc) * ySign);
-            gyroZRaw = SignedClampToShort(PickAxis(gX, gY, gZ, zSrc) * zSign);
-            accelXRaw = SignedClampToShort(PickAxis(aX, aY, aZ, xSrc) * xSign);
-            accelYRaw = SignedClampToShort(PickAxis(aX, aY, aZ, ySrc) * ySign);
-            accelZRaw = SignedClampToShort(PickAxis(aX, aY, aZ, zSrc) * zSign);
+            // Apply the user's Gyro Tuning: SEPARATE per-axis remap for gyro and accel (each
+            // output channel pulls from source[src] and optionally flips sign). Defaults are
+            // identity so untuned emulation is unchanged. Gyro and accel are tuned
+            // independently because a physically-correct handheld sometimes needs a different
+            // accel frame than gyro depending on the target's SDK convention.
+            gyroXRaw  = SignedClampToShort(PickAxis(gX, gY, gZ, gyroMapXSrc) * gyroMapXSign);
+            gyroYRaw  = SignedClampToShort(PickAxis(gX, gY, gZ, gyroMapYSrc) * gyroMapYSign);
+            gyroZRaw  = SignedClampToShort(PickAxis(gX, gY, gZ, gyroMapZSrc) * gyroMapZSign);
+            accelXRaw = SignedClampToShort(PickAxis(aX, aY, aZ, accelMapXSrc) * accelMapXSign);
+            accelYRaw = SignedClampToShort(PickAxis(aX, aY, aZ, accelMapYSrc) * accelMapYSign);
+            accelZRaw = SignedClampToShort(PickAxis(aX, aY, aZ, accelMapZSrc) * accelMapZSign);
             return true;
         }
 
@@ -1650,6 +1732,14 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
                     if (paused)
                     {
                         Thread.Sleep(10);
+                        continue;
+                    }
+                    if (systemSuspended)
+                    {
+                        // System is asleep: emit NOTHING. Continuous gyro deltas would
+                        // otherwise flood the virtual USB device and wake the machine back
+                        // up (HC #541). Poll slowly until SetSystemSuspended(false) on resume.
+                        Thread.Sleep(100);
                         continue;
                     }
                     if (desktopControlsActive)

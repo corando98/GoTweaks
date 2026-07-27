@@ -598,6 +598,7 @@
     <Compile Include="Settings\ViiperStickGyroEnabledProperty.cs" />
     <Compile Include="Settings\ViiperStickTriggerConfigProperty.cs" />
     <Compile Include="Settings\ViiperGyroAxisMapProperty.cs" />
+    <Compile Include="Settings\ViiperTuningProperty.cs" />
     <Compile Include="Settings\ProfileMatchByExeProperty.cs" />
     <Compile Include="Settings\ProfileCustomGamePathProperty.cs" />
     <Compile Include="Settings\ProfileGamesOnlyProperty.cs" />
@@ -655,6 +656,7 @@
     <Compile Include="Devices\Libraries\Legion\LegionControllerService.cs" />
     <Compile Include="Devices\Libraries\Legion\LenovoWMIService.cs" />
     <Compile Include="Devices\Libraries\Legion\LegionManager.cs" />
+    <Compile Include="Devices\Libraries\Legion\LegionManager.FirmwareWriteDebounce.cs" />
     <Compile Include="Devices\Libraries\Legion\LegionManager.Gyro.cs" />
     <Compile Include="Devices\Libraries\Legion\LegionManager.StickDeadzone.cs" />
     <Compile Include="Devices\Libraries\Legion\LegionManager.TriggerTravel.cs" />

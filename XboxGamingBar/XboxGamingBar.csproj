@@ -125,6 +125,7 @@
     <Compile Include="Data\SetupWarningsProperty.cs" />
     <Compile Include="Data\ViiperAlternateGyroConventionProperty.cs" />
     <Compile Include="Data\ViiperStickTriggerConfigProperty.cs" />
+    <Compile Include="Data\ViiperTuningProperty.cs" />
     <Compile Include="Data\ViiperStickTriggerPreviewEnabledProperty.cs" />
     <Compile Include="Data\ViiperStickTriggerLiveSampleProperty.cs" />
     <Compile Include="Data\WinRing0AvailableProperty.cs" />
@@ -299,6 +300,9 @@
       <DependentUpon>GamingWidget.xaml</DependentUpon>
     </Compile>
     <Compile Include="GamingWidget.ViiperStickTrigger.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="GamingWidget.ViiperGyroTuning.cs">
       <DependentUpon>GamingWidget.xaml</DependentUpon>
     </Compile>
     <Compile Include="Features\Profile\GamingWidget.ProfileDeletion.cs">

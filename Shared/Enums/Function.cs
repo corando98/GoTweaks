@@ -601,5 +601,12 @@
         LegionRgbActiveProfile,     // int 1-3 (0 = unknown) - active stored lighting profile
         LegionGamepadModeSelect,    // int 1=xinput 2=dinput (0 = unknown)
         LegionOsReportingDisabled,  // bool - true = 04/0f vendor-exclusive (pad hidden from OS)
+
+        // Gyro Tuning (VIIPER emulation): SEPARATE per-axis remap for gyro and accel, packed
+        // as "mapX,mapY,mapZ,invX,invY,invZ" where map is X|Y|Z (which source axis feeds the
+        // emulated device's output channel) and inv is 0|1 (negate). Default "X,Y,Z,0,0,0"
+        // = identity, a no-op over the hardcoded per-target frame.
+        Viiper_GyroTuning,          // string - gyroscope tuning matrix + inverts
+        Viiper_AccelTuning,         // string - accelerometer tuning matrix + inverts
     }
 }

@@ -21,30 +21,33 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         /// </summary>
         public void SetLeftStickDeadzone(int percent)
         {
-            try
+            DebounceFirmwareWrite("LeftStickDeadzone", () =>
             {
-                using var controller = new LegionGoController();
-                if (!controller.Connect())
+                try
                 {
-                    Logger.Warn("Cannot set left stick deadzone: controller not connected");
-                    return;
-                }
+                    using var controller = new LegionGoController();
+                    if (!controller.Connect())
+                    {
+                        Logger.Warn("Cannot set left stick deadzone: controller not connected");
+                        return;
+                    }
 
-                bool success = controller.SetStickDeadzone(Controller.Left, percent);
-                if (success)
-                {
-                    leftStickDeadzone = percent;
-                    Logger.Info($"Left stick deadzone set to {percent}%");
+                    bool success = controller.SetStickDeadzone(Controller.Left, percent);
+                    if (success)
+                    {
+                        leftStickDeadzone = percent;
+                        Logger.Info($"Left stick deadzone set to {percent}%");
+                    }
+                    else
+                    {
+                        Logger.Error($"Failed to set left stick deadzone to {percent}%");
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    Logger.Error($"Failed to set left stick deadzone to {percent}%");
+                    Logger.Error($"Error setting left stick deadzone: {ex.Message}");
                 }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Error setting left stick deadzone: {ex.Message}");
-            }
+            });
         }
 
         /// <summary>
@@ -52,30 +55,33 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         /// </summary>
         public void SetRightStickDeadzone(int percent)
         {
-            try
+            DebounceFirmwareWrite("RightStickDeadzone", () =>
             {
-                using var controller = new LegionGoController();
-                if (!controller.Connect())
+                try
                 {
-                    Logger.Warn("Cannot set right stick deadzone: controller not connected");
-                    return;
-                }
+                    using var controller = new LegionGoController();
+                    if (!controller.Connect())
+                    {
+                        Logger.Warn("Cannot set right stick deadzone: controller not connected");
+                        return;
+                    }
 
-                bool success = controller.SetStickDeadzone(Controller.Right, percent);
-                if (success)
-                {
-                    rightStickDeadzone = percent;
-                    Logger.Info($"Right stick deadzone set to {percent}%");
+                    bool success = controller.SetStickDeadzone(Controller.Right, percent);
+                    if (success)
+                    {
+                        rightStickDeadzone = percent;
+                        Logger.Info($"Right stick deadzone set to {percent}%");
+                    }
+                    else
+                    {
+                        Logger.Error($"Failed to set right stick deadzone to {percent}%");
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    Logger.Error($"Failed to set right stick deadzone to {percent}%");
+                    Logger.Error($"Error setting right stick deadzone: {ex.Message}");
                 }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Error setting right stick deadzone: {ex.Message}");
-            }
+            });
         }
 
     }

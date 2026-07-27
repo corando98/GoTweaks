@@ -25,31 +25,34 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         /// <param name="end">Percentage from end where trigger reports full (0-100).</param>
         public void SetLeftTriggerTravel(int start, int end)
         {
-            try
+            DebounceFirmwareWrite("LeftTriggerTravel", () =>
             {
-                using var controller = new LegionGoController();
-                if (!controller.Connect())
+                try
                 {
-                    Logger.Warn("Cannot set left trigger travel: controller not connected");
-                    return;
-                }
+                    using var controller = new LegionGoController();
+                    if (!controller.Connect())
+                    {
+                        Logger.Warn("Cannot set left trigger travel: controller not connected");
+                        return;
+                    }
 
-                bool success = controller.SetTriggerTravel(Controller.Left, start, end);
-                if (success)
-                {
-                    leftTriggerStart = start;
-                    leftTriggerEnd = end;
-                    Logger.Info($"Left trigger travel set to start={start}%, end={end}%");
+                    bool success = controller.SetTriggerTravel(Controller.Left, start, end);
+                    if (success)
+                    {
+                        leftTriggerStart = start;
+                        leftTriggerEnd = end;
+                        Logger.Info($"Left trigger travel set to start={start}%, end={end}%");
+                    }
+                    else
+                    {
+                        Logger.Error($"Failed to set left trigger travel");
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    Logger.Error($"Failed to set left trigger travel");
+                    Logger.Error($"Error setting left trigger travel: {ex.Message}");
                 }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Error setting left trigger travel: {ex.Message}");
-            }
+            });
         }
 
         /// <summary>
@@ -59,31 +62,34 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         /// <param name="end">Percentage from end where trigger reports full (0-100).</param>
         public void SetRightTriggerTravel(int start, int end)
         {
-            try
+            DebounceFirmwareWrite("RightTriggerTravel", () =>
             {
-                using var controller = new LegionGoController();
-                if (!controller.Connect())
+                try
                 {
-                    Logger.Warn("Cannot set right trigger travel: controller not connected");
-                    return;
-                }
+                    using var controller = new LegionGoController();
+                    if (!controller.Connect())
+                    {
+                        Logger.Warn("Cannot set right trigger travel: controller not connected");
+                        return;
+                    }
 
-                bool success = controller.SetTriggerTravel(Controller.Right, start, end);
-                if (success)
-                {
-                    rightTriggerStart = start;
-                    rightTriggerEnd = end;
-                    Logger.Info($"Right trigger travel set to start={start}%, end={end}%");
+                    bool success = controller.SetTriggerTravel(Controller.Right, start, end);
+                    if (success)
+                    {
+                        rightTriggerStart = start;
+                        rightTriggerEnd = end;
+                        Logger.Info($"Right trigger travel set to start={start}%, end={end}%");
+                    }
+                    else
+                    {
+                        Logger.Error($"Failed to set right trigger travel");
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    Logger.Error($"Failed to set right trigger travel");
+                    Logger.Error($"Error setting right trigger travel: {ex.Message}");
                 }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Error setting right trigger travel: {ex.Message}");
-            }
+            });
         }
 
     }

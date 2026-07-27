@@ -24,6 +24,14 @@ namespace XboxGamingBarHelper.Systems
         public event ResumeFromSleepEventHandler ResumeFromSleep;
 
         /// <summary>
+        /// Raised once per real suspend (deduped across the SystemEvents + kernel-callback
+        /// sources, same as <see cref="ResumeFromSleep"/>). Lets subsystems quiesce before
+        /// sleep — notably the VIIPER emulation, whose continuous virtual-gyro reports would
+        /// otherwise flood the emulated USB device and wake the machine back up (HC #541).
+        /// </summary>
+        public event ResumeFromSleepEventHandler SuspendingToSleep;
+
+        /// <summary>
         /// Raised when the AC/DC line status transitions (Adequate ↔ NotPresent/Inadequate).
         /// Deduplicated against <see cref="lastPowerSupplyStatus"/> so battery-level ticks that
         /// also produce StatusChange callbacks don't fire this every few seconds.
@@ -46,6 +54,7 @@ namespace XboxGamingBarHelper.Systems
         private PowrProf.DeviceNotifyCallbackRoutine suspendResumeCallback; // rooted for the registration lifetime
         private IntPtr suspendResumeNotificationHandle = IntPtr.Zero;
         private long lastResumeInvokeTicksUtc;
+        private long lastSuspendInvokeTicksUtc;
         private static readonly long ResumeDedupeWindowTicks = TimeSpan.FromSeconds(5).Ticks;
         private static readonly string[] IgnoredProcesses =
         {
@@ -363,7 +372,7 @@ namespace XboxGamingBarHelper.Systems
                 switch (type)
                 {
                     case PowrProf.PBT_APMSUSPEND:
-                        Logger.Info($"System is going to sleep (kernel notification) at: {DateTime.Now}");
+                        HandleSuspend("kernel notification");
                         break;
                     case PowrProf.PBT_APMRESUMEAUTOMATIC:
                     case PowrProf.PBT_APMRESUMESUSPEND:
@@ -393,6 +402,7 @@ namespace XboxGamingBarHelper.Systems
             System.Threading.Interlocked.Exchange(ref lastResumeInvokeTicksUtc, now);
 
             Logger.Info($"System resumed from sleep/hibernate ({source}) at: {DateTime.Now}");
+            LogLastWakeReason();
             ResumeFromSleep?.Invoke(this);
             // Refresh display settings in case display changed during sleep
             RefreshDisplaySettings();
@@ -400,6 +410,70 @@ namespace XboxGamingBarHelper.Systems
             // (issue #94: unplug during Modern Standby left the helper on the
             // stale power source until the next real transition).
             CheckPowerSupplyStatusChange("resume");
+        }
+
+        /// <summary>
+        /// Fires <see cref="SuspendingToSleep"/> once per real suspend, deduped across the
+        /// SystemEvents Suspend and kernel PBT_APMSUSPEND sources (both fire on classic S3).
+        /// </summary>
+        private void HandleSuspend(string source)
+        {
+            long now = DateTime.UtcNow.Ticks;
+            long last = System.Threading.Interlocked.Read(ref lastSuspendInvokeTicksUtc);
+            if (now - last < ResumeDedupeWindowTicks)
+            {
+                Logger.Debug($"Suspend ({source}) within dedupe window; already handled");
+                return;
+            }
+            System.Threading.Interlocked.Exchange(ref lastSuspendInvokeTicksUtc, now);
+            Logger.Info($"System suspending to sleep/hibernate ({source}) at: {DateTime.Now}");
+            try { SuspendingToSleep?.Invoke(this); }
+            catch (Exception ex) { Logger.Warn($"SuspendingToSleep handler threw: {ex.Message}"); }
+        }
+
+        /// <summary>
+        /// Best-effort: reads the most recent Kernel-Power wake event (id 507) from the
+        /// System event log and logs why the device woke. We DON'T act on it — our idle
+        /// hibernate already re-arms from a fresh baseline on resume so it can't ping-pong
+        /// (HC #544's over-aggressive-resleep failure can't occur here) — but the reason is
+        /// valuable triage for sleep/resume field reports.
+        /// </summary>
+        private void LogLastWakeReason()
+        {
+            try
+            {
+                var query = new System.Diagnostics.Eventing.Reader.EventLogQuery(
+                    "System",
+                    System.Diagnostics.Eventing.Reader.PathType.LogName,
+                    "*[System[Provider[@Name='Microsoft-Windows-Kernel-Power'] and (EventID=507)]]")
+                {
+                    ReverseDirection = true, // newest first
+                };
+                using (var reader = new System.Diagnostics.Eventing.Reader.EventLogReader(query))
+                {
+                    var rec = reader.ReadEvent();
+                    if (rec == null)
+                    {
+                        Logger.Debug("Wake reason: no Kernel-Power 507 event found");
+                        return;
+                    }
+                    string desc = null;
+                    try { desc = rec.FormatDescription(); } catch { }
+                    if (!string.IsNullOrWhiteSpace(desc))
+                    {
+                        // Collapse to a single line for the log.
+                        Logger.Info($"Wake reason (Kernel-Power 507): {desc.Replace("\r", " ").Replace("\n", " ").Trim()}");
+                    }
+                    else
+                    {
+                        Logger.Info("Wake reason (Kernel-Power 507): present but no description");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Debug($"Wake reason lookup failed: {ex.Message}");
+            }
         }
 
         /// <summary>
@@ -448,7 +522,7 @@ namespace XboxGamingBarHelper.Systems
                     HandleResume("SystemEvents");
                     break;
                 case PowerModes.Suspend:
-                    Logger.Info($"System is going to sleep/hibernate at: {DateTime.Now}");
+                    HandleSuspend("SystemEvents");
                     break;
                 case PowerModes.StatusChange:
                     // StatusChange fires on AC/DC line transitions AND on battery percentage

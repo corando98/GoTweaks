@@ -1529,6 +1529,8 @@ namespace XboxGamingBarHelper
                 settingsManager.ViiperGyroAxisMapX,
                 settingsManager.ViiperGyroAxisMapY,
                 settingsManager.ViiperGyroAxisMapZ,
+                settingsManager.ViiperGyroTuning,
+                settingsManager.ViiperAccelTuning,
                 settingsManager.ViiperStickTriggerConfig,
                 settingsManager.ViiperStickTriggerPreviewEnabled,
                 viiperEmulationManager.StickTriggerLiveSample,
@@ -1706,6 +1708,7 @@ namespace XboxGamingBarHelper
             Logger.Info("Initialize callbacks.");
             systemManager.RunningGame.PropertyChanged += RunningGame_PropertyChanged;
             systemManager.ResumeFromSleep += SystemManager_ResumeFromSleep;
+            systemManager.SuspendingToSleep += SystemManager_SuspendingToSleep;
             systemManager.PowerSourceChanged += SystemManager_PowerSourceChanged;
 
             // Gate the HidHide post-cloak device restart on controller attach state:
