@@ -1550,6 +1550,20 @@ namespace XboxGamingBarHelper
                         response.Add("Content", $"Error: {ex.Message}");
                     }
                 }
+                else if (properties == null)
+                {
+                    // The property registry never came up (a manager failed to initialize, or
+                    // registry construction threw). Without this guard every Get/Set would NRE
+                    // here and silently apply nothing — the exact failure behind issue #104 on
+                    // Legion Go S. Return a clear error instead so the client doesn't hang and
+                    // the cause is obvious in the log.
+                    Logger.Error($"Property registry not initialized; cannot handle {request.Function} (RequestId={request.RequestId})");
+                    response = new global::Windows.Foundation.Collections.ValueSet
+                    {
+                        { nameof(Function), (int)request.Function },
+                        { "Error", "Helper property registry not initialized" },
+                    };
+                }
                 else
                 {
                     // Convert to ValueSet and use the existing property handling
@@ -1590,7 +1604,11 @@ namespace XboxGamingBarHelper
             }
             catch (Exception ex)
             {
-                Logger.Error($"Error handling pipe property request: {ex.Message}");
+                // Log the full exception (with stack), not just ex.Message: issue #104 was a
+                // bare "Object reference not set" repeated for every property, and the missing
+                // stack is why it took a user field report to locate. The stack names the
+                // offending property/manager immediately.
+                Logger.Error(ex, $"Error handling pipe property request for {request?.Function}");
             }
         }
 

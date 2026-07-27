@@ -1702,8 +1702,18 @@ namespace XboxGamingBarHelper
 
             // Note: DefaultGameProfileManager properties are added dynamically in background task
 
-            // Initialize properties
-            properties = new HelperProperties(propertyList.ToArray());
+            // Initialize properties. Filter out any null entries first: a null getter (e.g. a
+            // device-gated manager that didn't initialize on this hardware) must not take down
+            // the whole registry — if `properties` were left null, every pipe Get/Set would NRE
+            // and silently apply nothing (issue #104, Legion Go S). Log how many were dropped so
+            // a missing feature is visible instead of turning into a total silent outage.
+            var nonNullProperties = propertyList.Where(p => p != null).ToArray();
+            int droppedProps = propertyList.Count - nonNullProperties.Length;
+            if (droppedProps > 0)
+            {
+                Logger.Warn($"Property registry: {droppedProps} null property/properties skipped (a manager likely failed to initialize on this device)");
+            }
+            properties = new HelperProperties(nonNullProperties);
 
             Logger.Info("Initialize callbacks.");
             systemManager.RunningGame.PropertyChanged += RunningGame_PropertyChanged;

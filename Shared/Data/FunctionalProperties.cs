@@ -18,6 +18,15 @@ namespace Shared.Data
             properties = new Dictionary<Function, FunctionalProperty>();
             foreach (var property in inProperties)
             {
+                // A single null entry must NOT abort the whole registry build: if it did,
+                // `properties` would be left null and EVERY subsequent pipe Get/Set would
+                // NRE, silently killing all hardware apply (issue #104 on Legion Go S, where
+                // one device-gated manager getter returned null). Skip nulls and keep going.
+                if (property == null)
+                {
+                    Logger.Warn("Skipping null property in registry build");
+                    continue;
+                }
                 if (!properties.ContainsKey(property.Function))
                 {
                     properties.Add(property.Function, property);
@@ -45,6 +54,11 @@ namespace Shared.Data
         /// </summary>
         public void Add(FunctionalProperty property)
         {
+            if (property == null)
+            {
+                Logger.Warn("Ignoring null property in dynamic Add");
+                return;
+            }
             lock (properties)
             {
                 if (!properties.ContainsKey(property.Function))
