@@ -327,6 +327,15 @@ namespace XboxGamingBarHelper
                 Logger.Info($"Target directory: {HelperDeploymentService.HelperFolder}");
                 Logger.Info($"Package version: {HelperDeploymentService.GetCurrentPackageVersion()}");
 
+                // Step 0: stop any running/zombie helper instances first (#97). A helper
+                // still running from the deployed folder keeps its exe/DLLs locked, so
+                // every copy attempt fails, .version is never stamped, and each launch
+                // re-fires the UAC setup loop. We're elevated here, so we have the rights
+                // to kill them regardless of who started them.
+                Logger.Info("Step 0: Stopping running helper instances...");
+                DebugLog("Step 0: Killing running helper instances...");
+                KillRunningHelperInstances(DebugLog);
+
                 // Step 1: Deploy helper files
                 Logger.Info("Step 1: Deploying helper files...");
                 DebugLog("Step 1: Deploying...");
@@ -364,6 +373,52 @@ namespace XboxGamingBarHelper
                 Logger.Error(ex, "Error during setup");
                 DebugLog($"EXCEPTION: {ex.Message}\n{ex.StackTrace}");
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Kills every other XboxGamingBarHelper process so the deploy that follows
+        /// doesn't fail on locked files (#97). All sessions, not just ours — a stale
+        /// scheduled-task helper holds the same locks wherever it lives. The launcher
+        /// instance that spawned this setup has already exited by the time UAC consent
+        /// completes, so "everything except self" is safe.
+        /// </summary>
+        private static void KillRunningHelperInstances(Action<string> debugLog)
+        {
+            try
+            {
+                int selfPid = Process.GetCurrentProcess().Id;
+                var peers = Process.GetProcessesByName("XboxGamingBarHelper");
+                foreach (var p in peers)
+                {
+                    try
+                    {
+                        if (p.Id == selfPid || p.HasExited)
+                        {
+                            continue;
+                        }
+
+                        Logger.Info($"Killing running helper instance (PID={p.Id}) before deploy");
+                        debugLog?.Invoke($"Killing helper PID={p.Id}");
+                        p.Kill();
+                        if (!p.WaitForExit(5000))
+                        {
+                            Logger.Warn($"Helper PID={p.Id} did not exit within 5s; deploy may hit locked files");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warn($"Could not kill helper PID={p.Id}: {ex.Message}");
+                    }
+                    finally
+                    {
+                        try { p.Dispose(); } catch { }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"Could not enumerate helper instances: {ex.Message}");
             }
         }
 
