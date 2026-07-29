@@ -705,6 +705,14 @@ namespace XboxGamingBar
         private long heartbeatWatcherLastMtimeTicks = 0;
         private int heartbeatWatcherLastPid = 0;
         private volatile bool heartbeatWatcherReconnectInFlight = false;
+        // Consecutive failed pipe retries while the heartbeat stays FRESH — that combo
+        // means the helper process is alive but its pipe server is wedged (2026-07-27
+        // field case). After a few strikes the watcher escalates to a force-launch,
+        // whose startup-side takeover kills the wedged incumbent and replaces it.
+        private int heartbeatWatcherFailedRetries = 0;
+        // Consecutive watcher ticks with a FROZEN heartbeat while disconnected — the
+        // complementary wedge (main loop dead, or process gone without cleanup).
+        private int heartbeatWatcherStaleTicks = 0;
 
         // Hotkey watchers for Xbox controller button combos
         private XboxGameBarHotkeyWatcher hotkeyMenuA = null;
@@ -1379,9 +1387,34 @@ namespace XboxGamingBar
             // exactly one tab — without it, holding a trigger would cycle tabs continuously.
             this.PreviewKeyDown += GamingWidget_PreviewKeyDown;
             this.PreviewKeyUp += GamingWidget_PreviewKeyUp;
+            // Analog LT/RT poll: soft-press tab cycling (the key events above only fire
+            // near a full pull). One tab per pull; shares the key handler's latches.
+            StartAnalogTriggerPoll();
             // Vertical end-stops for gamepad navigation: keep focus from escaping the
             // active tab's content at the bottom, and route top-exits to the active tab.
             this.LosingFocus += GamingWidget_LosingFocus;
+            // Entry shepherd: land every cross-window focus entry (Game Bar handing us
+            // input via D-pad/A on the widget icon) on the active nav pill.
+            this.GettingFocus += GamingWidget_GettingFocus;
+            // Entry anchor: when Game Bar ACTIVATES our window (input handover), anchor
+            // focus to the active nav pill — the GettingFocus path proved unreliable for
+            // detecting entries (OldFocusedElement is rarely null in this hosting mode).
+            try { Windows.UI.Xaml.Window.Current.CoreWindow.Activated += CoreWindow_Activated; }
+            catch (Exception cwEx) { Logger.Warn($"CoreWindow.Activated hook failed: {cwEx.Message}"); }
+            // Selection follows focus on the nav strip: focusing a pill checks it, so the
+            // focused pill and the active tab can never diverge (shepherd redirects are
+            // keyed to the CHECKED tab — divergence made D-pad moves look sideways).
+            foreach (var navChild in MainNavPanel.Children)
+            {
+                if (navChild is Windows.UI.Xaml.Controls.RadioButton navPill)
+                {
+                    navPill.GotFocus += NavPill_GotFocus;
+                }
+            }
+            // Nav bar icons-vs-text preference (Customization card).
+            LoadNavBarIconsSetting();
+            // Deterministic D-pad L/R between pills via explicit XYFocus targets.
+            UpdateNavPillXYFocus();
             // Clear any latched LT/RT "held" state whenever the widget regains focus.
             // HidHide CyclePort during emulation setup can hide the physical pad while
             // a trigger was physically pressed; the KeyUp never arrives so the widget

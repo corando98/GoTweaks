@@ -362,6 +362,9 @@
     <Compile Include="Features\Navigation\GamingWidget.Focus.cs">
       <DependentUpon>GamingWidget.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Features\Navigation\GamingWidget.NavCustomization.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Features\Navigation\GamingWidget.Navigation.cs">
       <DependentUpon>GamingWidget.xaml</DependentUpon>
     </Compile>

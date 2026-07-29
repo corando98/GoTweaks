@@ -299,6 +299,24 @@ namespace XboxGamingBar
             try
             {
                 var settings = ApplicationData.Current.LocalSettings;
+
+                // One-time migration (v0.3.2761): Win11 became the default theme and is
+                // the most polished variant — switch EVERY existing install to it ONCE on
+                // the first launch after updating. The flag makes it once-only: anyone who
+                // picks a different theme afterwards keeps their choice forever (the
+                // migration never re-runs). Fresh installs land here too and simply get
+                // Win11 as their starting theme.
+                if (!settings.Values.ContainsKey("Win11ThemeMigrationDone"))
+                {
+                    settings.Values["Win11ThemeMigrationDone"] = true;
+                    var previous = settings.Values.TryGetValue("WidgetTheme", out var prev) && prev is string p ? p : "(none)";
+                    settings.Values["WidgetTheme"] = "Win11";
+                    currentThemeName = "Win11";
+                    Logger.Info($"One-time theme migration: forcing Win11 (previous saved theme: {previous})");
+                    _ = ApplyThemeOnLoadAsync("Win11");
+                    return;
+                }
+
                 if (settings.Values.TryGetValue("WidgetTheme", out var saved) && saved is string themeName)
                 {
                     currentThemeName = themeName;
@@ -309,11 +327,13 @@ namespace XboxGamingBar
                 }
                 else
                 {
-                    // No saved theme - mark as initialized so user can save their choice
-                    _ = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Low, () =>
-                    {
-                        isThemeInitialized = true;
-                    });
+                    // No saved theme = fresh install. Win11 is the default theme (it
+                    // follows the system accent and is the most polished variant);
+                    // ApplyThemeOnLoadAsync also syncs the combo selection and flips
+                    // isThemeInitialized when done so the user's later choice saves.
+                    currentThemeName = "Win11";
+                    Logger.Info("No saved theme - defaulting to Win11");
+                    _ = ApplyThemeOnLoadAsync("Win11");
                 }
             }
             catch (Exception ex)

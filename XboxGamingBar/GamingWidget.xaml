@@ -10,7 +10,8 @@
     mc:Ignorable="d"
     d:DesignHeight="670" d:DesignWidth="600"
     RequiresPointer="WhenEngaged"
-    IsFocusEngagementEnabled="True">
+    IsFocusEngagementEnabled="True"
+    XYFocusKeyboardNavigation="Enabled">
 
     <Page.Resources>
         <!-- Existing Converters -->
@@ -64,6 +65,11 @@
             <Setter Property="Padding" Value="8,5,8,5"/>
             <Setter Property="Margin" Value="0"/>
             <Setter Property="BorderThickness" Value="0"/>
+            <!-- System focus visuals OFF: the template draws its own rounded FocusBorder
+                 via the Focused visual state below — enabling system visuals on top
+                 stacked a second square rect over it (field feedback 2026-07-28). The
+                 first-open invisible-focus bug was the missing focus ANCHOR (fixed in
+                 WidgetEvents/Navigation with FocusState.Keyboard), not these visuals. -->
             <Setter Property="UseSystemFocusVisuals" Value="False"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -114,18 +120,27 @@
                                             <ObjectAnimationUsingKeyFrames Storyboard.TargetName="FocusBorder" Storyboard.TargetProperty="Visibility">
                                                 <DiscreteObjectKeyFrame KeyTime="0" Value="Visible"/>
                                             </ObjectAnimationUsingKeyFrames>
+                                            <!-- Dark text on the light pill so the label stays readable -->
+                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter" Storyboard.TargetProperty="Foreground">
+                                                <DiscreteObjectKeyFrame KeyTime="0" Value="#1A1A1A"/>
+                                            </ObjectAnimationUsingKeyFrames>
+                                            <!-- Underline goes dark too — accent-on-light is hard to read -->
+                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="SelectionIndicator" Storyboard.TargetProperty="Background">
+                                                <DiscreteObjectKeyFrame KeyTime="0" Value="#1A1A1A"/>
+                                            </ObjectAnimationUsingKeyFrames>
                                         </Storyboard>
                                     </VisualState>
                                     <VisualState x:Name="Unfocused"/>
                                     <VisualState x:Name="PointerFocused"/>
                                 </VisualStateGroup>
                             </VisualStateManager.VisualStateGroups>
-                            <!-- Focus border with rounded corners -->
+                            <!-- Focused pill: filled rounded light background (replaces the
+                                 old white outline ring). Margin 0 = fill hugs the pill
+                                 bounds instead of bleeding into the strip spacing. -->
                             <Border x:Name="FocusBorder"
-                                    BorderBrush="White"
-                                    BorderThickness="2"
+                                    Background="#E8E8E8"
                                     CornerRadius="6"
-                                    Margin="-2"
+                                    Margin="0"
                                     Visibility="Collapsed"/>
                             <ContentPresenter x:Name="ContentPresenter"
                                               Content="{TemplateBinding Content}"
@@ -203,7 +218,12 @@
             <Setter Property="FocusVisualPrimaryBrush" Value="White"/>
             <Setter Property="FocusVisualSecondaryBrush" Value="Transparent"/>
             <Setter Property="FocusVisualPrimaryThickness" Value="2"/>
-            <Setter Property="FocusVisualMargin" Value="-3,-3,-3,-3"/>
+            <!-- -4 gives the ring air around the bare 40x20 switch graphic. CornerRadius
+                 4 = the same subtle rounding WinUI buttons use, so the toggle's focus
+                 rect matches the rest of the house rings (12 turned it into a capsule
+                 blob at this size — field feedback 2026-07-29). -->
+            <Setter Property="FocusVisualMargin" Value="-4,-4,-4,-4"/>
+            <Setter Property="CornerRadius" Value="4"/>
         </Style>
 
         <!-- Modern Slider Style - Fluent with System Accent Color, focus on parent card -->
@@ -223,23 +243,20 @@
         <!-- Modern ComboBox Style - System style with minor customizations -->
         <Style x:Key="ModernComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource DefaultComboBoxStyle}">
             <Setter Property="HorizontalAlignment" Value="Stretch"/>
-            <!-- High-visibility white focus ring for gamepad navigation, matching the slider/
-                 toggle/button styles. The ComboBox's own focused border brush is a near-invisible
-                 dark grey (#50555C), so gamepad users had no visible focus on dropdowns. -->
-            <Setter Property="UseSystemFocusVisuals" Value="True"/>
-            <Setter Property="FocusVisualPrimaryBrush" Value="White"/>
-            <Setter Property="FocusVisualSecondaryBrush" Value="Transparent"/>
-            <Setter Property="FocusVisualPrimaryThickness" Value="2"/>
-            <Setter Property="FocusVisualMargin" Value="-3,-3,-3,-3"/>
+            <!-- System focus visuals OFF for combos: the modern WinUI template draws its
+                 own bright rounded FOCUSED BORDER at the control edge (and ignores the
+                 legacy ComboBoxBorderBrushFocused suppression keys), so the old added
+                 white rect produced a DOUBLE ring (field screenshots 2026-07-29). The
+                 template's native ring is the single focus indicator now. -->
+            <Setter Property="UseSystemFocusVisuals" Value="False"/>
         </Style>
 
-        <!-- Override ComboBox border colors to prevent highlight on focus/hover -->
+        <!-- Tone down ComboBox hover/press feedback (focused border deliberately NOT
+             suppressed — it is the focus indicator, see ModernComboBoxStyle) -->
         <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#50555C"/>
         <SolidColorBrush x:Key="ComboBoxBorderBrushPressed" Color="#50555C"/>
-        <SolidColorBrush x:Key="ComboBoxBorderBrushFocused" Color="#50555C"/>
         <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#30343A"/>
         <SolidColorBrush x:Key="ComboBoxBackgroundPressed" Color="#30343A"/>
-        <SolidColorBrush x:Key="ComboBoxBackgroundFocused" Color="#30343A"/>
 
         <!-- Modern Button Style - System style -->
         <Style x:Key="ModernButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
@@ -441,10 +458,13 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- LT indicator -->
-                <Border Grid.Column="0" Background="#404040" CornerRadius="3" Padding="4,1" Margin="0,0,4,0" VerticalAlignment="Center">
-                    <TextBlock Text="LT" Foreground="#FFFFFF" FontSize="10" FontWeight="SemiBold"/>
-                </Border>
+                <!-- LT indicator (actual controller glyph). Sized to the old text badge's
+                     height so the nav strip row doesn't grow/reflow. -->
+                <Image Grid.Column="0" Height="16" Margin="0,0,4,0" VerticalAlignment="Center" Stretch="Uniform">
+                    <Image.Source>
+                        <SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/lt.svg" RasterizePixelWidth="32" RasterizePixelHeight="32"/>
+                    </Image.Source>
+                </Image>
 
                 <!-- Navigation Tabs - StackPanel for proper horizontal XY navigation -->
                 <!-- XYFocusKeyboardNavigation="Disabled" prevents vertical nav within, allows left/right -->
@@ -455,7 +475,9 @@
                             VerticalAlignment="Center"
                             XYFocusKeyboardNavigation="Disabled">
                     <RadioButton x:Name="QuickNavItem" Content="Quick" Tag="Quick" Style="{StaticResource NavRadioButtonStyle}" GroupName="MainNav" Checked="NavRadioButton_Checked"/>
-                    <RadioButton x:Name="PerformanceNavItem" Content="Performance" Tag="Performance" Style="{StaticResource NavRadioButtonStyle}" GroupName="MainNav" Checked="NavRadioButton_Checked"/>
+                    <!-- Content "Power" (short label to decompress the strip); Tag stays
+                         "Performance" — all nav logic is keyed on the Tag. -->
+                    <RadioButton x:Name="PerformanceNavItem" Content="Power" Tag="Performance" Style="{StaticResource NavRadioButtonStyle}" GroupName="MainNav" Checked="NavRadioButton_Checked"/>
                     <RadioButton x:Name="ProfilesNavItem" Content="Profiles" Tag="Game" Style="{StaticResource NavRadioButtonStyle}" GroupName="MainNav" Checked="NavRadioButton_Checked"/>
                     <RadioButton x:Name="GraphicsNavItem" Content="Display" Tag="AMD" Style="{StaticResource NavRadioButtonStyle}" GroupName="MainNav" Checked="NavRadioButton_Checked"/>
                     <RadioButton x:Name="ScalingNavItem" Content="Scale" Tag="Scaling" Style="{StaticResource NavRadioButtonStyle}" GroupName="MainNav" Checked="NavRadioButton_Checked"/>
@@ -464,11 +486,8 @@
                     <RadioButton x:Name="SystemNavItem" Content="System" Tag="System" Style="{StaticResource NavRadioButtonStyle}" GroupName="MainNav" Checked="NavRadioButton_Checked"/>
                 </StackPanel>
 
-                <!-- RT indicator and status dot -->
+                <!-- Status dot then RT indicator (dot sits LEFT of RT) -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Spacing="4">
-                    <Border Background="#404040" CornerRadius="3" Padding="4,1" Margin="4,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="RT" Foreground="#FFFFFF" FontSize="10" FontWeight="SemiBold"/>
-                    </Border>
                     <!-- Helper Connection Status Indicator -->
                     <Border x:Name="HelperStatusIndicator"
                             Background="#30000000"
@@ -491,6 +510,12 @@
                                        Visibility="Collapsed"/>
                         </StackPanel>
                     </Border>
+                    <!-- RT indicator (actual controller glyph), sized to the old badge height -->
+                    <Image Height="16" VerticalAlignment="Center" Stretch="Uniform">
+                        <Image.Source>
+                            <SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/rt.svg" RasterizePixelWidth="32" RasterizePixelHeight="32"/>
+                        </Image.Source>
+                    </Image>
                 </StackPanel>
             </Grid>
 
@@ -3747,7 +3772,7 @@
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/view.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image><TextBlock Text="+" VerticalAlignment="Center" Foreground="#AAAAAA" FontSize="14" Margin="5,0,5,0"/><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/a.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image></StackPanel>
-                                            <ComboBox x:Name="HotkeyMenuAComboBox" Grid.Column="1"
+                                            <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="HotkeyMenuAComboBox" Grid.Column="1"
                                                       SelectionChanged="HotkeyMenuA_SelectionChanged">
                                                 <ComboBoxItem Content="Disabled" Tag="0"/>
                                                 <ComboBoxItem Content="Keyboard Shortcut" Tag="1"/>
@@ -3781,7 +3806,7 @@
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/view.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image><TextBlock Text="+" VerticalAlignment="Center" Foreground="#AAAAAA" FontSize="14" Margin="5,0,5,0"/><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/b.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image></StackPanel>
-                                            <ComboBox x:Name="HotkeyMenuBComboBox" Grid.Column="1"
+                                            <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="HotkeyMenuBComboBox" Grid.Column="1"
                                                       SelectionChanged="HotkeyMenuB_SelectionChanged">
                                                 <ComboBoxItem Content="Disabled" Tag="0"/>
                                                 <ComboBoxItem Content="Keyboard Shortcut" Tag="1"/>
@@ -3815,7 +3840,7 @@
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/view.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image><TextBlock Text="+" VerticalAlignment="Center" Foreground="#AAAAAA" FontSize="14" Margin="5,0,5,0"/><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/x.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image></StackPanel>
-                                            <ComboBox x:Name="HotkeyMenuXComboBox" Grid.Column="1"
+                                            <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="HotkeyMenuXComboBox" Grid.Column="1"
                                                       SelectionChanged="HotkeyMenuX_SelectionChanged">
                                                 <ComboBoxItem Content="Disabled" Tag="0"/>
                                                 <ComboBoxItem Content="Keyboard Shortcut" Tag="1"/>
@@ -3849,7 +3874,7 @@
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/view.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image><TextBlock Text="+" VerticalAlignment="Center" Foreground="#AAAAAA" FontSize="14" Margin="5,0,5,0"/><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/y.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image></StackPanel>
-                                            <ComboBox x:Name="HotkeyMenuYComboBox" Grid.Column="1"
+                                            <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="HotkeyMenuYComboBox" Grid.Column="1"
                                                       SelectionChanged="HotkeyMenuY_SelectionChanged">
                                                 <ComboBoxItem Content="Disabled" Tag="0"/>
                                                 <ComboBoxItem Content="Keyboard Shortcut" Tag="1"/>
@@ -3883,7 +3908,7 @@
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/menu.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image><TextBlock Text="+" VerticalAlignment="Center" Foreground="#AAAAAA" FontSize="14" Margin="5,0,5,0"/><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/dpad-up.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image></StackPanel>
-                                            <ComboBox x:Name="HotkeyMenuDpadUpComboBox" Grid.Column="1"
+                                            <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="HotkeyMenuDpadUpComboBox" Grid.Column="1"
                                                       SelectionChanged="HotkeyMenuDpadUp_SelectionChanged">
                                                 <ComboBoxItem Content="Disabled" Tag="0"/>
                                                 <ComboBoxItem Content="Keyboard Shortcut" Tag="1"/>
@@ -3917,7 +3942,7 @@
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/menu.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image><TextBlock Text="+" VerticalAlignment="Center" Foreground="#AAAAAA" FontSize="14" Margin="5,0,5,0"/><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/dpad-down.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image></StackPanel>
-                                            <ComboBox x:Name="HotkeyMenuDpadDownComboBox" Grid.Column="1"
+                                            <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="HotkeyMenuDpadDownComboBox" Grid.Column="1"
                                                       SelectionChanged="HotkeyMenuDpadDown_SelectionChanged">
                                                 <ComboBoxItem Content="Disabled" Tag="0"/>
                                                 <ComboBoxItem Content="Keyboard Shortcut" Tag="1"/>
@@ -3951,7 +3976,7 @@
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/menu.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image><TextBlock Text="+" VerticalAlignment="Center" Foreground="#AAAAAA" FontSize="14" Margin="5,0,5,0"/><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/dpad-left.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image></StackPanel>
-                                            <ComboBox x:Name="HotkeyMenuDpadLeftComboBox" Grid.Column="1"
+                                            <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="HotkeyMenuDpadLeftComboBox" Grid.Column="1"
                                                       SelectionChanged="HotkeyMenuDpadLeft_SelectionChanged">
                                                 <ComboBoxItem Content="Disabled" Tag="0"/>
                                                 <ComboBoxItem Content="Keyboard Shortcut" Tag="1"/>
@@ -3985,7 +4010,7 @@
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/menu.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image><TextBlock Text="+" VerticalAlignment="Center" Foreground="#AAAAAA" FontSize="14" Margin="5,0,5,0"/><Image Width="20" Height="20" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/dpad-right.svg" RasterizePixelWidth="40" RasterizePixelHeight="40"/></Image.Source></Image></StackPanel>
-                                            <ComboBox x:Name="HotkeyMenuDpadRightComboBox" Grid.Column="1"
+                                            <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="HotkeyMenuDpadRightComboBox" Grid.Column="1"
                                                       SelectionChanged="HotkeyMenuDpadRight_SelectionChanged">
                                                 <ComboBoxItem Content="Disabled" Tag="0"/>
                                                 <ComboBoxItem Content="Keyboard Shortcut" Tag="1"/>
@@ -4261,7 +4286,7 @@
                                         <TextBlock Text="Active backend: VIIPER (USBIP). Changes take effect immediately (hot-swap)." FontSize="11" Foreground="#888888" Margin="0,2,0,10" TextWrapping="Wrap"/>
 
                                         <TextBlock Text="Virtual device" FontSize="12" Foreground="#CCCCCC" Margin="0,0,0,4"/>
-                                        <ComboBox x:Name="ViiperDeviceTypeComboBox" HorizontalAlignment="Stretch">
+                                        <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperDeviceTypeComboBox" HorizontalAlignment="Stretch">
                                             <ComboBoxItem Content="Xbox 360" Tag="xbox360"/>
                                             <!--
                                                 Xbox Elite 2 (Tag="xboxelite2") hidden after RE confirmed the
@@ -4279,7 +4304,7 @@
 
                                         <StackPanel x:Name="ViiperSteamSubDevicePanel" Visibility="Collapsed" Margin="0,12,0,0">
                                             <TextBlock Text="Steam sub-device" FontSize="12" Foreground="#CCCCCC" Margin="0,0,0,4"/>
-                                            <ComboBox x:Name="ViiperSteamSubDeviceComboBox" HorizontalAlignment="Stretch">
+                                            <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperSteamSubDeviceComboBox" HorizontalAlignment="Stretch">
                                                 <ComboBoxItem Content="Steam Deck" Tag="steam-deck"/>
                                                 <ComboBoxItem Content="Legion Go" Tag="legion-go"/>
                                                 <ComboBoxItem Content="Legion Go S" Tag="legion-go-s"/>
@@ -4293,7 +4318,7 @@
 
                                         <StackPanel x:Name="ViiperSonySubDevicePanel" Visibility="Collapsed" Margin="0,12,0,0">
                                             <TextBlock Text="Sony sub-device" FontSize="12" Foreground="#CCCCCC" Margin="0,0,0,4"/>
-                                            <ComboBox x:Name="ViiperSonySubDeviceComboBox" HorizontalAlignment="Stretch">
+                                            <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperSonySubDeviceComboBox" HorizontalAlignment="Stretch">
                                                 <ComboBoxItem Content="DualSense" Tag="dualsense"/>
                                                 <ComboBoxItem Content="DualSense Edge" Tag="dualsense-edge"/>
                                                 <ComboBoxItem Content="DualShock 4" Tag="dualshock4"/>
@@ -4302,7 +4327,7 @@
 
                                         <StackPanel x:Name="ViiperNintendoSubDevicePanel" Visibility="Collapsed" Margin="0,12,0,0">
                                             <TextBlock Text="Nintendo sub-device" FontSize="12" Foreground="#CCCCCC" Margin="0,0,0,4"/>
-                                            <ComboBox x:Name="ViiperNintendoSubDeviceComboBox" HorizontalAlignment="Stretch">
+                                            <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperNintendoSubDeviceComboBox" HorizontalAlignment="Stretch">
                                                 <ComboBoxItem Content="Switch Pro" Tag="switchpro"/>
                                                 <ComboBoxItem Content="Switch Pro 2" Tag="switchpro2"/>
                                                 <ComboBoxItem Content="Joy-Con (Left)" Tag="joycon-left"/>
@@ -4331,13 +4356,13 @@
                                         </StackPanel>
 
                                         <TextBlock Text="Input source" FontSize="12" Foreground="#CCCCCC" Margin="0,12,0,4"/>
-                                        <ComboBox x:Name="ViiperInputSourceComboBox" HorizontalAlignment="Stretch">
+                                        <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperInputSourceComboBox" HorizontalAlignment="Stretch">
                                             <ComboBoxItem Content="XInput (any controller)" Tag="XInput"/>
                                             <ComboBoxItem Content="Legion Go HID (native)" Tag="LegionHid"/>
                                         </ComboBox>
 
                                         <TextBlock Text="Gyro source" FontSize="12" Foreground="#CCCCCC" Margin="0,12,0,4"/>
-                                        <ComboBox x:Name="ViiperGyroSourceComboBox" HorizontalAlignment="Stretch">
+                                        <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperGyroSourceComboBox" HorizontalAlignment="Stretch">
                                             <ComboBoxItem Content="None" Tag="None"/>
                                             <ComboBoxItem Content="Left controller" Tag="Left"/>
                                             <ComboBoxItem Content="Right controller" Tag="Right"/>
@@ -4401,19 +4426,19 @@
                                                         <ColumnDefinition Width="*"/>
                                                     </Grid.ColumnDefinitions>
                                                     <TextBlock Grid.Column="0" Text="X←" FontSize="11" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                                    <ComboBox x:Name="ViiperGyroMatrixXComboBox" Grid.Column="1" HorizontalAlignment="Stretch" Margin="0,0,6,0" FontSize="12">
+                                                    <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperGyroMatrixXComboBox" Grid.Column="1" HorizontalAlignment="Stretch" Margin="0,0,6,0">
                                                         <ComboBoxItem Content="X" Tag="X"/>
                                                         <ComboBoxItem Content="Y" Tag="Y"/>
                                                         <ComboBoxItem Content="Z" Tag="Z"/>
                                                     </ComboBox>
                                                     <TextBlock Grid.Column="2" Text="Y←" FontSize="11" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                                    <ComboBox x:Name="ViiperGyroMatrixYComboBox" Grid.Column="3" HorizontalAlignment="Stretch" Margin="0,0,6,0" FontSize="12">
+                                                    <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperGyroMatrixYComboBox" Grid.Column="3" HorizontalAlignment="Stretch" Margin="0,0,6,0">
                                                         <ComboBoxItem Content="X" Tag="X"/>
                                                         <ComboBoxItem Content="Y" Tag="Y"/>
                                                         <ComboBoxItem Content="Z" Tag="Z"/>
                                                     </ComboBox>
                                                     <TextBlock Grid.Column="4" Text="Z←" FontSize="11" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                                    <ComboBox x:Name="ViiperGyroMatrixZComboBox" Grid.Column="5" HorizontalAlignment="Stretch" FontSize="12">
+                                                    <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperGyroMatrixZComboBox" Grid.Column="5" HorizontalAlignment="Stretch">
                                                         <ComboBoxItem Content="X" Tag="X"/>
                                                         <ComboBoxItem Content="Y" Tag="Y"/>
                                                         <ComboBoxItem Content="Z" Tag="Z"/>
@@ -4453,19 +4478,19 @@
                                                         <ColumnDefinition Width="*"/>
                                                     </Grid.ColumnDefinitions>
                                                     <TextBlock Grid.Column="0" Text="X←" FontSize="11" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                                    <ComboBox x:Name="ViiperAccelMatrixXComboBox" Grid.Column="1" HorizontalAlignment="Stretch" Margin="0,0,6,0" FontSize="12">
+                                                    <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperAccelMatrixXComboBox" Grid.Column="1" HorizontalAlignment="Stretch" Margin="0,0,6,0">
                                                         <ComboBoxItem Content="X" Tag="X"/>
                                                         <ComboBoxItem Content="Y" Tag="Y"/>
                                                         <ComboBoxItem Content="Z" Tag="Z"/>
                                                     </ComboBox>
                                                     <TextBlock Grid.Column="2" Text="Y←" FontSize="11" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                                    <ComboBox x:Name="ViiperAccelMatrixYComboBox" Grid.Column="3" HorizontalAlignment="Stretch" Margin="0,0,6,0" FontSize="12">
+                                                    <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperAccelMatrixYComboBox" Grid.Column="3" HorizontalAlignment="Stretch" Margin="0,0,6,0">
                                                         <ComboBoxItem Content="X" Tag="X"/>
                                                         <ComboBoxItem Content="Y" Tag="Y"/>
                                                         <ComboBoxItem Content="Z" Tag="Z"/>
                                                     </ComboBox>
                                                     <TextBlock Grid.Column="4" Text="Z←" FontSize="11" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                                    <ComboBox x:Name="ViiperAccelMatrixZComboBox" Grid.Column="5" HorizontalAlignment="Stretch" FontSize="12">
+                                                    <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperAccelMatrixZComboBox" Grid.Column="5" HorizontalAlignment="Stretch">
                                                         <ComboBoxItem Content="X" Tag="X"/>
                                                         <ComboBoxItem Content="Y" Tag="Y"/>
                                                         <ComboBoxItem Content="Z" Tag="Z"/>
@@ -4553,7 +4578,7 @@
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Grid.Column="0" Text="X→" FontSize="11" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                            <ComboBox x:Name="ViiperGyroAxisMapXComboBox" Grid.Column="1" HorizontalAlignment="Stretch" Margin="0,0,6,0" FontSize="12">
+                                            <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperGyroAxisMapXComboBox" Grid.Column="1" HorizontalAlignment="Stretch" Margin="0,0,6,0" FontSize="12">
                                                 <ComboBoxItem Content="X"  Tag="X"/>
                                                 <ComboBoxItem Content="Y"  Tag="Y"/>
                                                 <ComboBoxItem Content="Z"  Tag="Z"/>
@@ -4562,7 +4587,7 @@
                                                 <ComboBoxItem Content="-Z" Tag="-Z"/>
                                             </ComboBox>
                                             <TextBlock Grid.Column="2" Text="Y→" FontSize="11" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                            <ComboBox x:Name="ViiperGyroAxisMapYComboBox" Grid.Column="3" HorizontalAlignment="Stretch" Margin="0,0,6,0" FontSize="12">
+                                            <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperGyroAxisMapYComboBox" Grid.Column="3" HorizontalAlignment="Stretch" Margin="0,0,6,0" FontSize="12">
                                                 <ComboBoxItem Content="X"  Tag="X"/>
                                                 <ComboBoxItem Content="Y"  Tag="Y"/>
                                                 <ComboBoxItem Content="Z"  Tag="Z"/>
@@ -4571,7 +4596,7 @@
                                                 <ComboBoxItem Content="-Z" Tag="-Z"/>
                                             </ComboBox>
                                             <TextBlock Grid.Column="4" Text="Z→" FontSize="11" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                            <ComboBox x:Name="ViiperGyroAxisMapZComboBox" Grid.Column="5" HorizontalAlignment="Stretch" FontSize="12">
+                                            <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperGyroAxisMapZComboBox" Grid.Column="5" HorizontalAlignment="Stretch" FontSize="12">
                                                 <ComboBoxItem Content="X"  Tag="X"/>
                                                 <ComboBoxItem Content="Y"  Tag="Y"/>
                                                 <ComboBoxItem Content="Z"  Tag="Z"/>
@@ -4649,7 +4674,7 @@
                                             </Grid>
 
                                             <TextBlock Text="Activation mode" FontSize="12" Foreground="#CCCCCC" Margin="0,0,0,4"/>
-                                            <ComboBox x:Name="ViiperStickGyroActivationModeComboBox" HorizontalAlignment="Stretch"
+                                            <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperStickGyroActivationModeComboBox" HorizontalAlignment="Stretch"
                                                       SelectionChanged="ViiperStickGyroActivationModeComboBox_SelectionChanged">
                                                 <ComboBoxItem Content="Always On" Tag="0" IsSelected="True"/>
                                                 <ComboBoxItem Content="Hold" Tag="1"/>
@@ -4657,7 +4682,7 @@
                                             </ComboBox>
 
                                             <TextBlock Text="Activation button" FontSize="12" Foreground="#CCCCCC" Margin="0,8,0,4"/>
-                                            <ComboBox x:Name="ViiperStickGyroActivationButtonComboBox" HorizontalAlignment="Stretch"
+                                            <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperStickGyroActivationButtonComboBox" HorizontalAlignment="Stretch"
                                                       SelectionChanged="ViiperStickGyroActivationButtonComboBox_SelectionChanged">
                                                 <ComboBoxItem Content="None" Tag="0"/>
                                                 <ComboBoxItem Content="Right Trigger" Tag="1" IsSelected="True"/>
@@ -4779,7 +4804,7 @@
                                                     <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
                                                 <TextBlock Text="Sensitivity curve" Grid.Column="0" VerticalAlignment="Center" FontSize="12" Foreground="#CCCCCC"/>
-                                                <ComboBox x:Name="ViiperStickGyroCurvePresetComboBox" Grid.Column="1" Width="180"
+                                                <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperStickGyroCurvePresetComboBox" Grid.Column="1" Width="180"
                                                           FontSize="12" SelectionChanged="ViiperStickGyroCurvePresetComboBox_SelectionChanged">
                                                     <ComboBoxItem Content="Linear (flat)" Tag="0"/>
                                                     <ComboBoxItem Content="Slow + Precise" Tag="1"/>
@@ -4893,7 +4918,7 @@
                                                         <TextBlock Text="Send to joystick" FontSize="12" Foreground="#CCCCCC"/>
                                                         <TextBlock Text="Which emulated stick receives the gyro contribution." FontSize="10" Foreground="#666666" TextWrapping="Wrap"/>
                                                     </StackPanel>
-                                                    <ComboBox x:Name="ViiperStickGyroSelectComboBox"
+                                                    <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperStickGyroSelectComboBox"
                                                               Grid.Column="1" Width="160"
                                                               SelectionChanged="ViiperStickGyroSelectComboBox_SelectionChanged">
                                                         <ComboBoxItem Content="Left" Tag="0"/>
@@ -4911,7 +4936,7 @@
                                                         <TextBlock Text="3DOF to 2D conversion" FontSize="12" Foreground="#CCCCCC"/>
                                                         <TextBlock Text="Yaw (default) = laser pointer from back of device: yaw the device → camera pans, roll has no effect. Player/World Space use gravity as the yaw axis (camera pans relative to world up, not device direction)." FontSize="10" Foreground="#666666" TextWrapping="Wrap"/>
                                                     </StackPanel>
-                                                    <ComboBox x:Name="ViiperStickGyroConversionComboBox"
+                                                    <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperStickGyroConversionComboBox"
                                                               Grid.Column="1" Width="220"
                                                               SelectionChanged="ViiperStickGyroConversionComboBox_SelectionChanged">
                                                         <ComboBoxItem Content="Yaw (laser pointer)" Tag="0" IsSelected="True"/>
@@ -4932,7 +4957,7 @@
                                                         <TextBlock Text="Hold orientation" FontSize="12" Foreground="#CCCCCC"/>
                                                         <TextBlock Text="Flat = on a table; Handheld = held in front of you (default for Legion Go 2)." FontSize="10" Foreground="#666666" TextWrapping="Wrap"/>
                                                     </StackPanel>
-                                                    <ComboBox x:Name="ViiperStickGyroOrientationComboBox"
+                                                    <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperStickGyroOrientationComboBox"
                                                               Grid.Column="1" Width="200"
                                                               SelectionChanged="ViiperStickGyroOrientationComboBox_SelectionChanged">
                                                         <ComboBoxItem Content="Flat (parallel to ground)" Tag="0" IsSelected="True"/>
@@ -4984,7 +5009,7 @@
                                         </StackPanel>
 
                                         <TextBlock Text="Guide/Mode button" FontSize="12" Foreground="#CCCCCC" Margin="0,12,0,4"/>
-                                        <ComboBox x:Name="ViiperGuideButtonModeComboBox" HorizontalAlignment="Stretch">
+                                        <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperGuideButtonModeComboBox" HorizontalAlignment="Stretch">
                                             <ComboBoxItem Content="Native (emulated device Guide/PS)" Tag="Native"/>
                                             <ComboBoxItem Content="Open Xbox Game Bar (Win+G)" Tag="GameBar"/>
                                         </ComboBox>
@@ -5001,7 +5026,7 @@
                                             <Image Width="20" Height="20" Margin="0,0,6,0" Source="/Assets/ButtonGlyphs/Desktop.png"/>
                                             <TextBlock Text="Desktop button" FontSize="12" Foreground="#CCCCCC" VerticalAlignment="Center"/>
                                         </StackPanel>
-                                        <ComboBox x:Name="ViiperDesktopButtonTargetComboBox" HorizontalAlignment="Stretch">
+                                        <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperDesktopButtonTargetComboBox" HorizontalAlignment="Stretch">
                                             <ComboBoxItem Content="None" Tag="none"/>
                                             <ComboBoxItem Content="Guide / PS" Tag="guide"/>
                                             <ComboBoxItem Content="Touchpad click (Sony/Deck)" Tag="touchpad"/>
@@ -5014,7 +5039,7 @@
                                             <Image Width="20" Height="20" Margin="0,0,6,0" Source="/Assets/ButtonGlyphs/Page.png"/>
                                             <TextBlock Text="Page button" FontSize="12" Foreground="#CCCCCC" VerticalAlignment="Center"/>
                                         </StackPanel>
-                                        <ComboBox x:Name="ViiperPageButtonTargetComboBox" HorizontalAlignment="Stretch">
+                                        <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperPageButtonTargetComboBox" HorizontalAlignment="Stretch">
                                             <ComboBoxItem Content="None" Tag="none"/>
                                             <ComboBoxItem Content="Guide / PS" Tag="guide"/>
                                             <ComboBoxItem Content="Touchpad click (Sony/Deck)" Tag="touchpad"/>
@@ -5181,7 +5206,7 @@
                                                 <StackPanel x:Name="ViiperLSContent" Visibility="Collapsed">
 
                                                 <TextBlock Text="Deadzone shape" FontSize="12" Foreground="#CCCCCC" Margin="0,4,0,2"/>
-                                                <ComboBox x:Name="ViiperLSShapeComboBox" HorizontalAlignment="Stretch" FontSize="12">
+                                                <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperLSShapeComboBox" HorizontalAlignment="Stretch" FontSize="12">
                                                     <ComboBoxItem Content="Scaled Radial" Tag="0"/>
                                                     <ComboBoxItem Content="Radial" Tag="1"/>
                                                     <ComboBoxItem Content="Axial" Tag="2"/>
@@ -5216,7 +5241,7 @@
                                                         Minimum="0" Maximum="50" Value="0" StepFrequency="1"/>
 
                                                 <TextBlock Text="Sensitivity X" FontSize="12" Foreground="#CCCCCC" Margin="0,8,0,2"/>
-                                                <ComboBox x:Name="ViiperLSCurveXComboBox" HorizontalAlignment="Stretch" FontSize="12">
+                                                <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperLSCurveXComboBox" HorizontalAlignment="Stretch" FontSize="12">
                                                     <ComboBoxItem Content="Linear" Tag="0"/>
                                                     <ComboBoxItem Content="Smooth" Tag="1"/>
                                                     <ComboBoxItem Content="Aggressive" Tag="2"/>
@@ -5226,7 +5251,7 @@
                                                 </ComboBox>
 
                                                 <TextBlock Text="Sensitivity Y" FontSize="12" Foreground="#CCCCCC" Margin="0,4,0,2"/>
-                                                <ComboBox x:Name="ViiperLSCurveYComboBox" HorizontalAlignment="Stretch" FontSize="12">
+                                                <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperLSCurveYComboBox" HorizontalAlignment="Stretch" FontSize="12">
                                                     <ComboBoxItem Content="Linear" Tag="0"/>
                                                     <ComboBoxItem Content="Smooth" Tag="1"/>
                                                     <ComboBoxItem Content="Aggressive" Tag="2"/>
@@ -5252,7 +5277,7 @@
                                                 <StackPanel x:Name="ViiperRSContent" Visibility="Collapsed">
 
                                                 <TextBlock Text="Deadzone shape" FontSize="12" Foreground="#CCCCCC" Margin="0,4,0,2"/>
-                                                <ComboBox x:Name="ViiperRSShapeComboBox" HorizontalAlignment="Stretch" FontSize="12">
+                                                <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperRSShapeComboBox" HorizontalAlignment="Stretch" FontSize="12">
                                                     <ComboBoxItem Content="Scaled Radial" Tag="0"/>
                                                     <ComboBoxItem Content="Radial" Tag="1"/>
                                                     <ComboBoxItem Content="Axial" Tag="2"/>
@@ -5287,7 +5312,7 @@
                                                         Minimum="0" Maximum="50" Value="0" StepFrequency="1"/>
 
                                                 <TextBlock Text="Sensitivity X" FontSize="12" Foreground="#CCCCCC" Margin="0,8,0,2"/>
-                                                <ComboBox x:Name="ViiperRSCurveXComboBox" HorizontalAlignment="Stretch" FontSize="12">
+                                                <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperRSCurveXComboBox" HorizontalAlignment="Stretch" FontSize="12">
                                                     <ComboBoxItem Content="Linear" Tag="0"/>
                                                     <ComboBoxItem Content="Smooth" Tag="1"/>
                                                     <ComboBoxItem Content="Aggressive" Tag="2"/>
@@ -5297,7 +5322,7 @@
                                                 </ComboBox>
 
                                                 <TextBlock Text="Sensitivity Y" FontSize="12" Foreground="#CCCCCC" Margin="0,4,0,2"/>
-                                                <ComboBox x:Name="ViiperRSCurveYComboBox" HorizontalAlignment="Stretch" FontSize="12">
+                                                <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperRSCurveYComboBox" HorizontalAlignment="Stretch" FontSize="12">
                                                     <ComboBoxItem Content="Linear" Tag="0"/>
                                                     <ComboBoxItem Content="Smooth" Tag="1"/>
                                                     <ComboBoxItem Content="Aggressive" Tag="2"/>
@@ -5344,7 +5369,7 @@
                                                         Minimum="0" Maximum="50" Value="0" StepFrequency="1"/>
 
                                                 <TextBlock Text="Sensitivity" FontSize="12" Foreground="#CCCCCC" Margin="0,8,0,2"/>
-                                                <ComboBox x:Name="ViiperLTCurveComboBox" HorizontalAlignment="Stretch" FontSize="12">
+                                                <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperLTCurveComboBox" HorizontalAlignment="Stretch" FontSize="12">
                                                     <ComboBoxItem Content="Linear" Tag="0"/>
                                                     <ComboBoxItem Content="Smooth" Tag="1"/>
                                                     <ComboBoxItem Content="Aggressive" Tag="2"/>
@@ -5391,7 +5416,7 @@
                                                         Minimum="0" Maximum="50" Value="0" StepFrequency="1"/>
 
                                                 <TextBlock Text="Sensitivity" FontSize="12" Foreground="#CCCCCC" Margin="0,8,0,2"/>
-                                                <ComboBox x:Name="ViiperRTCurveComboBox" HorizontalAlignment="Stretch" FontSize="12">
+                                                <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ViiperRTCurveComboBox" HorizontalAlignment="Stretch" FontSize="12">
                                                     <ComboBoxItem Content="Linear" Tag="0"/>
                                                     <ComboBoxItem Content="Smooth" Tag="1"/>
                                                     <ComboBoxItem Content="Aggressive" Tag="2"/>
@@ -5415,18 +5440,69 @@
                         </StackPanel>
                         </Border>
 
-                        <!-- Enable Default Game Profiles Card -->
+                        <!-- Customization Card: theme, nav bar style, Default Game Profiles -->
                         <Border Style="{StaticResource CardStyle}">
                             <StackPanel>
-                                <Grid>
+                                <TextBlock Text="Customization" Style="{StaticResource CardTitleStyle}"/>
+                                <TextBlock Text="Widget appearance and behavior"
+                                           Style="{StaticResource CardCaptionStyle}"
+                                           TextWrapping="Wrap"/>
+
+                                <!-- Theme (moved here from the Debug section) -->
+                                <Grid Margin="0,12,0,0">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                        <TextBlock Text="Enable Default Game Profiles" Style="{StaticResource CardTitleStyle}"/>
+                                        <TextBlock Text="Theme" FontSize="14" Foreground="#FFFFFF"/>
+                                        <TextBlock Text="Widget color theme" FontSize="11" Foreground="#888888"/>
+                                    </StackPanel>
+                                    <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="ThemeComboBox"
+                                              Grid.Column="1"
+                                              Width="130"
+                                              VerticalAlignment="Center"
+                                              SelectionChanged="ThemeComboBox_SelectionChanged">
+                                        <ComboBoxItem Content="Default"/>
+                                        <ComboBoxItem Content="Dark"/>
+                                        <ComboBoxItem Content="OLED"/>
+                                        <ComboBoxItem Content="Dracula"/>
+                                        <ComboBoxItem Content="Nord"/>
+                                        <ComboBoxItem Content="Catppuccin"/>
+                                        <ComboBoxItem Content="Win11" IsSelected="True"/>
+                                    </ComboBox>
+                                </Grid>
+
+                                <!-- Nav bar style: icons vs text -->
+                                <Grid Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="Nav bar icons" FontSize="14" Foreground="#FFFFFF"/>
+                                        <TextBlock Text="Show icons instead of text on the navigation tabs"
+                                                   FontSize="11" Foreground="#888888" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <ToggleSwitch x:Name="NavBarIconsToggle"
+                                                  Grid.Column="1"
+                                                  IsOn="False"
+                                                  Toggled="NavBarIconsToggle_Toggled"
+                                                  Style="{StaticResource ModernToggleStyle}"/>
+                                </Grid>
+
+                                <Rectangle Height="1" Fill="#33FFFFFF" Margin="0,12,0,0"/>
+
+                                <!-- Default Game Profiles -->
+                                <Grid Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="Enable Default Game Profiles" FontSize="14" Foreground="#FFFFFF"/>
                                         <TextBlock Text="Use Microsoft Default Game Profiles for supported games"
-                                                   Style="{StaticResource CardCaptionStyle}"
+                                                   FontSize="11" Foreground="#888888"
                                                    TextWrapping="Wrap"/>
                                     </StackPanel>
                                     <ToggleSwitch x:Name="ForceDefaultGameProfileToggle"
@@ -5701,29 +5777,7 @@
 
                                 <!-- Collapsible Content -->
                                 <StackPanel x:Name="DebugContent" Visibility="Collapsed" Margin="0,12,0,0">
-                                    <!-- Theme Selector -->
-                                    <Grid Margin="0,0,0,12">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                            <TextBlock Text="Theme" FontSize="14" Foreground="#FFFFFF"/>
-                                            <TextBlock Text="Change widget appearance" FontSize="11" Foreground="#888888"/>
-                                        </StackPanel>
-                                        <ComboBox x:Name="ThemeComboBox"
-                                                  Grid.Column="1"
-                                                  Width="130"
-                                                  SelectionChanged="ThemeComboBox_SelectionChanged">
-                                            <ComboBoxItem Content="Default" IsSelected="True"/>
-                                            <ComboBoxItem Content="Dark"/>
-                                            <ComboBoxItem Content="OLED"/>
-                                            <ComboBoxItem Content="Dracula"/>
-                                            <ComboBoxItem Content="Nord"/>
-                                            <ComboBoxItem Content="Catppuccin"/>
-                                            <ComboBoxItem Content="Win11"/>
-                                        </ComboBox>
-                                    </Grid>
+                                    <!-- (Theme selector moved to the Customization card) -->
 
                                     <!-- Restart Helper / Kill GoTweaks Buttons (side by side) -->
                                     <Grid>
@@ -9071,7 +9125,7 @@
                                          (Lenovo button / TDP card), JumpFanCurveDropdownToActiveMode jumps
                                          the dropdown to follow. Items mirror TdpMode: Quiet=1, Balanced=2,
                                          Performance=3, Custom=255. -->
-                                    <ComboBox x:Name="FanCurvePresetComboBox"
+                                    <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="FanCurvePresetComboBox"
                                               Grid.Column="1"
                                               Width="160"
                                               VerticalAlignment="Center"
@@ -9597,7 +9651,7 @@
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
-                                            <ComboBox x:Name="GPDFanCurvePresetComboBox"
+                                            <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="GPDFanCurvePresetComboBox"
                                                       Grid.Column="0"
                                                       Width="130"
                                                       HorizontalAlignment="Left"

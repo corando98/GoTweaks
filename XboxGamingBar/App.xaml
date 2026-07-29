@@ -1,11 +1,40 @@
-﻿<Application
+<Application
     x:Class="XboxGamingBar.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:XboxGamingBar" >
-    
+
     <Application.Resources>
-        <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+            </ResourceDictionary.MergedDictionaries>
+            <!-- ComboBox focused/hover border+background suppression, registered in
+                 ThemeDictionaries: the control template references these via
+                 {ThemeResource}, which re-resolves against theme dictionaries whenever a
+                 theme (re)applies — plain page-level brush overrides are bypassed then.
+                 Field symptom (2026-07-29, after the Win11 theme migration): focused
+                 dropdowns showed a DOUBLE ring — our white focus rect PLUS the stock
+                 white-ish ComboBoxBorderBrushFocused at the control edge. Keeping the
+                 keys here makes the suppression survive theme re-evaluation. -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Default">
+                    <!-- Hover/press feedback only. The FOCUSED border keys are deliberately
+                         NOT overridden: the template's bright focused border is the single
+                         focus indicator for dropdowns (see ModernComboBoxStyle). -->
+                    <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#50555C"/>
+                    <SolidColorBrush x:Key="ComboBoxBorderBrushPressed" Color="#50555C"/>
+                    <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#30343A"/>
+                    <SolidColorBrush x:Key="ComboBoxBackgroundPressed" Color="#30343A"/>
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#50555C"/>
+                    <SolidColorBrush x:Key="ComboBoxBorderBrushPressed" Color="#50555C"/>
+                    <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#30343A"/>
+                    <SolidColorBrush x:Key="ComboBoxBackgroundPressed" Color="#30343A"/>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
     </Application.Resources>
-    
+
 </Application>

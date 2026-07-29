@@ -268,7 +268,9 @@ namespace XboxGamingBar
                             {
                                 if (cell is Button btn && btn.Tag is string id && id == focusTileId)
                                 {
-                                    btn.Focus(FocusState.Programmatic);
+                                    // Keyboard so the focus rect is visible — this restore
+                                    // runs mid gamepad-driven tile reorder.
+                                    btn.Focus(FocusState.Keyboard);
                                     return;
                                 }
                             }
@@ -306,10 +308,11 @@ namespace XboxGamingBar
                                 : new SolidColorBrush(Windows.UI.Color.FromArgb(80, 80, 85, 92));
                             btn.BorderThickness = new Thickness(isSelected ? 2 : 1);
 
-                            // Focus the specified tile
+                            // Focus the specified tile (Keyboard so the focus rect is
+                            // visible — this runs during gamepad-driven tile selection)
                             if (!string.IsNullOrEmpty(focusTileId) && id == focusTileId)
                             {
-                                btn.Focus(FocusState.Programmatic);
+                                btn.Focus(FocusState.Keyboard);
                             }
                         }
                     }

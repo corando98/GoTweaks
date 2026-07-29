@@ -151,6 +151,8 @@ namespace XboxGamingBar
             // Capture the CURRENT heartbeat snapshot so we only react to FRESHER
             // heartbeats, not the stale one that was there when we gave up.
             (heartbeatWatcherLastMtimeTicks, heartbeatWatcherLastPid) = ReadHeartbeatSnapshot();
+            heartbeatWatcherFailedRetries = 0;
+            heartbeatWatcherStaleTicks = 0;
 
             heartbeatWatcherTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
             heartbeatWatcherTimer.Tick += HeartbeatWatcher_Tick;
@@ -173,6 +175,7 @@ namespace XboxGamingBar
             // If we got connected via some other path, shut down.
             if (App.IsConnected)
             {
+                heartbeatWatcherFailedRetries = 0;
                 StopHeartbeatWatcher();
                 return;
             }
@@ -181,8 +184,23 @@ namespace XboxGamingBar
             var (mtime, pid) = ReadHeartbeatSnapshot();
             // Nothing there yet — keep polling quietly.
             if (pid == 0 || mtime == 0) return;
-            // Same file we've already seen — nothing changed on the helper side.
-            if (mtime == heartbeatWatcherLastMtimeTicks && pid == heartbeatWatcherLastPid) return;
+            // Same file we've already seen — the helper side isn't writing heartbeats.
+            // Either the process is gone (clean exits delete the file, so a leftover file
+            // means it didn't exit cleanly) or it's a zombie whose main loop died while
+            // other threads hold the mutex. Neither heals by waiting: after ~15 s of a
+            // frozen heartbeat, force-launch a replacement — its startup takeover kills a
+            // lingering zombie, and a genuinely dead helper just starts normally.
+            if (mtime == heartbeatWatcherLastMtimeTicks && pid == heartbeatWatcherLastPid)
+            {
+                if (++heartbeatWatcherStaleTicks >= 5)
+                {
+                    heartbeatWatcherStaleTicks = 0;
+                    Logger.Warn("Helper heartbeat frozen for ~15s while disconnected — force-launching replacement helper");
+                    _ = LaunchHelperWithGuardsAsync("Heartbeat frozen while disconnected", forceLaunch: true);
+                }
+                return;
+            }
+            heartbeatWatcherStaleTicks = 0;
 
             Logger.Info($"Heartbeat watcher detected helper activity (pid={pid}, mtime={mtime}); retrying pipe connect");
             heartbeatWatcherLastMtimeTicks = mtime;
@@ -213,6 +231,29 @@ namespace XboxGamingBar
                 finally
                 {
                     heartbeatWatcherReconnectInFlight = false;
+                }
+
+                // Escalation: the heartbeat is FRESH (that's what triggered this retry)
+                // yet the pipe still won't connect — the helper process is alive but its
+                // pipe server is wedged. Retrying the pipe forever can't fix that; after
+                // three strikes force-launch a new helper, whose startup takeover kills
+                // the unreachable incumbent and replaces it (2026-07-27 field case).
+                if (App.IsConnected)
+                {
+                    heartbeatWatcherFailedRetries = 0;
+                }
+                else if (++heartbeatWatcherFailedRetries >= 3)
+                {
+                    heartbeatWatcherFailedRetries = 0;
+                    Logger.Warn("Helper heartbeat fresh but pipe unreachable after 3 retries — force-launching replacement helper");
+                    try
+                    {
+                        await LaunchHelperWithGuardsAsync("Heartbeat fresh but pipe wedged", forceLaunch: true);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warn($"Force-launch after wedge detection threw: {ex.Message}");
+                    }
                 }
             });
         }

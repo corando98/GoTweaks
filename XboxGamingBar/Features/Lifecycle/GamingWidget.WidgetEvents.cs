@@ -86,11 +86,28 @@ namespace XboxGamingBar
 
                     var ignoreFocus = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Low, () =>
                     {
-                        if (FocusManager.GetFocusedElement() == null)
+                        // Anchor gamepad focus on open — UNCONDITIONALLY. Earlier
+                        // heuristics ("only when focus is null / on a ScrollViewer")
+                        // kept missing whatever non-visual element Game Bar actually
+                        // parks focus on, so users still needed a touch tap or an A
+                        // press before the nav bar showed focus (field feedback
+                        // 2026-07-28 round 2). On the open transition there is no user
+                        // focus state worth preserving — the nav strip is always the
+                        // right starting point.
                         {
+                            // Analog LT/RT poll only runs while the widget is visible.
+                            StartAnalogTriggerPoll();
+                            var focused = FocusManager.GetFocusedElement();
+                            Logger.Info($"Open-anchor: focus was on {(focused == null ? "null" : focused.GetType().Name)}; anchoring to active nav item");
                             FocusActiveNavItem();
                         }
                     });
+                }
+                else
+                {
+                    // Hidden: stop the analog LT/RT poll so the widget doesn't touch
+                    // Windows.Gaming.Input at all while a game has the controller.
+                    var ignoreStop = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Low, () => StopAnalogTriggerPoll());
                 }
 
                 // Resize to full height on first activation.
