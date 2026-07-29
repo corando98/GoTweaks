@@ -914,9 +914,22 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
         private ViiperInputSourceKind ResolveInputSource()
         {
             var value = settingsManager?.ViiperInputSource?.Value ?? "XInput";
-            return string.Equals(value, "LegionHid", StringComparison.OrdinalIgnoreCase)
-                ? ViiperInputSourceKind.LegionHid
-                : ViiperInputSourceKind.XInput;
+            if (string.Equals(value, "LegionHid", StringComparison.OrdinalIgnoreCase))
+            {
+                return ViiperInputSourceKind.LegionHid;
+            }
+            // XInput requested — but with "Disable OS Reporting" on, the firmware register
+            // 04/0f is in vendor-exclusive mode and the physical pad emits NO XInput, so
+            // this source would read nothing and the emulated pad would sit neutral
+            // ("emulation broken"). The vendor report stream still flows, so fall back to
+            // LegionHid for the session on Legion hardware.
+            if (legionManager?.LegionOsReportingDisabled?.Value == true
+                && legionManager?.LegionGoDetected?.Value == true)
+            {
+                Logger.Warn("VIIPER input source XInput is unavailable while OS reporting is disabled (04/0f vendor-exclusive) — using Legion Go HID for this session");
+                return ViiperInputSourceKind.LegionHid;
+            }
+            return ViiperInputSourceKind.XInput;
         }
 
         private void OnInputSourceChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)

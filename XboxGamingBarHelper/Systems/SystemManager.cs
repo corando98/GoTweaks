@@ -400,9 +400,17 @@ namespace XboxGamingBarHelper.Systems
                 return;
             }
             System.Threading.Interlocked.Exchange(ref lastResumeInvokeTicksUtc, now);
+            // Mirror of HandleSuspend: after a real resume, the next suspend is a NEW
+            // sleep — clear the suspend dedupe so a quick re-sleep isn't swallowed
+            // (which would leave the VIIPER forwarder emitting through the sleep, the
+            // exact wake-flood SetSystemSuspended exists to prevent).
+            System.Threading.Interlocked.Exchange(ref lastSuspendInvokeTicksUtc, 0);
 
             Logger.Info($"System resumed from sleep/hibernate ({source}) at: {DateTime.Now}");
-            LogLastWakeReason();
+            // Deferred: the kernel writes the 507 wake-reason record asynchronously after
+            // wake, so an immediate read races it and reports the PREVIOUS wake — and the
+            // event-log query mustn't delay the resume re-apply work below either.
+            Task.Run(async () => { await Task.Delay(2000); LogLastWakeReason(); });
             ResumeFromSleep?.Invoke(this);
             // Refresh display settings in case display changed during sleep
             RefreshDisplaySettings();
@@ -426,6 +434,10 @@ namespace XboxGamingBarHelper.Systems
                 return;
             }
             System.Threading.Interlocked.Exchange(ref lastSuspendInvokeTicksUtc, now);
+            // A real suspend means the next resume is a NEW wake, however soon it lands —
+            // clear the resume dedupe so a rapid sleep/wake cycle (Modern Standby bounce,
+            // auto-resleep) can't swallow it and leave subscribers wrongly suspended.
+            System.Threading.Interlocked.Exchange(ref lastResumeInvokeTicksUtc, 0);
             Logger.Info($"System suspending to sleep/hibernate ({source}) at: {DateTime.Now}");
             try { SuspendingToSleep?.Invoke(this); }
             catch (Exception ex) { Logger.Warn($"SuspendingToSleep handler threw: {ex.Message}"); }

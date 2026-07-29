@@ -23,6 +23,22 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         private const int FirmwareWriteDebounceMs = 300;
 
         /// <summary>
+        /// Cancels all pending debounced writes. Called from Dispose so a deferred slider
+        /// write can't open a fresh controller handle mid-teardown.
+        /// </summary>
+        private void DisposeFirmwareDebounceTimers()
+        {
+            lock (firmwareDebounceLock)
+            {
+                foreach (var t in firmwareDebounceTimers.Values)
+                {
+                    try { t.Dispose(); } catch { }
+                }
+                firmwareDebounceTimers.Clear();
+            }
+        }
+
+        /// <summary>
         /// Schedules <paramref name="write"/> to run once after a short quiet period, keyed
         /// by <paramref name="key"/>. A newer call for the same key cancels the pending one,
         /// so only the last value in a burst is written to the controller.

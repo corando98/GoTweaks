@@ -3055,7 +3055,10 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                 {
                     bool cleared = controller.ClearButtonMapping(remapButton);
                     Logger.Info($"Button {remapButton} firmware mapping cleared for helper-side {(isSystem ? "system action" : "scroll repeat")} (cleared={cleared})");
-                    return true;
+                    // Report the actual clear result: if the firmware rejected it, the stock
+                    // mapping keeps firing UNDER the helper-side action — that's a failed
+                    // apply, not a success (matches the disabled-path in SetLegionButtonMapping).
+                    return cleared;
                 }
 
                 // Log the button details for debugging
@@ -3465,6 +3468,17 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             if (disposing)
             {
                 Logger.Info("Disposing Legion Manager...");
+
+                try
+                {
+                    // Cancel any pending debounced firmware writes so a 300ms-deferred
+                    // slider write can't open a fresh controller handle mid-teardown.
+                    DisposeFirmwareDebounceTimers();
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"Error disposing firmware debounce timers: {ex.Message}");
+                }
 
                 try
                 {

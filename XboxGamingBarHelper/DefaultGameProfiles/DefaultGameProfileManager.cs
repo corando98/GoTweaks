@@ -485,7 +485,12 @@ namespace XboxGamingBarHelper.DefaultGameProfiles
                 if (_legionManager != null && _legionManager.LegionGoDetected.Value)
                 {
                     Logger.Info("Switching Legion to Custom TDP mode for default profile");
-                    _legionManager.LegionPerformanceMode.SetValue(255);
+                    // ForceSetValue, NOT SetValue: internal sets carry updatedTime=0 and
+                    // GenericProperty's timestamp guard silently rejects them once the
+                    // property holds a real widget timestamp (user changed modes in the
+                    // UI) — the mode never switched and the DGP TDP write was then
+                    // discarded as "not in Custom mode" (field report 2026-07-29).
+                    _legionManager.LegionPerformanceMode.ForceSetValue(255);
 
                     // Wait for mode change to propagate before setting TDP
                     // This ensures any mode-change handlers complete first
@@ -496,11 +501,14 @@ namespace XboxGamingBarHelper.DefaultGameProfiles
                 if (profile.TDP > 0 && _performanceManager?.TDP != null)
                 {
                     Logger.Info($"Setting TDP to {profile.TDP}W");
-                    _performanceManager.TDP.SetValue(profile.TDP);
+                    // ForceSetValue: same timestamp-guard hazard as the mode switch above —
+                    // a user who has touched the TDP slider gives the property a real
+                    // timestamp, after which zero-timestamp internal sets are dropped.
+                    _performanceManager.TDP.ForceSetValue(profile.TDP);
 
                     // Set again after a short delay to override any competing updates
                     await Task.Delay(100);
-                    _performanceManager.TDP.SetValue(profile.TDP);
+                    _performanceManager.TDP.ForceSetValue(profile.TDP);
                     Logger.Info($"TDP confirmed at {profile.TDP}W");
                 }
 
@@ -578,7 +586,9 @@ namespace XboxGamingBarHelper.DefaultGameProfiles
                     if (_savedTdpMode.HasValue && _legionManager != null && _legionManager.LegionGoDetected.Value)
                     {
                         Logger.Info($"Restoring TDP mode: {_savedTdpMode.Value}");
-                        _legionManager.LegionPerformanceMode.SetValue(_savedTdpMode.Value);
+                        // ForceSetValue: see ApplyProfile — zero-timestamp internal sets
+                        // are rejected once the property carries a widget timestamp.
+                        _legionManager.LegionPerformanceMode.ForceSetValue(_savedTdpMode.Value);
                     }
 
                     // Restore saved TDP value (only if we were in Custom mode, otherwise the mode handles TDP)
@@ -588,7 +598,7 @@ namespace XboxGamingBarHelper.DefaultGameProfiles
                         if (_savedTdpMode.HasValue && _savedTdpMode.Value == 255)
                         {
                             Logger.Info($"Restoring TDP value: {_savedTdpValue.Value}W");
-                            _performanceManager.TDP.SetValue(_savedTdpValue.Value);
+                            _performanceManager.TDP.ForceSetValue(_savedTdpValue.Value);
                         }
                         else
                         {

@@ -27,7 +27,7 @@ namespace XboxGamingBarHelper.RTSS.OSDItems
         public override string GetOSDString(int osdLevel)
         {
             var pm = Program.PresentMonMetrics;
-            if (pm == null || !pm.IsLive()) return string.Empty;
+            if (pm == null || !pm.IsLive(3000)) return string.Empty;
 
             int cpu = (int)System.Math.Round(pm.CpuBusyPct);
             int gpu = (int)System.Math.Round(pm.GpuBusyPct);

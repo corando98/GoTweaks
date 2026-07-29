@@ -338,11 +338,40 @@ namespace XboxGamingBarHelper
                 }
                 if (!peerGone)
                 {
-                    Logger.Warn("Another XboxGamingBarHelper.exe is still running after wait. Exiting to prevent duplicate.");
-                    LogManager.Flush();
-                    return;
+                    // The peer refuses to go. Probe its pipe before deferring: a healthy
+                    // helper accepts a connection; a wedged one (2026-07-27 field case —
+                    // pipe server dead, watchdog thread alive, mutex held for hours) leaves
+                    // the widget permanently disconnected, and exiting here would make
+                    // every future launch die at this gate until Task Manager.
+                    bool wedged = !IsSetupInProgress() && !IncumbentPipeResponds(2000);
+                    if (!wedged)
+                    {
+                        Logger.Warn("Another XboxGamingBarHelper.exe is still running after wait. Exiting to prevent duplicate.");
+                        LogManager.Flush();
+                        return;
+                    }
+                    if (ElevationBootstrapper.IsRunningAsAdmin())
+                    {
+                        Logger.Warn("Peer helper is alive but its pipe is unreachable — assuming wedged; killing it and taking over.");
+                        if (!TryKillWedgedIncumbent())
+                        {
+                            Logger.Error("Could not remove wedged peer helper. Exiting.");
+                            LogManager.Flush();
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        // Medium IL can't kill the elevated incumbent. Fall through to the
+                        // elevation bootstrap — the elevated relaunch re-runs this gate and
+                        // performs the kill there.
+                        Logger.Warn("Peer helper is alive but its pipe is unreachable — wedged; deferring takeover to the elevated relaunch.");
+                    }
                 }
-                Logger.Info("Peer helper exited during wait — proceeding with startup (takeover after kill/restart).");
+                else
+                {
+                    Logger.Info("Peer helper exited during wait — proceeding with startup (takeover after kill/restart).");
+                }
             }
 
             // Process-exit + unhandled-exception cleanup. Two shared concerns:
@@ -543,8 +572,40 @@ namespace XboxGamingBarHelper
 
             if (!createdNew)
             {
-                Logger.Warn("Another instance of XboxGamingBarHelper is already running. Exiting.");
-                return;
+                // An incumbent helper holds the mutex. Probe its pipe before deferring to
+                // it: a healthy helper accepts a connection within a couple of seconds. A
+                // wedged one (field case 2026-07-27: HID + pipe server dead, watchdog
+                // thread alive, mutex held for hours) leaves the widget permanently
+                // disconnected, and without this takeover every subsequent launch exits
+                // right here — only Task Manager recovers. Never take over during setup:
+                // the peer is the setup-mode helper waiting on our RunTaskNow handoff.
+                if (IsSetupInProgress() || IncumbentPipeResponds(2000))
+                {
+                    Logger.Warn("Another instance of XboxGamingBarHelper is already running. Exiting.");
+                    return;
+                }
+
+                Logger.Warn("Incumbent helper holds the mutex but its pipe is unreachable — assuming wedged; attempting takeover");
+                if (!TryKillWedgedIncumbent())
+                {
+                    Logger.Error("Could not remove wedged incumbent helper. Exiting.");
+                    return;
+                }
+
+                // The kernel abandons the mutex when the incumbent dies; claim it.
+                try
+                {
+                    if (!singleInstanceMutex.WaitOne(TimeSpan.FromSeconds(8)))
+                    {
+                        Logger.Error("Mutex still held after killing incumbent helper. Exiting.");
+                        return;
+                    }
+                }
+                catch (AbandonedMutexException)
+                {
+                    // Thrown WITH ownership granted — exactly the expected path after a kill.
+                    Logger.Info("Acquired abandoned mutex from killed incumbent");
+                }
             }
 
             Logger.Info("Single instance mutex acquired. Starting helper.");
@@ -573,6 +634,76 @@ namespace XboxGamingBarHelper
                 // controllers surviving reboot).
             }
 
+        }
+
+        /// <summary>
+        /// Probes the incumbent helper's named pipe with a short client connect. True =
+        /// the accept loop answered (healthy incumbent, defer to it). False = nobody is
+        /// listening (instances exhausted or accept loop dead) — the wedge signature.
+        /// The probe connection is disposed immediately; on a healthy incumbent it just
+        /// shows up as a client that connected and instantly went away.
+        /// </summary>
+        private static bool IncumbentPipeResponds(int timeoutMs)
+        {
+            try
+            {
+                using (var probe = new System.IO.Pipes.NamedPipeClientStream(
+                    ".", IPC.NamedPipeServer.PipeName, System.IO.Pipes.PipeDirection.InOut))
+                {
+                    probe.Connect(timeoutMs);
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Info($"Incumbent pipe probe failed ({ex.GetType().Name}: {ex.Message})");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Kills same-session XboxGamingBarHelper peers (we are elevated, so we can kill
+        /// the elevated incumbent). Only called after the pipe probe said the incumbent is
+        /// unreachable. Returns true when no peer remains alive afterwards.
+        /// </summary>
+        private static bool TryKillWedgedIncumbent()
+        {
+            bool allGone = true;
+            try
+            {
+                var self = Process.GetCurrentProcess();
+                int selfPid = self.Id;
+                int selfSession = self.SessionId;
+                foreach (var p in Process.GetProcessesByName("XboxGamingBarHelper"))
+                {
+                    try
+                    {
+                        if (p.Id == selfPid || p.HasExited || p.SessionId != selfSession) continue;
+                        Logger.Warn($"Killing wedged incumbent helper PID {p.Id}");
+                        p.Kill();
+                        if (!p.WaitForExit(5000))
+                        {
+                            Logger.Error($"Incumbent PID {p.Id} did not exit within 5s");
+                            allGone = false;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"Failed to kill incumbent PID {p.Id}: {ex.Message}");
+                        allGone = false;
+                    }
+                    finally
+                    {
+                        try { p.Dispose(); } catch { }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"TryKillWedgedIncumbent enumeration failed: {ex.Message}");
+                return false;
+            }
+            return allGone;
         }
 
         /// <summary>
@@ -2035,6 +2166,12 @@ namespace XboxGamingBarHelper
 
                 // Write heartbeat file so widget can detect if helper is running
                 WriteHeartbeat();
+
+                // Self-heal the pipe server: if the accept loop ever exits without a
+                // shutdown request, restart it. Prevents the alive-but-unreachable wedge
+                // where every subsystem runs but no widget can connect (2026-07-27).
+                try { pipeServer?.EnsureListening(); }
+                catch (Exception ex) { Logger.Debug($"EnsureListening threw: {ex.Message}"); }
 
                 // Check if MSIX package has been uninstalled - if so, clean up and exit
                 CheckForPackageUninstall();

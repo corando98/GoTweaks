@@ -861,6 +861,41 @@ namespace XboxGamingBarHelper
             }
         }
 
+        /// <summary>
+        /// Called by LegionButtonMonitor after it restored the STOCK Desktop/Page firmware
+        /// bindings (leaving vendor-exclusive suppression). If the user has custom firmware
+        /// mappings on those buttons, re-apply them — the stock restore just overwrote them.
+        /// Deferred: the re-apply opens its own controller connection and must not contend
+        /// with the monitor's vendor handle mid-init sequence. ForceSetValue re-runs the
+        /// property's normal hardware apply with its current value.
+        /// </summary>
+        internal static void NotifyFrontButtonMappingsRestored()
+        {
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(750);
+                try
+                {
+                    var desktop = legionManager?.LegionButtonDesktop;
+                    if (desktop != null && !string.IsNullOrEmpty(desktop.Value))
+                    {
+                        Logger.Info("Re-applying user Desktop-button firmware mapping after stock restore");
+                        desktop.ForceSetValue(desktop.Value);
+                    }
+                    var page = legionManager?.LegionButtonPage;
+                    if (page != null && !string.IsNullOrEmpty(page.Value))
+                    {
+                        Logger.Info("Re-applying user Page-button firmware mapping after stock restore");
+                        page.ForceSetValue(page.Value);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warn($"Front-button mapping re-apply failed: {ex.Message}");
+                }
+            });
+        }
+
         private static void LegionButtonMonitor_BatteryUpdated(object sender, LegionButtonBatteryEventArgs e)
         {
             try

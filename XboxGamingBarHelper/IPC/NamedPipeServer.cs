@@ -289,8 +289,18 @@ namespace XboxGamingBarHelper.IPC
                 }
                 catch (IOException ex)
                 {
-                    Logger.Debug($"Pipe IO error while accepting (likely shutdown): {ex.Message}");
                     try { pipe?.Dispose(); } catch { }
+                    if (cancellationToken.IsCancellationRequested) break;
+                    // NOT just shutdown: "all pipe instances are busy" lands here when
+                    // zombie clients (suspended UWP widgets whose streams never close, so
+                    // ReadLine blocks forever and RemoveClient never runs) have consumed
+                    // every instance. This used to be a Debug log with no sleep — a silent
+                    // tight spin where the helper looked alive but no widget could ever
+                    // connect again (field wedge 2026-07-27). Log it visibly, reclaim
+                    // instances, and pace the loop.
+                    Logger.Warn($"Pipe server cannot listen ({ex.Message}); reclaiming instances");
+                    ReclaimPipeInstances();
+                    Thread.Sleep(1000);
                 }
                 catch (Exception ex)
                 {
@@ -303,6 +313,57 @@ namespace XboxGamingBarHelper.IPC
                     }
                 }
             }
+            Logger.Info("Pipe server accept loop exited");
+        }
+
+        /// <summary>
+        /// Frees pipe instances when a new listener can't be created: first closes clients
+        /// whose stream already reads as disconnected, and if none were found while the
+        /// client list is full, closes the OLDEST client — a suspended UWP widget reads as
+        /// "connected" forever, while a genuinely live client just reconnects within
+        /// seconds (the widget retries on disconnect). Closing the stream also unblocks
+        /// that client's stuck ReadLine so its read task can exit.
+        /// </summary>
+        private void ReclaimPipeInstances()
+        {
+            List<ClientConnection> toClose = new List<ClientConnection>();
+            lock (_clientsLock)
+            {
+                foreach (var c in _clients)
+                {
+                    bool connected;
+                    try { connected = c.Stream?.IsConnected == true; }
+                    catch { connected = false; }
+                    if (!connected) toClose.Add(c);
+                }
+                if (toClose.Count == 0 && _clients.Count >= MaxClients - 1 && _clients.Count > 0)
+                {
+                    toClose.Add(_clients[0]); // oldest — most likely the zombie
+                }
+            }
+            foreach (var c in toClose)
+            {
+                Logger.Warn($"Reclaiming pipe instance from client {c.Id}");
+                RemoveClient(c);
+            }
+        }
+
+        /// <summary>
+        /// Restarts the accept loop if it exited without a shutdown being requested (an
+        /// unforeseen escape from AcceptLoop would otherwise leave the helper permanently
+        /// unreachable while every other subsystem keeps running). Called periodically from
+        /// the helper's heartbeat path; cheap when healthy.
+        /// </summary>
+        public void EnsureListening()
+        {
+            if (_isDisposed) return;
+            var task = _listenerTask;
+            var cts = _cancellationTokenSource;
+            if (task == null || cts == null || cts.IsCancellationRequested) return;
+            if (!task.IsCompleted) return;
+
+            Logger.Error("Pipe server listener task exited unexpectedly; restarting accept loop");
+            _listenerTask = Task.Run(() => AcceptLoop(cts.Token));
         }
 
         /// <summary>

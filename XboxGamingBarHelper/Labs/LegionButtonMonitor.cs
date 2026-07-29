@@ -1172,6 +1172,13 @@ namespace XboxGamingBarHelper.Labs
                 legionRLongCommandPath = commandPath;
             }
             Logger.Info($"LegionButtonMonitor: Legion {button} LONG-press configured - enabled={enabled}, action={actionType}");
+
+            // Same notification as the short-press ConfigureButton: a long-press binding
+            // can add or remove the only Guide route, and VIIPER must reconcile its
+            // guide-only pad (spin up for a new hold=Guide, tear down when the last
+            // Guide mapping is removed).
+            try { Program.NotifyGuideRouteChanged(); }
+            catch (Exception ex) { Logger.Debug($"ConfigureButtonLongPress: NotifyGuideRouteChanged threw: {ex.Message}"); }
         }
 
         /// <summary>
@@ -1264,6 +1271,11 @@ namespace XboxGamingBarHelper.Labs
         public bool HasGuideActionConfigured =>
             (legionLEnabled && legionLActionType == LegionButtonAction.XboxGuide) ||
             (legionREnabled && legionRActionType == LegionButtonAction.XboxGuide) ||
+            // Long-press bindings can route to Guide too — without these terms a
+            // hold=Guide mapping never spins up the guide-only pad (dead binding
+            // whenever full emulation is off).
+            (legionLLongEnabled && legionLLongActionType == LegionButtonAction.XboxGuide) ||
+            (legionRLongEnabled && legionRLongActionType == LegionButtonAction.XboxGuide) ||
             (scrollUpEnabled && scrollUpActionType == LegionButtonAction.XboxGuide) ||
             (scrollDownEnabled && scrollDownActionType == LegionButtonAction.XboxGuide) ||
             (scrollClickEnabled && scrollClickActionType == LegionButtonAction.XboxGuide);
@@ -1427,6 +1439,12 @@ namespace XboxGamingBarHelper.Labs
             _hasWriteAccess = false;
             _highQualityGyroConfigured = false;
             _reportStreamWoken = false;
+            // Drop any in-flight long-press hold so a restart can't inherit it and fire
+            // the long action spuriously (mirror of the TryReconnect reset).
+            legionLHeld = false;
+            legionRHeld = false;
+            legionLLongFired = false;
+            legionRLongFired = false;
 
             Logger.Info("LegionButtonMonitor: Stopped");
             }
@@ -2334,6 +2352,14 @@ namespace XboxGamingBarHelper.Labs
         /// </summary>
         public bool SetPhysicalXInputEnabled(bool enabled)
         {
+            // Go 2 command space only: the Go S uses a different [cmd][sub] protocol and its
+            // MCU is known to lock up on stray writes — same gate as every sibling firmware
+            // method (QueryInputMode / ApplyRgbActiveProfile / ApplyGamepadMode).
+            if (IsGoSControllerDevice())
+            {
+                Logger.Info("LegionButtonMonitor: SetPhysicalXInputEnabled skipped (Go S command space)");
+                return false;
+            }
             _physicalXInputSuppressed = !enabled;
             var handle = hidHandle;
             if (handle == null || handle.IsInvalid || !_hasWriteAccess)
@@ -2341,16 +2367,27 @@ namespace XboxGamingBarHelper.Labs
                 Logger.Info($"LegionButtonMonitor: physical XInput {(enabled ? "enable" : "suppress")} deferred (no HID handle) - will apply on connect");
                 return false;
             }
-            bool ok = true;
-            foreach (byte[] cmd in BuildXInputOutputRegisterCommands())
+            try
             {
-                ok &= SendOutputReport(handle, cmd,
-                    enabled ? "physical XInput output ON" : "physical XInput output OFF (controller emulation)");
-                System.Threading.Thread.Sleep(20);
+                bool ok = true;
+                foreach (byte[] cmd in BuildXInputOutputRegisterCommands())
+                {
+                    ok &= SendOutputReport(handle, cmd,
+                        enabled ? "physical XInput output ON" : "physical XInput output OFF (controller emulation)");
+                    System.Threading.Thread.Sleep(20);
+                }
+                ApplyFrontButtonFirmwareState(handle);
+                Logger.Info($"LegionButtonMonitor: physical XInput output {(enabled ? "ENABLED" : "SUPPRESSED")} via 04/0f (global+L+R) => {ok}");
+                return ok;
             }
-            ApplyFrontButtonFirmwareState(handle);
-            Logger.Info($"LegionButtonMonitor: physical XInput output {(enabled ? "ENABLED" : "SUPPRESSED")} via 04/0f (global+L+R) => {ok}");
-            return ok;
+            catch (Exception ex)
+            {
+                // The monitor thread can Close() the handle mid-write (disconnect/watchdog).
+                // The desired state was recorded above, so the per-connect init re-asserts
+                // it; just report not-applied-now instead of unwinding the pipe handler.
+                Logger.Warn($"LegionButtonMonitor: SetPhysicalXInputEnabled write failed ({ex.Message}); state will re-assert on next connect");
+                return false;
+            }
         }
 
         // Legion Desktop (0x25) / Page (0x26) firmware button mappings. In vendor-exclusive
@@ -2363,9 +2400,20 @@ namespace XboxGamingBarHelper.Labs
         private const byte LEGION_FRONT_DESKTOP_BUTTON = 0x25;
         private const byte LEGION_FRONT_PAGE_BUTTON = 0x26;
 
+        // True while WE have cleared the Desktop/Page firmware bindings (suppressed mode).
+        // The enabled branch below must only write the stock restore when this is set:
+        // users can install CUSTOM firmware mappings on 0x25/0x26 (LegionButtonDesktop/
+        // Page properties), and an unconditional per-connect "restore default" silently
+        // reverted those to stock on every dock/undock/sleep/reboot while the remap UI
+        // still showed the user's choice.
+        private bool _frontButtonsCleared;
+
         private void ApplyFrontButtonFirmwareState(SafeFileHandle handle)
         {
             if (handle == null || handle.IsInvalid || !_hasWriteAccess || !IsTabletControllerDevice()) return;
+            // Nothing to do on the common path: not suppressed and we never cleared —
+            // leave the user's firmware mappings (stock or custom) untouched.
+            if (!_physicalXInputSuppressed && !_frontButtonsCleared) return;
             try
             {
                 foreach (byte btn in new[] { LEGION_FRONT_DESKTOP_BUTTON, LEGION_FRONT_PAGE_BUTTON })
@@ -2382,6 +2430,20 @@ namespace XboxGamingBarHelper.Labs
                         ? $"clear front-button 0x{btn:X2} (suppress)"
                         : $"restore front-button 0x{btn:X2}");
                     System.Threading.Thread.Sleep(15);
+                }
+                if (_physicalXInputSuppressed)
+                {
+                    _frontButtonsCleared = true;
+                }
+                else
+                {
+                    // We just wrote stock defaults over 0x25/0x26 — if the user has custom
+                    // Desktop/Page firmware mappings, re-apply them (deferred so the
+                    // re-apply's own controller connection doesn't contend with this
+                    // handle mid-init sequence).
+                    _frontButtonsCleared = false;
+                    try { Program.NotifyFrontButtonMappingsRestored(); }
+                    catch (Exception ex) { Logger.Debug($"NotifyFrontButtonMappingsRestored threw: {ex.Message}"); }
                 }
             }
             catch (Exception ex) { Logger.Warn($"ApplyFrontButtonFirmwareState failed: {ex.Message}"); }
@@ -2877,6 +2939,15 @@ namespace XboxGamingBarHelper.Labs
                 pendingLegionRState = null;
                 pendingLegionLStateSince = DateTime.MinValue;
                 pendingLegionRStateSince = DateTime.MinValue;
+                // Also drop any long-press hold captured on the OLD connection: with the
+                // debounce state cleared above, no release edge will ever commit for it, so
+                // a mid-hold disconnect would leave legionL/RHeld latched and the first
+                // report tick after reconnect (possibly minutes later) would fire the long
+                // action out of nowhere via CheckLegionLongPressTimeouts.
+                legionLHeld = false;
+                legionRHeld = false;
+                legionLLongFired = false;
+                legionRLongFired = false;
 
                 // (ViGEm retirement: the dedicated Guide pad is gone — VIIPER's
                 // guide-only pad reconciles itself via NotifyGuideRouteChanged.)

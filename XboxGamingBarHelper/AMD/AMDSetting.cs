@@ -86,6 +86,11 @@ namespace XboxGamingBarHelper.AMD
             if (result is ADLX_RESULT adlxResult)
             {
                 if (adlxResult == ADLX_RESULT.ADLX_OK) return true;
+                // ADLX_ALREADY_ENABLED = the driver is already at the requested state (e.g.
+                // the user flipped it in Adrenalin while our cache was stale) — a no-op
+                // success, not a failure. Same false-failure pattern as the AFMF V1
+                // sub-setters (AMDFluidMotionFrameSettingV1, confirmed on-device).
+                if (adlxResult == ADLX_RESULT.ADLX_ALREADY_ENABLED) return true;
                 Logger.Error($"{GetType().Name} SetEnabled({enabled}) returned {adlxResult}.");
                 return false;
             }

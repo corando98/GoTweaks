@@ -32,10 +32,26 @@ namespace XboxGamingBarHelper.PresentMon
         private double _sumGpuBusyMs;
         private double _sumMsBetweenPresentsApp;
         private long _appSampleCount;
+        // All-frame present-interval sum + sample count (Application + Repeated + generated),
+        // used to derive the DISPLAYED rate the same burst-immune way as the rendered rate.
+        private double _sumMsBetweenPresentsAll;
+        private long _displayedSampleCount;
 
         private long _lastUpdateTicksUtc;
 
-        // Last computed 1 s rates / averages exposed to consumers.
+        // FPS is derived from AVERAGE frame time, not a per-window frame COUNT: PresentMon
+        // block-buffers its stdout, so frames reach us in multi-second bursts. Counting
+        // frames-per-flush-window then swings wildly (near 0 on an empty window, 100+ when a
+        // backlog burst drains) even at a steady real frame rate (issue #104, Legion Go 2).
+        // Each frame's MsBetweenPresents is its true interval regardless of when we receive
+        // it, so averaging that gives a stable rate. A light EWMA smooths across windows, and
+        // an empty window while still live HOLDS the last value instead of dropping to 0.
+        private double _ewmaFtAppMs;   // EWMA of Application frame time (ms); 0 = uninitialized
+        private double _ewmaFtAllMs;   // EWMA of all-frame present interval (ms)
+        private const double FtEwmaAlpha = 0.5;
+        private const int HoldMs = 3000; // keep the last rate this long into a delivery gap
+
+        // Last computed rates / averages exposed to consumers.
         private volatile int _appFps;
         private volatile int _afmfFps;
         private volatile int _displayedFps;
@@ -73,16 +89,30 @@ namespace XboxGamingBarHelper.PresentMon
             {
                 case FrameType.Application:
                     Interlocked.Increment(ref _appFrameCount);
-                    // Only Application rows carry meaningful CPU/GPU busy times
-                    // and the real render-to-render gap.
-                    AddDouble(ref _sumCpuBusyMs, cpuBusyMs);
-                    AddDouble(ref _sumGpuBusyMs, gpuBusyMs);
-                    AddDouble(ref _sumMsBetweenPresentsApp, msBetweenPresents);
-                    Interlocked.Increment(ref _appSampleCount);
+                    // Only Application rows carry meaningful CPU/GPU busy times and the real
+                    // render-to-render gap. Skip non-positive intervals (a swapchain's first
+                    // present reports 0) — they'd drag the average down and inflate FPS.
+                    if (msBetweenPresents > 0)
+                    {
+                        AddDouble(ref _sumCpuBusyMs, cpuBusyMs);
+                        AddDouble(ref _sumGpuBusyMs, gpuBusyMs);
+                        AddDouble(ref _sumMsBetweenPresentsApp, msBetweenPresents);
+                        Interlocked.Increment(ref _appSampleCount);
+                    }
                     break;
                 case FrameType.AMD_AFMF:
+                case FrameType.Intel_XEFG:
+                    // Any frame-generated row (AMD AFMF / Intel XeSS-FG / re-tagged Lossless
+                    // Scaling) marks FG as active for the window — gates the OSD [FG] badge.
                     Interlocked.Increment(ref _afmfFrameCount);
                     break;
+            }
+            // Every frame (any type) contributes its present interval to the displayed-rate
+            // average — that's the rate at which unique buffers hit the swap chain.
+            if (msBetweenPresents > 0)
+            {
+                AddDouble(ref _sumMsBetweenPresentsAll, msBetweenPresents);
+                Interlocked.Increment(ref _displayedSampleCount);
             }
             Interlocked.Exchange(ref _lastUpdateTicksUtc, DateTime.UtcNow.Ticks);
         }
@@ -94,41 +124,75 @@ namespace XboxGamingBarHelper.PresentMon
         /// </summary>
         public void FlushPerSecond()
         {
-            int app = (int)Interlocked.Exchange(ref _appFrameCount, 0);
-            int afmf = (int)Interlocked.Exchange(ref _afmfFrameCount, 0);
-            int disp = (int)Interlocked.Exchange(ref _displayedFrameCount, 0);
+            // Drain the raw per-window counters. FPS no longer derives from these
+            // count-per-window values (see the field comment), but the FG count still
+            // gates the [FG] badge: presence of generated frames is a per-window fact,
+            // not a rate, so the count is reliable for that even with bursty delivery.
+            Interlocked.Exchange(ref _appFrameCount, 0);
+            long afmfCount = Interlocked.Exchange(ref _afmfFrameCount, 0);
+            Interlocked.Exchange(ref _displayedFrameCount, 0);
+
             long appSamples = Interlocked.Exchange(ref _appSampleCount, 0);
+            long dispSamples = Interlocked.Exchange(ref _displayedSampleCount, 0);
             double sumCpu = Interlocked.Exchange(ref _sumCpuBusyMs, 0);
             double sumGpu = Interlocked.Exchange(ref _sumGpuBusyMs, 0);
             double sumPresentApp = Interlocked.Exchange(ref _sumMsBetweenPresentsApp, 0);
+            double sumPresentAll = Interlocked.Exchange(ref _sumMsBetweenPresentsAll, 0);
 
-            _appFps = app;
-            _afmfFps = afmf;
-            _displayedFps = disp;
+            bool live = IsLive(HoldMs);
+
+            // Rendered (Application) FPS from the average render-to-render frame time.
             if (appSamples > 0)
             {
+                double ftAppAvg = sumPresentApp / appSamples;
+                _ewmaFtAppMs = _ewmaFtAppMs <= 0 ? ftAppAvg : FtEwmaAlpha * ftAppAvg + (1 - FtEwmaAlpha) * _ewmaFtAppMs;
+                _appFps = _ewmaFtAppMs > 0 ? (int)Math.Round(1000.0 / _ewmaFtAppMs) : 0;
+
                 double cpuAvg = sumCpu / appSamples;
                 double gpuAvg = sumGpu / appSamples;
-                double ftAvg  = sumPresentApp / appSamples;
                 Interlocked.Exchange(ref _cpuBusyAvgMs, cpuAvg);
                 Interlocked.Exchange(ref _gpuBusyAvgMs, gpuAvg);
-                Interlocked.Exchange(ref _frametimeAvgMs, ftAvg);
-                // Busy % = render-cost / available frame time. Clamp at 100
-                // because PresentMon's CPU/GPU busy can overshoot the present
-                // interval when a present is delayed (queue drain).
-                double cpuPct = ftAvg > 0 ? System.Math.Min(100.0, cpuAvg / ftAvg * 100.0) : 0;
-                double gpuPct = ftAvg > 0 ? System.Math.Min(100.0, gpuAvg / ftAvg * 100.0) : 0;
+                Interlocked.Exchange(ref _frametimeAvgMs, _ewmaFtAppMs);
+                // Busy % = render-cost / available frame time. Clamp at 100 because
+                // PresentMon's CPU/GPU busy can overshoot the present interval when a present
+                // is delayed (queue drain).
+                double cpuPct = _ewmaFtAppMs > 0 ? Math.Min(100.0, cpuAvg / _ewmaFtAppMs * 100.0) : 0;
+                double gpuPct = _ewmaFtAppMs > 0 ? Math.Min(100.0, gpuAvg / _ewmaFtAppMs * 100.0) : 0;
                 Interlocked.Exchange(ref _cpuBusyPct, cpuPct);
                 Interlocked.Exchange(ref _gpuBusyPct, gpuPct);
             }
-            else
+            else if (!live)
             {
+                // Genuinely no frames for HoldMs (game paused / closed / alt-tabbed) — clear.
+                _appFps = 0;
+                _ewmaFtAppMs = 0;
                 Interlocked.Exchange(ref _cpuBusyAvgMs, 0);
                 Interlocked.Exchange(ref _gpuBusyAvgMs, 0);
                 Interlocked.Exchange(ref _frametimeAvgMs, 0);
                 Interlocked.Exchange(ref _cpuBusyPct, 0);
                 Interlocked.Exchange(ref _gpuBusyPct, 0);
             }
+            // else: live but this window was empty (a stdout delivery gap) — HOLD last values.
+
+            // Displayed FPS from the average all-frame present interval; AFMF/FG presence is
+            // the displayed rate above the rendered rate.
+            if (dispSamples > 0)
+            {
+                double ftAllAvg = sumPresentAll / dispSamples;
+                _ewmaFtAllMs = _ewmaFtAllMs <= 0 ? ftAllAvg : FtEwmaAlpha * ftAllAvg + (1 - FtEwmaAlpha) * _ewmaFtAllMs;
+                _displayedFps = _ewmaFtAllMs > 0 ? (int)Math.Round(1000.0 / _ewmaFtAllMs) : 0;
+                // Only report an FG rate when generated frames were actually seen this
+                // window — displayed-vs-rendered rounding jitter (±1) must not light the
+                // OSD's [FG] badge on a non-frame-generated game.
+                _afmfFps = afmfCount > 0 ? Math.Max(0, _displayedFps - _appFps) : 0;
+            }
+            else if (!live)
+            {
+                _displayedFps = 0;
+                _afmfFps = 0;
+                _ewmaFtAllMs = 0;
+            }
+            // else: HOLD last displayed/afmf values through the delivery gap.
         }
 
         /// <summary>Called when the runner stops so consumers see "no data" immediately.</summary>
@@ -138,10 +202,14 @@ namespace XboxGamingBarHelper.PresentMon
             Interlocked.Exchange(ref _afmfFrameCount, 0);
             Interlocked.Exchange(ref _displayedFrameCount, 0);
             Interlocked.Exchange(ref _appSampleCount, 0);
+            Interlocked.Exchange(ref _displayedSampleCount, 0);
             Interlocked.Exchange(ref _sumCpuBusyMs, 0);
             Interlocked.Exchange(ref _sumGpuBusyMs, 0);
             Interlocked.Exchange(ref _sumMsBetweenPresentsApp, 0);
+            Interlocked.Exchange(ref _sumMsBetweenPresentsAll, 0);
             Interlocked.Exchange(ref _lastUpdateTicksUtc, 0);
+            _ewmaFtAppMs = 0;
+            _ewmaFtAllMs = 0;
             _appFps = 0;
             _afmfFps = 0;
             _displayedFps = 0;

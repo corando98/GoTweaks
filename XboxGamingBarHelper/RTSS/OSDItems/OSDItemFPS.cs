@@ -23,7 +23,9 @@ namespace XboxGamingBarHelper.RTSS.OSDItems
             // non-AFMF games and as a safety net when PresentMon is
             // unavailable.
             var pm = Program.PresentMonMetrics;
-            if (pm != null && pm.IsLive())
+            // Match PresentMonMetrics' hold window (3 s): PresentMon delivers frames in
+            // bursts, so a 2 s gate would flap to the RTSS <FR> fallback between bursts.
+            if (pm != null && pm.IsLive(3000))
             {
                 int rendered = pm.RenderedFps;
                 int displayed = pm.DisplayedFps;

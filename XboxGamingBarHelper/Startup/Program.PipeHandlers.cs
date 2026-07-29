@@ -1561,6 +1561,7 @@ namespace XboxGamingBarHelper
                     response = new global::Windows.Foundation.Collections.ValueSet
                     {
                         { nameof(Function), (int)request.Function },
+                        { nameof(Shared.Enums.Command), (int)Shared.Enums.Command.Response },
                         { "Error", "Helper property registry not initialized" },
                     };
                 }
