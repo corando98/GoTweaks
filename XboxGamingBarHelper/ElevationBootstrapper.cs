@@ -38,6 +38,16 @@ namespace XboxGamingBarHelper
         private const string RelaunchInProgressMutexName = "Global\\GoTweaks_SetupInProgress";
         private static Mutex relaunchInProgressMutex;
 
+        // Zombie-setup guard (2026-07-29 field wedge): an elevated --setup launched from
+        // the WindowsApps path spun at 100% CPU before ever reaching Main — it never
+        // acquired the setup mutex and never logged, so nothing deduped it, and the
+        // widget's 15s force-launch escalation piled up ~25 such zombies. The marker
+        // file records when we last fired a UAC setup; within the cooldown we refuse
+        // to fire another. Lives in the deploy folder so uninstall sweeps it.
+        private const int SetupLaunchCooldownSeconds = 120;
+        private static readonly string SetupLaunchMarkerPath =
+            Path.Combine(HelperDeploymentService.HelperFolder, ".setup_launch");
+
         /// <summary>
         /// Ensures the helper is running with admin privileges.
         /// Returns true if execution should continue, false if we're relaunching elevated.
@@ -112,12 +122,66 @@ namespace XboxGamingBarHelper
                 Logger.Info($"Deployment valid: {deploymentValid}, Deployment needed: {deploymentNeeded}, Task configured: {taskConfigured}");
                 LogManager.Flush(); // Ensure logs are written before decision
 
-                // If deployment is needed (missing or outdated), always trigger setup
-                // This handles the case where an old instance is running from WindowsApps
+                // If deployment is needed (missing or outdated), refresh it HERE, without
+                // elevation: the deploy target (LocalCache\GoTweaks\Helper) is user-writable,
+                // so copying files never needed admin — only scheduled-task creation does.
+                // This kills two birds (2026-07-29 field wedge): routine updates skip UAC
+                // entirely when the task already exists, and when elevation IS needed we
+                // elevate the freshly-DEPLOYED exe instead of the WindowsApps one — the
+                // elevated-from-WindowsApps launch is the combination that spun pre-Main
+                // at 100% CPU and wedged the "Initial setup" banner.
+                if (deploymentNeeded)
+                {
+                    Logger.Info("Deploying helper files from bootstrap (no elevation — target is user-writable)...");
+                    try
+                    {
+                        if (HelperDeploymentService.DeployHelper())
+                        {
+                            deploymentNeeded = HelperDeploymentService.IsDeploymentNeeded();
+                            Logger.Info($"Bootstrap deploy finished; deployment still needed: {deploymentNeeded}");
+                        }
+                        else
+                        {
+                            Logger.Warn("Bootstrap deploy failed — falling back to elevated setup");
+                        }
+                    }
+                    catch (Exception dex)
+                    {
+                        Logger.Warn($"Bootstrap deploy threw: {dex.Message} — falling back to elevated setup");
+                    }
+                }
+
                 if (deploymentNeeded || !taskConfigured)
                 {
-                    Logger.Info("Setup needed - launching with --setup flag (will trigger UAC)...");
-                    if (LaunchElevatedForSetup(exePath, args))
+                    // Dedupe before firing UAC. A healthy in-flight setup holds the
+                    // Global setup mutex (probe below treats NoReadUp access-denied as
+                    // "exists"); a pre-Main zombie holds nothing, so the launch-marker
+                    // cooldown is the backstop that stops the every-15s widget
+                    // escalation from multiplying stuck setups.
+                    if (IsSetupMutexHeld())
+                    {
+                        Logger.Info("A setup/relaunch process is already in flight (mutex held) — not launching another; exiting");
+                        LogManager.Flush();
+                        return false;
+                    }
+                    if (SetupLaunchedRecently())
+                    {
+                        Logger.Warn($"A setup was launched <{SetupLaunchCooldownSeconds}s ago and hasn't completed — skipping relaunch; exiting");
+                        LogManager.Flush();
+                        return false;
+                    }
+
+                    // Prefer the deployed exe for the elevated setup: a plain filesystem
+                    // path with no MSIX/appmodel involvement — the path elevated task
+                    // launches have used safely all along. Only fall back to the current
+                    // (WindowsApps) exe when the deploy above failed and there is no
+                    // usable deployed copy to elevate.
+                    string setupExePath = (!deploymentNeeded && File.Exists(HelperDeploymentService.DeployedExePath))
+                        ? HelperDeploymentService.DeployedExePath
+                        : exePath;
+                    Logger.Info($"Setup needed - launching with --setup flag (will trigger UAC)... exe={setupExePath}");
+                    StampSetupLaunchMarker();
+                    if (LaunchElevatedForSetup(setupExePath, args))
                     {
                         Logger.Info("Launched setup process via UAC, exiting current instance");
                         LogManager.Flush();
@@ -128,6 +192,9 @@ namespace XboxGamingBarHelper
                     LogManager.Flush();
                     return true; // Continue anyway, but warn user
                 }
+
+                // Deployment fresh (possibly just refreshed above) and task configured —
+                // no elevation needed; fall through to the scheduled-task launch path.
 
                 // Deployment is valid and task is configured - check for existing instance
                 const string mutexName = "Global\\XboxGamingBarHelper_SingleInstance";
@@ -364,6 +431,72 @@ namespace XboxGamingBarHelper
                 Logger.Error(ex, "Error during setup");
                 DebugLog($"EXCEPTION: {ex.Message}\n{ex.StackTrace}");
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// True when the Global setup/relaunch mutex exists — a setup or relaunch is in
+        /// flight. From this Medium-IL bootstrap, OpenExisting on a mutex created by a
+        /// High-IL setup process throws UnauthorizedAccessException (mandatory integrity
+        /// policy: NoReadUp) — that still proves the mutex EXISTS, so it counts as held.
+        /// </summary>
+        private static bool IsSetupMutexHeld()
+        {
+            try
+            {
+                using (Mutex.OpenExisting(RelaunchInProgressMutexName))
+                {
+                    return true;
+                }
+            }
+            catch (WaitHandleCannotBeOpenedException)
+            {
+                return false;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logger.Debug($"Setup mutex probe failed: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// True when a UAC setup launch was stamped within the cooldown window. Catches
+        /// the pre-Main zombie setups that never acquire the mutex: without this, every
+        /// widget force-launch (~15s) fires another UAC setup on top of the stuck one.
+        /// </summary>
+        private static bool SetupLaunchedRecently()
+        {
+            try
+            {
+                if (!File.Exists(SetupLaunchMarkerPath))
+                {
+                    return false;
+                }
+                var age = DateTime.UtcNow - File.GetLastWriteTimeUtc(SetupLaunchMarkerPath);
+                return age >= TimeSpan.Zero && age < TimeSpan.FromSeconds(SetupLaunchCooldownSeconds);
+            }
+            catch (Exception ex)
+            {
+                Logger.Debug($"Setup launch marker probe failed: {ex.Message}");
+                return false;
+            }
+        }
+
+        private static void StampSetupLaunchMarker()
+        {
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(SetupLaunchMarkerPath));
+                File.WriteAllText(SetupLaunchMarkerPath, DateTime.UtcNow.ToString("o"));
+            }
+            catch (Exception ex)
+            {
+                Logger.Debug($"Could not stamp setup launch marker: {ex.Message}");
             }
         }
 
