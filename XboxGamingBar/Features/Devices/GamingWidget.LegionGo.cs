@@ -50,8 +50,10 @@ namespace XboxGamingBar
         {
             if (LegionNavItem != null)
             {
-                LegionNavItem.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-                Logger.Info($"Legion tab visibility set to: {visible}");
+                // Through the tab-settings layer so a user-hidden Legion tab isn't
+                // resurrected every time device detection re-runs.
+                SetNavTabDeviceAvailability("Legion", visible);
+                Logger.Info($"Legion tab device availability set to: {visible}");
             }
 
             // TDP Mode card is always visible for all devices

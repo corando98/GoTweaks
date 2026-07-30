@@ -125,7 +125,7 @@ namespace XboxGamingBar
                     if (initialTarget.IsGame)
                     {
                         Logger.Info($"Initial tracked game DisplayName={initialTarget.DisplayName} AumId={initialTarget.AumId} TitleId={initialTarget.TitleId} IsFullscreen={initialTarget.IsFullscreen}");
-                        trackedGame.SetValue(new TrackedGame(initialTarget.AumId, initialTarget.DisplayName, StringHelper.CleanStringForSerialization(initialTarget.TitleId), initialTarget.IsFullscreen));
+                        trackedGame.SetValue(new TrackedGame(initialTarget.AumId, StringHelper.CleanGameName(initialTarget.DisplayName), StringHelper.CleanStringForSerialization(initialTarget.TitleId), initialTarget.IsFullscreen));
                     }
                     else
                     {

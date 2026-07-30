@@ -71,6 +71,12 @@ namespace XboxGamingBarHelper.Settings
             get { return usbipInstalled; }
         }
 
+        private readonly HidHideInstalledProperty hidHideInstalled;
+        public HidHideInstalledProperty HidHideInstalled
+        {
+            get { return hidHideInstalled; }
+        }
+
         // VIIPER emulation configuration (global, persisted)
         private readonly ViiperDeviceTypeProperty viiperDeviceType;
         public ViiperDeviceTypeProperty ViiperDeviceType
@@ -258,6 +264,7 @@ namespace XboxGamingBarHelper.Settings
             emulationBackend = new EmulationBackendProperty(this);
             usbipInstalled = new UsbipInstalledProperty(this);
             installUsbip = new InstallUsbipProperty(this);
+            hidHideInstalled = new HidHideInstalledProperty(this);
             viiperDeviceType = new ViiperDeviceTypeProperty(this);
             viiperInputSource = new ViiperInputSourceProperty(this);
             viiperGyroSource = new ViiperGyroSourceProperty(this);

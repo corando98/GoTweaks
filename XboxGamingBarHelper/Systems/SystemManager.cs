@@ -668,6 +668,10 @@ namespace XboxGamingBarHelper.Systems
             // When preferExe is false: use window title, fall back to exe name
             string GetGameName(string path, string windowTitle)
             {
+                // Window titles go through CleanGameName: some titles embed
+                // zero-width/format code points that vary per launch, so a
+                // name-keyed profile silently stops matching (e.g. ARC Raiders).
+                windowTitle = Shared.Utilities.StringHelper.CleanGameName(windowTitle);
                 if (preferExe)
                 {
                     // Prefer executable name, fall back to window title if path is empty

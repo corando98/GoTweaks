@@ -349,6 +349,21 @@ namespace XboxGamingBar
             });
         }
 
+        /// <summary>
+        /// Validates a profile-sourced index against a ComboBox's live item range.
+        /// Returns -1 (no selection) when the combo is empty or the index is out of
+        /// range. An out-of-range SelectedIndex assignment throws ArgumentException;
+        /// when that happens inside a dependency-property/selection callback, XAML
+        /// rewraps it as a stowed exception and fail-fasts the entire Game Bar
+        /// process (0xc000027b). Profiles saved under a different preset or device
+        /// configuration can legitimately hold indexes the current combo lacks.
+        /// </summary>
+        private static int ClampComboIndex(ComboBox combo, int desiredIndex)
+        {
+            int count = combo?.Items?.Count ?? 0;
+            return (desiredIndex >= 0 && desiredIndex < count) ? desiredIndex : -1;
+        }
+
         private void LoadProfileSettings(string profileName, bool isExplicitSwitch = false)
         {
             if (isLoadingProfile) return;
@@ -569,7 +584,7 @@ namespace XboxGamingBar
                         // Update controller type selection (0=PID, 1=Q-Learning, 2=SARSA)
                         if (AutoTDPControllerModeComboBox != null)
                         {
-                            AutoTDPControllerModeComboBox.SelectedIndex = profile.AutoTDPControllerType;
+                            AutoTDPControllerModeComboBox.SelectedIndex = ClampComboIndex(AutoTDPControllerModeComboBox, profile.AutoTDPControllerType);
                             UpdateAutoTDPMLInfoPanelVisibility();
                         }
                         // NOTE: Do NOT send to helper here - helper is source of truth for profile values
@@ -585,7 +600,7 @@ namespace XboxGamingBar
                     isLoadingOSPowerMode = true;
                     try
                     {
-                        OSPowerModeComboBox.SelectedIndex = profile.OSPowerMode;
+                        OSPowerModeComboBox.SelectedIndex = ClampComboIndex(OSPowerModeComboBox, profile.OSPowerMode);
                         if (profile.OSPowerMode >= 0 && profile.OSPowerMode < OSPowerModeNames.Length)
                         {
                             OSPowerModeValue.Text = OSPowerModeNames[profile.OSPowerMode];
@@ -658,11 +673,11 @@ namespace XboxGamingBar
                         if (index >= 0 && (legionPerformanceMode.Value != savedLegionPerformanceMode || TDPModeComboBox.SelectedIndex != index))
                         {
                             if (LegionPerformanceModeComboBox.SelectedIndex != index)
-                                LegionPerformanceModeComboBox.SelectedIndex = index;
+                                LegionPerformanceModeComboBox.SelectedIndex = ClampComboIndex(LegionPerformanceModeComboBox, index);
                             if (TDPModeComboBox.SelectedIndex != index)
                             {
                                 lastTDPModeIndex = index;
-                                TDPModeComboBox.SelectedIndex = index;
+                                TDPModeComboBox.SelectedIndex = ClampComboIndex(TDPModeComboBox, index);
                             }
                             legionPerformanceMode?.ForceSetValue(savedLegionPerformanceMode);
                             modeChanged = true;
@@ -722,9 +737,9 @@ namespace XboxGamingBar
 
                             modeChanged = legionPerformanceMode.Value != profileMode;
                             if (LegionPerformanceModeComboBox.SelectedIndex != modeIndex)
-                                LegionPerformanceModeComboBox.SelectedIndex = modeIndex;
+                                LegionPerformanceModeComboBox.SelectedIndex = ClampComboIndex(LegionPerformanceModeComboBox, modeIndex);
                             if (TDPModeComboBox.SelectedIndex != modeIndex)
-                                TDPModeComboBox.SelectedIndex = modeIndex;
+                                TDPModeComboBox.SelectedIndex = ClampComboIndex(TDPModeComboBox, modeIndex);
                             legionPerformanceMode?.ForceSetValue(profileMode);
                             Logger.Info($"Applied profile TDP Mode: {GetLegionModeShortName(profileMode)} ({profileMode}) for {profileName}");
 
@@ -787,7 +802,7 @@ namespace XboxGamingBar
 
                         if (TDPModeComboBox.SelectedIndex != modeIndex)
                         {
-                            TDPModeComboBox.SelectedIndex = modeIndex;
+                            TDPModeComboBox.SelectedIndex = ClampComboIndex(TDPModeComboBox, modeIndex);
                             Logger.Info($"Applied generic device TDP Mode: index {modeIndex} (mode {profileMode}) for {profileName}");
 
                             // For Custom mode, the TDP slider value was already set above
@@ -949,6 +964,7 @@ namespace XboxGamingBar
                 UpdateProfileDisplay();
 
                 // Safety check: If AutoTDP is enabled but we're not in Custom mode, switch to Custom mode
+                // (see catch below for why nothing here may throw)
                 // This handles profiles that were saved with incorrect mode values before the fix.
                 // Skip for game profiles: helper manages TDP mode for game profiles, and the toggle
                 // may show true from autoTDPEnabled.Value which belongs to a DIFFERENT game's profile.
@@ -962,9 +978,9 @@ namespace XboxGamingBar
                         try
                         {
                             lastTDPModeIndex = customIndex;
-                            TDPModeComboBox.SelectedIndex = customIndex;
+                            TDPModeComboBox.SelectedIndex = ClampComboIndex(TDPModeComboBox, customIndex);
                             if (LegionPerformanceModeComboBox != null)
-                                LegionPerformanceModeComboBox.SelectedIndex = customIndex;
+                                LegionPerformanceModeComboBox.SelectedIndex = ClampComboIndex(LegionPerformanceModeComboBox, customIndex);
                             legionPerformanceMode?.SetValue(255);
                             UpdateTDPSliderEnabledState();
                         }
@@ -974,6 +990,15 @@ namespace XboxGamingBar
                         }
                     }
                 }
+            }
+            catch (Exception ex)
+            {
+                // LoadProfileSettings runs inside selection-changed / property-changed
+                // callbacks. An exception escaping one of those becomes a stowed
+                // exception and fail-fasts the whole Game Bar process — the widget
+                // "dies after a game ends" with no log. Better to land in a
+                // partially-loaded UI state than to take down the process.
+                Logger.Error(ex, $"LoadProfileSettings failed for profile '{profileName}' — continuing with partially applied settings");
             }
             finally
             {

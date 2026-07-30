@@ -578,6 +578,7 @@
     <Compile Include="ControllerEmulation\Viiper\ViiperStickTriggerLiveSampleProperty.cs" />
     <Compile Include="Settings\ViiperStickTriggerPreviewEnabledProperty.cs" />
     <Compile Include="Settings\UsbipInstalledProperty.cs" />
+    <Compile Include="Settings\HidHideInstalledProperty.cs" />
     <Compile Include="Settings\ViiperDeviceTypeProperty.cs" />
     <Compile Include="Settings\ViiperInputSourceProperty.cs" />
     <Compile Include="Settings\ViiperGyroSourceProperty.cs" />

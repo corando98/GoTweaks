@@ -58,6 +58,30 @@ namespace XboxGamingBarHelper.Profile
             }
         }
 
+        public int TDPBoostSPPT
+        {
+            get { return value.TDPBoostSPPT; }
+            set
+            {
+                if (this.value.TDPBoostSPPT != value)
+                {
+                    this.value.TDPBoostSPPT = value;
+                }
+            }
+        }
+
+        public int TDPBoostFPPT
+        {
+            get { return value.TDPBoostFPPT; }
+            set
+            {
+                if (this.value.TDPBoostFPPT != value)
+                {
+                    this.value.TDPBoostFPPT = value;
+                }
+            }
+        }
+
         public GameId GameId
         {
             get { return value.GameId; }

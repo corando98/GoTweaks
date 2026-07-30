@@ -1640,6 +1640,7 @@ namespace XboxGamingBarHelper
                 settingsManager.EmulationBackend,
                 settingsManager.UsbipInstalled,
                 settingsManager.InstallUsbip,
+                settingsManager.HidHideInstalled,
                 settingsManager.ViiperDeviceType,
                 settingsManager.ViiperInputSource,
                 settingsManager.ViiperGyroSource,
@@ -1891,6 +1892,8 @@ namespace XboxGamingBarHelper
             profileManager.PerGameProfile.PropertyChanged += PerGameProfile_PropertyChanged;
             performanceManager.TDP.PropertyChanged += TDP_PropertyChanged;
             performanceManager.TDPBoostEnabled.PropertyChanged += TDPBoostEnabled_PropertyChanged;
+            performanceManager.TDPBoostSPPT.PropertyChanged += TDPBoostSPPT_PropertyChanged;
+            performanceManager.TDPBoostFPPT.PropertyChanged += TDPBoostFPPT_PropertyChanged;
             powerManager.CPUBoost.PropertyChanged += CPUBoost_PropertyChanged;
             powerManager.CPUEPP.PropertyChanged += CPUEPP_PropertyChanged;
             powerManager.HibernateTimeoutAC.PropertyChanged += UpdateHibernateTimeoutMonitorState;

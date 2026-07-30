@@ -535,6 +535,16 @@ namespace XboxGamingBar
         private static readonly List<string> BlackListAppTrackerNames = new List<string>()
         {
             "App Installer", //Somehow App Installer shows up as a game sometimes
+            // Game Bar reports IsGame=true for desktop-shell windows right after a
+            // windowed game closes: the foreground falls to Explorer and the tracker
+            // mislabels it, tearing down the per-game profile while the game is
+            // still exiting. These are English display names; the clear-debounce in
+            // AppTargetTracker_TargetChanged covers the transient case on other
+            // locales.
+            "File Explorer",
+            "Program Manager",
+            "Active apps",
+            "explorer.exe",
         };
 
         // Theme definitions
@@ -1012,6 +1022,8 @@ namespace XboxGamingBar
         private readonly PawnIOAvailableProperty pawnIOAvailable;
         private readonly PawnIOInstalledProperty pawnIOInstalled;
         private readonly InstallPawnIOProperty installPawnIO;
+        private readonly HidHideInstalledProperty hidHideInstalled;
+        private readonly InstallHidHideProperty installHidHide;
         private readonly SetupWarningsProperty setupWarnings;
         private readonly PowerButtonActionProperty powerButtonActionAC;
         private readonly PowerButtonActionProperty powerButtonActionDC;
@@ -1413,6 +1425,7 @@ namespace XboxGamingBar
             }
             // Nav bar icons-vs-text preference (Customization card).
             LoadNavBarIconsSetting();
+            LoadTabSettings();
             // Deterministic D-pad L/R between pills via explicit XYFocus targets.
             UpdateNavPillXYFocus();
             // Clear any latched LT/RT "held" state whenever the widget regains focus.
@@ -1783,6 +1796,15 @@ namespace XboxGamingBar
             winRing0Available.SetAvailabilityCallback(UpdateWinRing0Visibility);
             pawnIOInstalled.SetInstalledCallback(UpdatePawnIOInstalledUI);
 
+            // Setup tab: HidHide status/install properties + status refresh on any
+            // tool-state change (initial sync and post-install pushes alike).
+            hidHideInstalled = new HidHideInstalledProperty();
+            installHidHide = new InstallHidHideProperty(this);
+            usbipInstalled.PropertyChanged += (s, e) => UpdateSetupTabStatus();
+            hidHideInstalled.PropertyChanged += (s, e) => UpdateSetupTabStatus();
+            rtssInstalled.PropertyChanged += (s, e) => UpdateSetupTabStatus();
+            pawnIOInstalled.PropertyChanged += (s, e) => UpdateSetupTabStatus();
+
             // AutoTDP properties
             autoTDPEnabled = new AutoTDPEnabledProperty(false);
             autoTDPTargetFPS = new AutoTDPTargetFPSProperty(60);
@@ -2026,6 +2048,8 @@ namespace XboxGamingBar
                 pawnIOAvailable,
                 pawnIOInstalled,
                 installPawnIO,
+                hidHideInstalled,
+                installHidHide,
                 setupWarnings,
                 powerButtonActionAC,
                 powerButtonActionDC,
@@ -4702,6 +4726,12 @@ namespace XboxGamingBar
                     await Task.Delay(200);
                     isInitialSync = false;
                     Logger.Info("Initial sync complete - profile saves are now enabled");
+
+                    // Setup tab visibility must be evaluated explicitly here: if every
+                    // tool is missing, the *Installed properties sync false→false and
+                    // PropertyChanged (equality-skipped) never fires — without this
+                    // call a fresh install would never see the Setup tab at all.
+                    UpdateSetupTabStatus();
                 }
             }
 
@@ -4710,6 +4740,15 @@ namespace XboxGamingBar
 
             Logger.Info("=== OnNavigatedTo END ===");
         }
+        // Debounce for tracked-game CLEARS. Game Bar fires transient null/non-game
+        // target events mid-game (e.g. when the overlay itself activates or the
+        // foreground briefly falls to the desktop shell); acting on them instantly
+        // reset the per-game profile while the game was still running. A clear only
+        // commits if no valid game re-arrives within the window; a real game exit
+        // just switches profiles ~600ms later, which nothing depends on.
+        private const int TargetClearDebounceMs = 600;
+        private System.Threading.CancellationTokenSource targetClearCts;
+
         private void AppTargetTracker_TargetChanged(XboxGameBarAppTargetTracker sender, object args)
         {
             var settingEnabled = appTargetTracker.Setting == XboxGameBarAppTargetSetting.Enabled;
@@ -4722,22 +4761,48 @@ namespace XboxGamingBar
 
             if (target == null)
             {
-                Logger.Info("Found no target.");
-                trackedGame.SetValue(new TrackedGame());
+                Logger.Info("[TargetChanged] no target");
+                DebouncedClearTrackedGame("no target");
             }
             else
             {
-                if (target.IsGame && !BlackListAppTrackerNames.Contains(target.DisplayName))
+                bool blacklisted = BlackListAppTrackerNames.Contains(target.DisplayName, StringComparer.OrdinalIgnoreCase);
+                if (target.IsGame && !blacklisted)
                 {
-                    Logger.Info($"Tracked game DisplayName={target.DisplayName} AumId={target.AumId} TitleId={target.TitleId} IsFullscreen={target.IsFullscreen}");
-                    trackedGame.SetValue(new TrackedGame(target.AumId, target.DisplayName, StringHelper.CleanStringForSerialization(target.TitleId), target.IsFullscreen));
+                    // A valid game supersedes any pending clear from a transient event.
+                    targetClearCts?.Cancel();
+                    Logger.Info($"[TargetChanged] game DisplayName={target.DisplayName} AumId={target.AumId} TitleId={target.TitleId} IsFullscreen={target.IsFullscreen}");
+                    trackedGame.SetValue(new TrackedGame(target.AumId, StringHelper.CleanGameName(target.DisplayName), StringHelper.CleanStringForSerialization(target.TitleId), target.IsFullscreen));
                 }
                 else
                 {
-                    Logger.Info($"Tracked non-game DisplayName={target.DisplayName} AumId={target.AumId} TitleId={target.TitleId} IsFullscreen={target.IsFullscreen}");
-                    trackedGame.SetValue(new TrackedGame());
+                    Logger.Info($"[TargetChanged] non-game DisplayName={target.DisplayName} AumId={target.AumId} TitleId={target.TitleId} IsFullscreen={target.IsFullscreen} IsGame={target.IsGame} blacklisted={blacklisted}");
+                    DebouncedClearTrackedGame($"non-game '{target.DisplayName}'");
                 }
             }
+        }
+
+        private void DebouncedClearTrackedGame(string reason)
+        {
+            targetClearCts?.Cancel();
+            var cts = new System.Threading.CancellationTokenSource();
+            targetClearCts = cts;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(TargetClearDebounceMs, cts.Token);
+                }
+                catch (TaskCanceledException)
+                {
+                    return; // a valid game (or a newer clear) arrived inside the window
+                }
+                if (!cts.IsCancellationRequested)
+                {
+                    Logger.Info($"[TargetChanged] clear committed after {TargetClearDebounceMs}ms debounce ({reason})");
+                    trackedGame.SetValue(new TrackedGame());
+                }
+            });
         }
 
         /// <summary>

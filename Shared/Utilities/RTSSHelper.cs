@@ -85,9 +85,21 @@ namespace Shared.Utilities
 
         private static bool IsInstalledUncached()
         {
+            // Registry key alone is NOT proof: RTSS's NSIS uninstaller leaves the
+            // Unwinder\RTSS key (including InstallDir) behind, so a registry-only
+            // check reads "installed" forever after an uninstall — the widget then
+            // shows OSD/FPS-limit controls that can't work and the helper's
+            // AutoStartRTSS retries a nonexistent exe every tick. Require RTSS.exe
+            // on disk too. (The TTL cache above keeps the File.Exists cheap.)
             using (RegistryKey key = Registry.LocalMachine.OpenSubKey(@"Software\WOW6432Node\Unwinder\RTSS"))
             {
-                return key != null;
+                if (key == null)
+                {
+                    return false;
+                }
+                var installDir = key.GetValue("InstallDir") as string;
+                return !string.IsNullOrEmpty(installDir)
+                    && System.IO.File.Exists(System.IO.Path.Combine(installDir, "RTSS.exe"));
             }
         }
 

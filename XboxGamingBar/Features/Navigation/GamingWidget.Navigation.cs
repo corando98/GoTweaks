@@ -199,6 +199,7 @@ namespace XboxGamingBar
                 lastUserNavTag = tag;
 
                 // Hide all sections
+                SetupScrollViewer.Visibility = Visibility.Collapsed;
                 QuickSettingsScrollViewer.Visibility = Visibility.Collapsed;
                 PerformanceScrollViewer.Visibility = Visibility.Collapsed;
                 GameScrollViewer.Visibility = Visibility.Collapsed;
@@ -217,6 +218,10 @@ namespace XboxGamingBar
                 // Show selected section and scroll to top
                 switch (tag)
                 {
+                    case "Setup":
+                        SetupScrollViewer.Visibility = Visibility.Visible;
+                        SetupScrollViewer.ChangeView(null, 0, null, true);
+                        break;
                     case "Quick":
                         QuickSettingsScrollViewer.Visibility = Visibility.Visible;
                         QuickSettingsScrollViewer.ChangeView(null, 0, null, true);
@@ -289,6 +294,7 @@ namespace XboxGamingBar
             var textSecondaryBrush = new SolidColorBrush(theme.TextSecondary);
 
             // Apply to all scroll viewers (only visible ones will have loaded content)
+            ApplyThemeToVisualTree(SetupScrollViewer, theme, cardBgBrush, cardBorderBrush, accentBrush, textSecondaryBrush);
             ApplyThemeToVisualTree(QuickSettingsScrollViewer, theme, cardBgBrush, cardBorderBrush, accentBrush, textSecondaryBrush);
             ApplyThemeToVisualTree(PerformanceScrollViewer, theme, cardBgBrush, cardBorderBrush, accentBrush, textSecondaryBrush);
             ApplyThemeToVisualTree(GameScrollViewer, theme, cardBgBrush, cardBorderBrush, accentBrush, textSecondaryBrush);
@@ -425,9 +431,27 @@ namespace XboxGamingBar
             {
                 var focusedCtl = FocusManager.GetFocusedElement();
                 bool vertical = e.Key == VirtualKey.Up || e.Key == VirtualKey.Down;
+                // Vertical arrows on ANY content control route through us — not just
+                // value controls. When the event fell through to the framework, the
+                // ScrollViewer scrolled on it AND XY focus navigation moved focus, so
+                // one press did both (field feedback 2026-07-29: "scrolls the view
+                // down, and then moves to the next control"). Claiming the key here
+                // means the only scrolling is our StartBringIntoView on the target.
+                // Exclusions: nav strip (RadioButton branches below own it), text
+                // inputs (arrows move the caret), parked ScrollViewer (Down branch
+                // below enters the tab), and any open popup (dropdown/flyout items
+                // need their arrows).
+                bool genericVertical = vertical
+                    && focusedCtl is Control
+                    && !(focusedCtl is ScrollViewer)
+                    && !(focusedCtl is TextBox) && !(focusedCtl is PasswordBox)
+                    && !(focusedCtl is RichEditBox) && !(focusedCtl is AutoSuggestBox)
+                    && !IsInNavigationArea(focusedCtl as FrameworkElement)
+                    && Windows.UI.Xaml.Media.VisualTreeHelper.GetOpenPopups(Window.Current).Count == 0;
                 bool intercept =
                     (focusedCtl is ComboBox cbCtl && !cbCtl.IsDropDownOpen)
-                    || (focusedCtl is Slider && vertical);
+                    || (focusedCtl is Slider && vertical)
+                    || genericVertical;
                 if (intercept)
                 {
                     e.Handled = true;

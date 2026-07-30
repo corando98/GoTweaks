@@ -491,6 +491,20 @@ namespace XboxGamingBarHelper
 
             performanceManager.TDP.SetProfileValue(profileManager.GlobalProfile.TDP);
             performanceManager.TDPBoostEnabled.SetValue(profileManager.GlobalProfile.TDPBoostEnabled);
+            // Per-profile boost deltas must come along on helper-side switches too —
+            // previously only the widget pushed them, so with the widget closed the
+            // previous profile's deltas stuck. Set BEFORE the SetTDP below (its
+            // debounce-fire reads these properties).
+            performanceManager.TDPBoostSPPT.SetValue(profileManager.GlobalProfile.TDPBoostSPPT);
+            performanceManager.TDPBoostFPPT.SetValue(profileManager.GlobalProfile.TDPBoostFPPT);
+            // Unconditional hardware re-apply: when the outgoing and incoming profiles
+            // have EQUAL TDP but different boost, TDP.SetProfileValue equality-skips
+            // (no SetTDP queued) and the boost property's own re-apply is suppressed
+            // while isApplyingProfile — the old profile's SPPT/FPPT stayed on the
+            // hardware indefinitely. SetTDP reads the boost state at debounce-fire
+            // time, so this single call closes the window; the 150ms debounce dedupes
+            // against any apply already in flight.
+            performanceManager.SetTDP(performanceManager.TDP.Value);
             powerManager.CPUBoost.SetValue(profileManager.GlobalProfile.CPUBoost);
             powerManager.CPUEPP.SetValue(profileManager.GlobalProfile.CPUEPP);
             profileManager.PerGameProfile.SetValue(false);
@@ -564,6 +578,11 @@ namespace XboxGamingBarHelper
                         // All settings applied atomically under lock to prevent cross-contamination
                         performanceManager.TDP.SetProfileValue(profileManager.CurrentProfile.TDP);
                         performanceManager.TDPBoostEnabled.SetValue(profileManager.CurrentProfile.TDPBoostEnabled);
+                        performanceManager.TDPBoostSPPT.SetValue(profileManager.CurrentProfile.TDPBoostSPPT);
+                        performanceManager.TDPBoostFPPT.SetValue(profileManager.CurrentProfile.TDPBoostFPPT);
+                        // Unconditional re-apply — closes the equal-TDP/different-boost
+                        // stale-SPPT/FPPT window (see RestoreGlobalProfileSettings).
+                        performanceManager.SetTDP(performanceManager.TDP.Value);
                         powerManager.CPUBoost.SetValue(profileManager.CurrentProfile.CPUBoost);
                         powerManager.CPUEPP.SetValue(profileManager.CurrentProfile.CPUEPP);
                         profileManager.PerGameProfile.SetValue(profileManager.CurrentProfile.Use);
@@ -658,6 +677,11 @@ namespace XboxGamingBarHelper
 
                     performanceManager.TDP.SetProfileValue(gameProfile.TDP);
                     performanceManager.TDPBoostEnabled.SetValue(gameProfile.TDPBoostEnabled);
+                    performanceManager.TDPBoostSPPT.SetValue(gameProfile.TDPBoostSPPT);
+                    performanceManager.TDPBoostFPPT.SetValue(gameProfile.TDPBoostFPPT);
+                    // Unconditional re-apply — closes the equal-TDP/different-boost
+                    // stale-SPPT/FPPT window (see RestoreGlobalProfileSettings).
+                    performanceManager.SetTDP(performanceManager.TDP.Value);
                     powerManager.CPUBoost.SetValue(gameProfile.CPUBoost);
                     powerManager.CPUEPP.SetValue(gameProfile.CPUEPP);
                 }
@@ -778,6 +802,56 @@ namespace XboxGamingBarHelper
             RouteProfileSave(ProfileSaveFlagsState.TDP, "TDPBoostEnabled",
                 cur => cur.TDPBoostEnabled = performanceManager.TDPBoostEnabled.Value,
                 glo => glo.TDPBoostEnabled = performanceManager.TDPBoostEnabled.Value);
+        }
+
+        // Persist per-profile TDP Boost deltas. Without these handlers the deltas
+        // lived only in the helper's in-memory properties (widget pushes them on its
+        // own profile switches): GameProfile.TDPBoostSPPT/FPPT stayed at defaults, so
+        // helper-side profile switching (widget closed — FSE) carried the PREVIOUS
+        // profile's deltas indefinitely. Same guard set + routing as TDPBoostEnabled
+        // (deltas are grouped under the TDP save flag).
+        private static void TDPBoostSPPT_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (isApplyingProfile)
+            {
+                Logger.Debug("Skipping TDPBoostSPPT_PropertyChanged - already applying profile");
+                return;
+            }
+            if (IsInProfileSwitchCooldown())
+            {
+                Logger.Debug("Skipping TDPBoostSPPT_PropertyChanged - in profile switch cooldown");
+                return;
+            }
+            if (defaultGameProfileManager != null && defaultGameProfileManager.ProfileEnabled.Value)
+            {
+                Logger.Debug("Skipping TDPBoostSPPT_PropertyChanged - Default Game Profile is active");
+                return;
+            }
+            RouteProfileSave(ProfileSaveFlagsState.TDP, "TDPBoostSPPT",
+                cur => cur.TDPBoostSPPT = performanceManager.TDPBoostSPPT.Value,
+                glo => glo.TDPBoostSPPT = performanceManager.TDPBoostSPPT.Value);
+        }
+
+        private static void TDPBoostFPPT_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (isApplyingProfile)
+            {
+                Logger.Debug("Skipping TDPBoostFPPT_PropertyChanged - already applying profile");
+                return;
+            }
+            if (IsInProfileSwitchCooldown())
+            {
+                Logger.Debug("Skipping TDPBoostFPPT_PropertyChanged - in profile switch cooldown");
+                return;
+            }
+            if (defaultGameProfileManager != null && defaultGameProfileManager.ProfileEnabled.Value)
+            {
+                Logger.Debug("Skipping TDPBoostFPPT_PropertyChanged - Default Game Profile is active");
+                return;
+            }
+            RouteProfileSave(ProfileSaveFlagsState.TDP, "TDPBoostFPPT",
+                cur => cur.TDPBoostFPPT = performanceManager.TDPBoostFPPT.Value,
+                glo => glo.TDPBoostFPPT = performanceManager.TDPBoostFPPT.Value);
         }
 
         private static void RunningGame_PropertyChanged(object sender, PropertyChangedEventArgs e)

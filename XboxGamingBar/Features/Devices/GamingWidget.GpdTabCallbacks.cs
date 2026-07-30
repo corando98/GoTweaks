@@ -50,8 +50,10 @@ namespace XboxGamingBar
         {
             if (GPDNavItem != null)
             {
-                GPDNavItem.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-                Logger.Info($"GPD tab visibility set to: {visible}");
+                // Through the tab-settings layer so a user-hidden GPD tab isn't
+                // resurrected every time device detection re-runs.
+                SetNavTabDeviceAvailability("GPD", visible);
+                Logger.Info($"GPD tab device availability set to: {visible}");
             }
 
             // Update connection status text

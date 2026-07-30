@@ -474,6 +474,10 @@
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
                             XYFocusKeyboardNavigation="Disabled">
+                    <!-- Setup tab: only shown while first-time setup is incomplete (helper
+                         reports a required tool missing). Availability driven from
+                         UpdateSetupTabStatus via the tab-settings device layer. -->
+                    <RadioButton x:Name="SetupNavItem" Content="Setup" Tag="Setup" Style="{StaticResource NavRadioButtonStyle}" GroupName="MainNav" Visibility="Collapsed" Checked="NavRadioButton_Checked"/>
                     <RadioButton x:Name="QuickNavItem" Content="Quick" Tag="Quick" Style="{StaticResource NavRadioButtonStyle}" GroupName="MainNav" Checked="NavRadioButton_Checked"/>
                     <!-- Content "Power" (short label to decompress the strip); Tag stays
                          "Performance" — all nav logic is keyed on the Tag. -->
@@ -523,6 +527,85 @@
             <Grid Grid.Row="1">
             <!-- QUICK SETTINGS TAB -->
             <Grid>
+                <!-- Setup tab content: first-run tool status + install actions -->
+                <ScrollViewer x:Name="SetupScrollViewer" XYFocusUpNavigationStrategy="NavigationDirectionDistance" XYFocusDownNavigationStrategy="NavigationDirectionDistance" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
+                              BringIntoViewOnFocusChange="True">
+                    <StackPanel Padding="16,8,16,16">
+                        <Border Style="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <TextBlock Text="First-time Setup" Style="{StaticResource CardTitleStyle}"/>
+                                <TextBlock Text="GoTweaks needs a few free companion tools for its full feature set. Install what you plan to use — this tab disappears once everything is in place (or hide it under System → Customization)."
+                                           Style="{StaticResource CardCaptionStyle}"
+                                           TextWrapping="Wrap"/>
+
+                                <!-- VIIPER controller driver (usbip-win2) -->
+                                <Grid Margin="0,14,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0">
+                                        <TextBlock Text="Controller driver (usbip-win2)" FontSize="14" Foreground="#FFFFFF"/>
+                                        <TextBlock Text="Powers controller emulation (Xbox/DualSense/Switch targets, gyro)"
+                                                   FontSize="11" Foreground="#888888" TextWrapping="Wrap"/>
+                                        <TextBlock x:Name="SetupStatusUsbip" Text="Checking..." FontSize="11" Foreground="#C8A040" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                    <Button x:Name="SetupInstallUsbipButton" Grid.Column="1" Content="Install" Click="SetupInstallUsbip_Click"
+                                            VerticalAlignment="Center" Padding="14,6" Background="#3E434B" Foreground="#FFFFFF" BorderBrush="#6B7584" BorderThickness="1" CornerRadius="4"/>
+                                </Grid>
+
+                                <!-- HidHide -->
+                                <Grid Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0">
+                                        <TextBlock Text="HidHide" FontSize="14" Foreground="#FFFFFF"/>
+                                        <TextBlock Text="Hides the physical controller from games while emulation is active"
+                                                   FontSize="11" Foreground="#888888" TextWrapping="Wrap"/>
+                                        <TextBlock x:Name="SetupStatusHidHide" Text="Checking..." FontSize="11" Foreground="#C8A040" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                    <Button x:Name="SetupInstallHidHideButton" Grid.Column="1" Content="Install" Click="SetupInstallHidHide_Click"
+                                            VerticalAlignment="Center" Padding="14,6" Background="#3E434B" Foreground="#FFFFFF" BorderBrush="#6B7584" BorderThickness="1" CornerRadius="4"/>
+                                </Grid>
+
+                                <!-- RTSS -->
+                                <Grid Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0">
+                                        <TextBlock Text="RivaTuner Statistics Server" FontSize="14" Foreground="#FFFFFF"/>
+                                        <TextBlock Text="Powers the performance overlay (OSD) and FPS limiter"
+                                                   FontSize="11" Foreground="#888888" TextWrapping="Wrap"/>
+                                        <TextBlock x:Name="SetupStatusRtss" Text="Checking..." FontSize="11" Foreground="#C8A040" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                    <Button x:Name="SetupInstallRtssButton" Grid.Column="1" Content="Download" Click="SetupDownloadRtss_Click"
+                                            VerticalAlignment="Center" Padding="14,6" Background="#3E434B" Foreground="#FFFFFF" BorderBrush="#6B7584" BorderThickness="1" CornerRadius="4"/>
+                                </Grid>
+
+                                <!-- PawnIO -->
+                                <Grid Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0">
+                                        <TextBlock Text="PawnIO" FontSize="14" Foreground="#FFFFFF"/>
+                                        <TextBlock Text="Signed driver for TDP control and fan-curve access"
+                                                   FontSize="11" Foreground="#888888" TextWrapping="Wrap"/>
+                                        <TextBlock x:Name="SetupStatusPawnIO" Text="Checking..." FontSize="11" Foreground="#C8A040" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                    <Button x:Name="SetupInstallPawnIOButton" Grid.Column="1" Content="Install" Click="SetupInstallPawnIO_Click"
+                                            VerticalAlignment="Center" Padding="14,6" Background="#3E434B" Foreground="#FFFFFF" BorderBrush="#6B7584" BorderThickness="1" CornerRadius="4"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+
                 <ScrollViewer x:Name="QuickSettingsScrollViewer" XYFocusUpNavigationStrategy="NavigationDirectionDistance" XYFocusDownNavigationStrategy="NavigationDirectionDistance" VerticalScrollBarVisibility="Auto" Visibility="Visible"
                               BringIntoViewOnFocusChange="True">
                     <StackPanel Padding="16,8,16,16">
@@ -5491,6 +5574,241 @@
                                                   Style="{StaticResource ModernToggleStyle}"/>
                                 </Grid>
 
+                                <!-- Default tab on open -->
+                                <Grid Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="Default tab" FontSize="14" Foreground="#FFFFFF"/>
+                                        <TextBlock Text="Tab selected whenever the widget opens" FontSize="11" Foreground="#888888"/>
+                                    </StackPanel>
+                                    <ComboBox Style="{StaticResource ModernComboBoxStyle}" x:Name="DefaultTabComboBox"
+                                              Grid.Column="1"
+                                              Width="130"
+                                              VerticalAlignment="Center"
+                                              SelectionChanged="DefaultTabComboBox_SelectionChanged">
+                                        <ComboBoxItem Content="Last used" IsSelected="True"/>
+                                        <ComboBoxItem Content="Setup"/>
+                                        <ComboBoxItem Content="Quick"/>
+                                        <ComboBoxItem Content="Power"/>
+                                        <ComboBoxItem Content="Profiles"/>
+                                        <ComboBoxItem Content="Display"/>
+                                        <ComboBoxItem Content="Scale"/>
+                                        <ComboBoxItem Content="Legion"/>
+                                        <ComboBoxItem Content="GPD"/>
+                                        <ComboBoxItem Content="System"/>
+                                    </ComboBox>
+                                </Grid>
+
+                                <!-- Show Setup tab (onboarding reset) -->
+                                <Grid Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="Show Setup tab" FontSize="14" Foreground="#FFFFFF"/>
+                                        <TextBlock Text="Bring back the first-time setup tab even when setup is complete"
+                                                   FontSize="11" Foreground="#888888" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <ToggleSwitch x:Name="ShowSetupTabToggle"
+                                                  Grid.Column="1"
+                                                  IsOn="False"
+                                                  Toggled="ShowSetupTabToggle_Toggled"
+                                                  Style="{StaticResource ModernToggleStyle}"/>
+                                </Grid>
+
+                                <!-- GoTweaks self-update preferences (moved from Debug).
+                                     The helper's startup probe is gated by "Check for
+                                     updates on start"; the Quick-tab banner is hidden
+                                     when "Hide banner" is on. Same x:Names/handlers —
+                                     persisted per-user in LocalSettings. -->
+                                <Grid Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="Check for updates on start" FontSize="14" Foreground="#FFFFFF"/>
+                                        <TextBlock Text="Look for new GoTweaks releases when the widget opens"
+                                                   FontSize="11" Foreground="#888888" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <ToggleSwitch x:Name="GoTweaksUpdateOnStartCheckbox"
+                                                  Grid.Column="1"
+                                                  Style="{StaticResource ModernToggleStyle}"
+                                                  IsOn="True"
+                                                  Toggled="GoTweaksUpdateOnStartCheckbox_Changed"/>
+                                </Grid>
+                                <Grid Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="Hide update banner" FontSize="14" Foreground="#FFFFFF"/>
+                                        <TextBlock Text="Don't show the GoTweaks update banner on the Quick tab"
+                                                   FontSize="11" Foreground="#888888" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <ToggleSwitch x:Name="GoTweaksHideBannerCheckbox"
+                                                  Grid.Column="1"
+                                                  Style="{StaticResource ModernToggleStyle}"
+                                                  IsOn="False"
+                                                  Toggled="GoTweaksHideBannerCheckbox_Changed"/>
+                                </Grid>
+
+                                <!-- Tab order & visibility -->
+                                <TextBlock Text="Tab order and visibility" FontSize="14" Foreground="#FFFFFF" Margin="0,12,0,0"/>
+                                <TextBlock Text="Reorder tabs or hide the ones you don't use. System can't be hidden."
+                                           FontSize="11" Foreground="#888888" TextWrapping="Wrap"/>
+                                <StackPanel x:Name="TabSettingsList" Margin="0,8,0,0">
+                                    <Grid x:Name="TabRow_Setup" Margin="0,2,0,2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Setup" FontSize="13" Foreground="#FFFFFF" VerticalAlignment="Center"/>
+                                        <Button Grid.Column="1" Tag="Setup" Click="TabMoveUp_Click" Width="34" Height="30" Padding="0" Margin="0,0,4,0" Background="Transparent" BorderThickness="1" BorderBrush="#33FFFFFF">
+                                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE70E;" FontSize="12"/>
+                                        </Button>
+                                        <Button Grid.Column="2" Tag="Setup" Click="TabMoveDown_Click" Width="34" Height="30" Padding="0" Background="Transparent" BorderThickness="1" BorderBrush="#33FFFFFF">
+                                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE70D;" FontSize="12"/>
+                                        </Button>
+                                        <ToggleSwitch Grid.Column="3" x:Name="TabShow_Setup" Tag="Setup" IsOn="True" Toggled="TabShow_Toggled" Style="{StaticResource ModernToggleStyle}" Margin="8,0,0,0"/>
+                                    </Grid>
+                                    <Grid x:Name="TabRow_Quick" Margin="0,2,0,2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Quick" FontSize="13" Foreground="#FFFFFF" VerticalAlignment="Center"/>
+                                        <Button Grid.Column="1" Tag="Quick" Click="TabMoveUp_Click" Width="34" Height="30" Padding="0" Margin="0,0,4,0" Background="Transparent" BorderThickness="1" BorderBrush="#33FFFFFF">
+                                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE70E;" FontSize="12"/>
+                                        </Button>
+                                        <Button Grid.Column="2" Tag="Quick" Click="TabMoveDown_Click" Width="34" Height="30" Padding="0" Background="Transparent" BorderThickness="1" BorderBrush="#33FFFFFF">
+                                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE70D;" FontSize="12"/>
+                                        </Button>
+                                        <ToggleSwitch Grid.Column="3" x:Name="TabShow_Quick" Tag="Quick" IsOn="True" Toggled="TabShow_Toggled" Style="{StaticResource ModernToggleStyle}" Margin="8,0,0,0"/>
+                                    </Grid>
+                                    <Grid x:Name="TabRow_Performance" Margin="0,2,0,2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Power" FontSize="13" Foreground="#FFFFFF" VerticalAlignment="Center"/>
+                                        <Button Grid.Column="1" Tag="Performance" Click="TabMoveUp_Click" Width="34" Height="30" Padding="0" Margin="0,0,4,0" Background="Transparent" BorderThickness="1" BorderBrush="#33FFFFFF">
+                                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE70E;" FontSize="12"/>
+                                        </Button>
+                                        <Button Grid.Column="2" Tag="Performance" Click="TabMoveDown_Click" Width="34" Height="30" Padding="0" Background="Transparent" BorderThickness="1" BorderBrush="#33FFFFFF">
+                                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE70D;" FontSize="12"/>
+                                        </Button>
+                                        <ToggleSwitch Grid.Column="3" x:Name="TabShow_Performance" Tag="Performance" IsOn="True" Toggled="TabShow_Toggled" Style="{StaticResource ModernToggleStyle}" Margin="8,0,0,0"/>
+                                    </Grid>
+                                    <Grid x:Name="TabRow_Game" Margin="0,2,0,2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Profiles" FontSize="13" Foreground="#FFFFFF" VerticalAlignment="Center"/>
+                                        <Button Grid.Column="1" Tag="Game" Click="TabMoveUp_Click" Width="34" Height="30" Padding="0" Margin="0,0,4,0" Background="Transparent" BorderThickness="1" BorderBrush="#33FFFFFF">
+                                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE70E;" FontSize="12"/>
+                                        </Button>
+                                        <Button Grid.Column="2" Tag="Game" Click="TabMoveDown_Click" Width="34" Height="30" Padding="0" Background="Transparent" BorderThickness="1" BorderBrush="#33FFFFFF">
+                                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE70D;" FontSize="12"/>
+                                        </Button>
+                                        <ToggleSwitch Grid.Column="3" x:Name="TabShow_Game" Tag="Game" IsOn="True" Toggled="TabShow_Toggled" Style="{StaticResource ModernToggleStyle}" Margin="8,0,0,0"/>
+                                    </Grid>
+                                    <Grid x:Name="TabRow_AMD" Margin="0,2,0,2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Display" FontSize="13" Foreground="#FFFFFF" VerticalAlignment="Center"/>
+                                        <Button Grid.Column="1" Tag="AMD" Click="TabMoveUp_Click" Width="34" Height="30" Padding="0" Margin="0,0,4,0" Background="Transparent" BorderThickness="1" BorderBrush="#33FFFFFF">
+                                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE70E;" FontSize="12"/>
+                                        </Button>
+                                        <Button Grid.Column="2" Tag="AMD" Click="TabMoveDown_Click" Width="34" Height="30" Padding="0" Background="Transparent" BorderThickness="1" BorderBrush="#33FFFFFF">
+                                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE70D;" FontSize="12"/>
+                                        </Button>
+                                        <ToggleSwitch Grid.Column="3" x:Name="TabShow_AMD" Tag="AMD" IsOn="True" Toggled="TabShow_Toggled" Style="{StaticResource ModernToggleStyle}" Margin="8,0,0,0"/>
+                                    </Grid>
+                                    <Grid x:Name="TabRow_Scaling" Margin="0,2,0,2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Scale" FontSize="13" Foreground="#FFFFFF" VerticalAlignment="Center"/>
+                                        <Button Grid.Column="1" Tag="Scaling" Click="TabMoveUp_Click" Width="34" Height="30" Padding="0" Margin="0,0,4,0" Background="Transparent" BorderThickness="1" BorderBrush="#33FFFFFF">
+                                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE70E;" FontSize="12"/>
+                                        </Button>
+                                        <Button Grid.Column="2" Tag="Scaling" Click="TabMoveDown_Click" Width="34" Height="30" Padding="0" Background="Transparent" BorderThickness="1" BorderBrush="#33FFFFFF">
+                                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE70D;" FontSize="12"/>
+                                        </Button>
+                                        <ToggleSwitch Grid.Column="3" x:Name="TabShow_Scaling" Tag="Scaling" IsOn="True" Toggled="TabShow_Toggled" Style="{StaticResource ModernToggleStyle}" Margin="8,0,0,0"/>
+                                    </Grid>
+                                    <Grid x:Name="TabRow_Legion" Margin="0,2,0,2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Legion" FontSize="13" Foreground="#FFFFFF" VerticalAlignment="Center"/>
+                                        <Button Grid.Column="1" Tag="Legion" Click="TabMoveUp_Click" Width="34" Height="30" Padding="0" Margin="0,0,4,0" Background="Transparent" BorderThickness="1" BorderBrush="#33FFFFFF">
+                                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE70E;" FontSize="12"/>
+                                        </Button>
+                                        <Button Grid.Column="2" Tag="Legion" Click="TabMoveDown_Click" Width="34" Height="30" Padding="0" Background="Transparent" BorderThickness="1" BorderBrush="#33FFFFFF">
+                                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE70D;" FontSize="12"/>
+                                        </Button>
+                                        <ToggleSwitch Grid.Column="3" x:Name="TabShow_Legion" Tag="Legion" IsOn="True" Toggled="TabShow_Toggled" Style="{StaticResource ModernToggleStyle}" Margin="8,0,0,0"/>
+                                    </Grid>
+                                    <Grid x:Name="TabRow_GPD" Margin="0,2,0,2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="GPD" FontSize="13" Foreground="#FFFFFF" VerticalAlignment="Center"/>
+                                        <Button Grid.Column="1" Tag="GPD" Click="TabMoveUp_Click" Width="34" Height="30" Padding="0" Margin="0,0,4,0" Background="Transparent" BorderThickness="1" BorderBrush="#33FFFFFF">
+                                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE70E;" FontSize="12"/>
+                                        </Button>
+                                        <Button Grid.Column="2" Tag="GPD" Click="TabMoveDown_Click" Width="34" Height="30" Padding="0" Background="Transparent" BorderThickness="1" BorderBrush="#33FFFFFF">
+                                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE70D;" FontSize="12"/>
+                                        </Button>
+                                        <ToggleSwitch Grid.Column="3" x:Name="TabShow_GPD" Tag="GPD" IsOn="True" Toggled="TabShow_Toggled" Style="{StaticResource ModernToggleStyle}" Margin="8,0,0,0"/>
+                                    </Grid>
+                                    <Grid x:Name="TabRow_System" Margin="0,2,0,2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="System" FontSize="13" Foreground="#FFFFFF" VerticalAlignment="Center"/>
+                                        <Button Grid.Column="1" Tag="System" Click="TabMoveUp_Click" Width="34" Height="30" Padding="0" Margin="0,0,4,0" Background="Transparent" BorderThickness="1" BorderBrush="#33FFFFFF">
+                                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE70E;" FontSize="12"/>
+                                        </Button>
+                                        <Button Grid.Column="2" Tag="System" Click="TabMoveDown_Click" Width="34" Height="30" Padding="0" Background="Transparent" BorderThickness="1" BorderBrush="#33FFFFFF">
+                                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE70D;" FontSize="12"/>
+                                        </Button>
+                                        <ToggleSwitch Grid.Column="3" x:Name="TabShow_System" Tag="System" IsOn="True" IsEnabled="False" Toggled="TabShow_Toggled" Style="{StaticResource ModernToggleStyle}" Margin="8,0,0,0"/>
+                                    </Grid>
+                                </StackPanel>
+
                                 <Rectangle Height="1" Fill="#33FFFFFF" Margin="0,12,0,0"/>
 
                                 <!-- Default Game Profiles -->
@@ -5829,45 +6147,8 @@
                                                 Click="CheckForUpdateDebugButton_Click"/>
                                     </Grid>
 
-                                    <!-- GoTweaks self-update preferences. Shared with the
-                                         Quick-tab update banner: the helper's startup
-                                         probe is gated by "Check for updates on start",
-                                         and the banner is hidden when "Hide banner" is
-                                         on. Persisted per-user in LocalSettings. -->
-                                    <Grid Margin="0,8,0,0">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0"
-                                                   Text="Check for updates on start"
-                                                   FontSize="12"
-                                                   Foreground="#B9C0CC"
-                                                   VerticalAlignment="Center"
-                                                   TextWrapping="Wrap"/>
-                                        <ToggleSwitch x:Name="GoTweaksUpdateOnStartCheckbox"
-                                                      Grid.Column="1"
-                                                      Style="{StaticResource ModernToggleStyle}"
-                                                      IsOn="True"
-                                                      Toggled="GoTweaksUpdateOnStartCheckbox_Changed"/>
-                                    </Grid>
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0"
-                                                   Text="Hide GoTweaks update banner on Quick tab"
-                                                   FontSize="12"
-                                                   Foreground="#B9C0CC"
-                                                   VerticalAlignment="Center"
-                                                   TextWrapping="Wrap"/>
-                                        <ToggleSwitch x:Name="GoTweaksHideBannerCheckbox"
-                                                      Grid.Column="1"
-                                                      Style="{StaticResource ModernToggleStyle}"
-                                                      IsOn="False"
-                                                      Toggled="GoTweaksHideBannerCheckbox_Changed"/>
-                                    </Grid>
+                                    <!-- (GoTweaks self-update preference toggles moved to the
+                                         Customization card on the System tab, 2026-07-30.) -->
 
                                     <!-- Export Default Game Profiles Button -->
                                     <Button x:Name="ExportDGPsButton"

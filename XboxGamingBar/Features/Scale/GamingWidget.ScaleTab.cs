@@ -11,8 +11,10 @@ namespace XboxGamingBar
         {
             if (ScalingNavItem != null)
             {
-                ScalingNavItem.Visibility = installed ? Visibility.Visible : Visibility.Collapsed;
-                Logger.Info($"Scale tab visibility set to: {installed} (Lossless Scaling installed: {installed})");
+                // Through the tab-settings layer so a user-hidden Scale tab isn't
+                // resurrected every time the install check re-runs.
+                SetNavTabDeviceAvailability("Scaling", installed);
+                Logger.Info($"Scale tab device availability set to: {installed} (Lossless Scaling installed: {installed})");
             }
 
             // Rebuild Quick Settings tiles to show/hide Lossless Scaling tile

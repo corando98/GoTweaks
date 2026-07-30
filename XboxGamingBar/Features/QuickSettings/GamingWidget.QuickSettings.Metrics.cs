@@ -163,7 +163,7 @@ namespace XboxGamingBar
                             else if (drain < 0)
                                 displayValue = $"+{-drain:F1}W";
                             else
-                                displayValue = "--W";
+                                displayValue = "0.0W"; // on AC, battery idle — "--W" read as broken
                         }
                         break;
 

@@ -122,6 +122,8 @@
     <Compile Include="Data\ViiperStickGyroEnabledProperty.cs" />
     <Compile Include="Data\ViiperJoyconGyroPerHalfProperty.cs" />
     <Compile Include="Data\InstallUsbipProperty.cs" />
+    <Compile Include="Data\HidHideInstalledProperty.cs" />
+    <Compile Include="Data\InstallHidHideProperty.cs" />
     <Compile Include="Data\SetupWarningsProperty.cs" />
     <Compile Include="Data\ViiperAlternateGyroConventionProperty.cs" />
     <Compile Include="Data\ViiperStickTriggerConfigProperty.cs" />
@@ -309,6 +311,15 @@
       <DependentUpon>GamingWidget.xaml</DependentUpon>
     </Compile>
     <Compile Include="Features\Lifecycle\GamingWidget.Lifecycle.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Lifecycle\GamingWidget.DispatcherHealth.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Navigation\GamingWidget.TabSettings.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Setup\GamingWidget.SetupTab.cs">
       <DependentUpon>GamingWidget.xaml</DependentUpon>
     </Compile>
     <Compile Include="Features\LosslessScaling\GamingWidget.ChillFPS.cs">

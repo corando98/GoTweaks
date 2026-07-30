@@ -73,7 +73,11 @@ namespace XboxGamingBar
                     return;
                 }
 
-                Logger.Debug($"Widget received pipe message: Function={message["Function"]}");
+                // TryGetValue, not indexer: string interpolation arguments are evaluated
+                // even when Debug logging is off, so a message without a "Function" key
+                // (e.g. HelperExiting notifications) would throw KeyNotFoundException
+                // here and silently abort the whole handler before the checks below run.
+                Logger.Debug($"Widget received pipe message: Function={(message.TryGetValue("Function", out object fnVal) ? fnVal : "(none)")}");
 
                 // Helper told us it's exiting on purpose (kill / upgrade / update). Mark it so the
                 // imminent pipe-disconnect doesn't auto-relaunch the dying helper and race it
@@ -299,55 +303,67 @@ namespace XboxGamingBar
 
         /// <summary>
         /// Handles Named Pipe disconnection from the helper.
+        /// Deliberately NOT async void with bare Dispatcher.RunAsync: this fires on
+        /// the pipe read thread, and after Modern Standby the dispatcher may be dead
+        /// (see GamingWidget.DispatcherHealth.cs) — an exception escaping an async
+        /// void handler fail-fasts the whole Game Bar process. That crash-then-rehost
+        /// is why "restart helper" used to appear to cure the blank-widget state.
         /// </summary>
-        private async void PipeClient_Disconnected(object sender, EventArgs e)
+        private void PipeClient_Disconnected(object sender, EventArgs e)
         {
-            Logger.Info("Named pipe disconnected from helper");
-
-            // Ignore disconnects from inactive/unloading widget instances.
-            // A new active instance will own reconnection.
-            if (isUnloading || App.GetActiveGamingWidget() != this)
+            try
             {
-                Logger.Info($"Skipping reconnect handling (isUnloading={isUnloading}, isActive={App.GetActiveGamingWidget() == this})");
-                return;
-            }
+                Logger.Info("Named pipe disconnected from helper");
 
-            // Unregister handlers
-            App.PipeMessageReceived -= PipeClient_MessageReceived;
-            App.PipeDisconnected -= PipeClient_Disconnected;
-
-            // If the active mode had EC override on, the helper was driving 0xC6C8 every
-            // 3s. With the helper gone (crash or kill), 0xC6C8 holds whatever RPM we last
-            // wrote — fan stuck at that value until the helper reconnects or reboot.
-            // Surface a warning in the fan card so the user isn't left wondering why the
-            // fan won't ramp. Cleared on next successful pipe-connect (OnPipeConnectedAsync).
-            bool activeUnlockWasOn = legionUnlockFanCurve != null && legionUnlockFanCurve.Value;
-
-            // Show reconnecting state and trigger guarded reconnect flow.
-            await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
-            {
-                ShowConnectionBanner(BannerState.Reconnecting);
-                if (activeUnlockWasOn && FanCurveHelperDisconnectedWarning != null)
+                // Ignore disconnects from inactive/unloading widget instances.
+                // A new active instance will own reconnection.
+                if (isUnloading || App.GetActiveGamingWidget() != this)
                 {
-                    FanCurveHelperDisconnectedWarning.Visibility = Windows.UI.Xaml.Visibility.Visible;
+                    Logger.Info($"Skipping reconnect handling (isUnloading={isUnloading}, isActive={App.GetActiveGamingWidget() == this})");
+                    return;
                 }
-            });
 
-            // Skip auto-relaunch if the helper just told us it's exiting on purpose. Relaunching
-            // the dying helper here raced it and spawned two instances contending for the pipe
-            // (issue #81). The intentional initiator owns relaunch.
-            double sinceIntentionalMs = (DateTime.UtcNow - _helperIntentionalExitUtc).TotalMilliseconds;
-            if (sinceIntentionalMs < IntentionalExitSuppressMs)
-            {
-                Logger.Info($"Pipe disconnected after intentional helper exit ({sinceIntentionalMs:F0}ms ago) - skipping auto-relaunch.");
-                return;
+                // Unregister handlers
+                App.PipeMessageReceived -= PipeClient_MessageReceived;
+                App.PipeDisconnected -= PipeClient_Disconnected;
+
+                // If the active mode had EC override on, the helper was driving 0xC6C8 every
+                // 3s. With the helper gone (crash or kill), 0xC6C8 holds whatever RPM we last
+                // wrote — fan stuck at that value until the helper reconnects or reboot.
+                // Surface a warning in the fan card so the user isn't left wondering why the
+                // fan won't ramp. Cleared on next successful pipe-connect (OnPipeConnectedAsync).
+                bool activeUnlockWasOn = legionUnlockFanCurve != null && legionUnlockFanCurve.Value;
+
+                // Show reconnecting state and trigger guarded reconnect flow.
+                TryRunOnDispatcher(() =>
+                {
+                    ShowConnectionBanner(BannerState.Reconnecting);
+                    if (activeUnlockWasOn && FanCurveHelperDisconnectedWarning != null)
+                    {
+                        FanCurveHelperDisconnectedWarning.Visibility = Windows.UI.Xaml.Visibility.Visible;
+                    }
+                }, "PipeClient_Disconnected/banner");
+
+                // Skip auto-relaunch if the helper just told us it's exiting on purpose. Relaunching
+                // the dying helper here raced it and spawned two instances contending for the pipe
+                // (issue #81). The intentional initiator owns relaunch.
+                double sinceIntentionalMs = (DateTime.UtcNow - _helperIntentionalExitUtc).TotalMilliseconds;
+                if (sinceIntentionalMs < IntentionalExitSuppressMs)
+                {
+                    Logger.Info($"Pipe disconnected after intentional helper exit ({sinceIntentionalMs:F0}ms ago) - skipping auto-relaunch.");
+                    return;
+                }
+
+                Logger.Info("Pipe disconnected - starting automatic helper reconnection");
+                TryRunOnDispatcher(() =>
+                {
+                    _ = LaunchHelperWithGuardsAsync("Pipe disconnected");
+                }, "PipeClient_Disconnected/relaunch");
             }
-
-            Logger.Info("Pipe disconnected - starting automatic helper reconnection");
-            await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
+            catch (Exception ex)
             {
-                _ = LaunchHelperWithGuardsAsync("Pipe disconnected");
-            });
+                Logger.Error(ex, "PipeClient_Disconnected failed");
+            }
         }
 
         // Single-pass JSON string unescape. Sequential Replace() calls corrupt data:

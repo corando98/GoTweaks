@@ -97,6 +97,9 @@ namespace XboxGamingBar
                         {
                             // Analog LT/RT poll only runs while the widget is visible.
                             StartAnalogTriggerPoll();
+                            // Default-tab preference applies on every open, BEFORE the
+                            // focus anchor so the anchor lands on the right pill.
+                            ApplyDefaultTabOnOpen();
                             var focused = FocusManager.GetFocusedElement();
                             Logger.Info($"Open-anchor: focus was on {(focused == null ? "null" : focused.GetType().Name)}; anchoring to active nav item");
                             FocusActiveNavItem();

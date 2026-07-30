@@ -43,6 +43,28 @@ namespace XboxGamingBar
 {
     public sealed partial class GamingWidget
     {
+        /// <summary>
+        /// Writes one value into a settings container, absorbing the failure instead
+        /// of aborting the caller mid-save. LocalSettings enforces a ~8 KB cap per
+        /// value; an oversized string (large button-mapping JSON) throws, and without
+        /// this guard the exception aborted SaveControllerProfileToStorage partway
+        /// through — a torn profile where keys before the throw held new values and
+        /// the rest stayed stale. Skipping the one oversized key keeps the previous
+        /// stored value for it and lets every other key save normally.
+        /// </summary>
+        private static void SetSettingSafe(ApplicationDataContainer container, string key, object value)
+        {
+            try
+            {
+                container.Values[key] = value;
+            }
+            catch (Exception ex)
+            {
+                int len = (value as string)?.Length ?? -1;
+                Logger.Error($"Failed to store setting '{key}'{(len >= 0 ? $" ({len} chars)" : "")}: {ex.Message} — skipped, previous stored value retained");
+            }
+        }
+
         private void SaveControllerProfileToStorage(string profileName, ControllerProfile profile)
         {
             // Never save to "No game detected" profile
@@ -59,14 +81,14 @@ namespace XboxGamingBar
             var y1Json = profile.ButtonY1.ToJson();
             var y2Json = profile.ButtonY2.ToJson();
             var desktopJson = profile.ButtonDesktop.ToJson();
-            container.Values["ButtonY1"] = y1Json;
-            container.Values["ButtonY2"] = y2Json;
-            container.Values["ButtonY3"] = profile.ButtonY3.ToJson();
-            container.Values["ButtonM1"] = profile.ButtonM1.ToJson();
-            container.Values["ButtonM2"] = profile.ButtonM2.ToJson();
-            container.Values["ButtonM3"] = profile.ButtonM3.ToJson();
-            container.Values["ButtonDesktop"] = desktopJson;
-            container.Values["ButtonPage"] = profile.ButtonPage.ToJson();
+            SetSettingSafe(container, "ButtonY1", y1Json);
+            SetSettingSafe(container, "ButtonY2", y2Json);
+            SetSettingSafe(container, "ButtonY3", profile.ButtonY3.ToJson());
+            SetSettingSafe(container, "ButtonM1", profile.ButtonM1.ToJson());
+            SetSettingSafe(container, "ButtonM2", profile.ButtonM2.ToJson());
+            SetSettingSafe(container, "ButtonM3", profile.ButtonM3.ToJson());
+            SetSettingSafe(container, "ButtonDesktop", desktopJson);
+            SetSettingSafe(container, "ButtonPage", profile.ButtonPage.ToJson());
             Logger.Info($"SaveControllerProfile: {profileName} ButtonY1={y1Json}, ButtonY2={y2Json}, ButtonDesktop={desktopJson}");
             container.Values["NintendoLayout"] = profile.NintendoLayout;
             container.Values["VibrationLevel"] = profile.VibrationLevel;
@@ -104,7 +126,7 @@ namespace XboxGamingBar
             if (profile.GamepadButtonMappings != null && profile.GamepadButtonMappings.Count > 0)
             {
                 var gamepadMappingsJson = SerializeGamepadButtonMappings(profile.GamepadButtonMappings);
-                container.Values["GamepadButtonMappings"] = gamepadMappingsJson;
+                SetSettingSafe(container, "GamepadButtonMappings", gamepadMappingsJson);
             }
             else
             {
@@ -126,7 +148,7 @@ namespace XboxGamingBar
             // Store the game exe path for game profiles (used for loading icons)
             if (profileName.StartsWith("Game_") && !string.IsNullOrEmpty(currentGameExePath))
             {
-                container.Values["GameExePath"] = currentGameExePath;
+                SetSettingSafe(container, "GameExePath", currentGameExePath);
             }
 
             Logger.Info($"Saved controller profile: {profileName}, LightMode={profile.LightMode}, Color=#{profile.LightColorR:X2}{profile.LightColorG:X2}{profile.LightColorB:X2}, Brightness={profile.LightBrightness}");
@@ -1878,8 +1900,12 @@ namespace XboxGamingBar
 
                 Logger.Info("Re-pushing active controller profile to helper after pipe connect (recovery from cold-start race)");
                 SendButtonMappingsToHelper(profile, force: true);
-                SendControllerSettingsToHelper(profile);
-                SendLightingToHelper(profile);
+                // force: the widget's cached values equal the profile's, so plain
+                // SetValue would equality-skip and nothing would reach a restarted
+                // helper (verified 2026-07-30 — recovery previously depended solely
+                // on the helper's own global.xml restore).
+                SendControllerSettingsToHelper(profile, force: true);
+                SendLightingToHelper(profile, force: true);
             }
             catch (Exception ex)
             {
@@ -1890,7 +1916,7 @@ namespace XboxGamingBar
         /// <summary>
         /// Sends lighting settings to the helper via IPC
         /// </summary>
-        private void SendLightingToHelper(ControllerProfile profile)
+        private void SendLightingToHelper(ControllerProfile profile, bool force = false)
         {
             try
             {
@@ -1919,8 +1945,10 @@ namespace XboxGamingBar
                     return;
                 }
 
-                // Send light mode
-                legionLightMode?.SetValue(profile.LightMode);
+                // Send light mode (force bypasses the equality skip on reconnect
+                // resends — see SendControllerSettingsToHelper)
+                if (force) legionLightMode?.ForceSetValue(profile.LightMode);
+                else legionLightMode?.SetValue(profile.LightMode);
 
                 // Send light color as hex string (RRGGBB format)
                 // Use SetFromProfile to mark as user-saved, preventing sync from overwriting with helper's default
@@ -1928,13 +1956,16 @@ namespace XboxGamingBar
                 legionLightColor?.SetFromProfile(colorHex);
 
                 // Send light speed
-                legionLightSpeed?.SetValue(profile.LightSpeed);
+                if (force) legionLightSpeed?.ForceSetValue(profile.LightSpeed);
+                else legionLightSpeed?.SetValue(profile.LightSpeed);
 
                 // Send brightness
-                legionLightBrightness?.SetValue(profile.LightBrightness);
+                if (force) legionLightBrightness?.ForceSetValue(profile.LightBrightness);
+                else legionLightBrightness?.SetValue(profile.LightBrightness);
 
                 // Send power light
-                legionPowerLight?.SetValue(profile.PowerLight);
+                if (force) legionPowerLight?.ForceSetValue(profile.PowerLight);
+                else legionPowerLight?.SetValue(profile.PowerLight);
 
                 Logger.Info($"Sent lighting to helper: Mode={profile.LightMode}, Color=#{colorHex}, Speed={profile.LightSpeed}, Brightness={profile.LightBrightness}, PowerLight={profile.PowerLight}");
             }
@@ -1948,37 +1979,49 @@ namespace XboxGamingBar
         /// Sends all controller settings (gyro, deadzone, vibration, triggers) to the helper via IPC.
         /// This ensures the helper has the full profile even when the widget is closed.
         /// </summary>
-        private void SendControllerSettingsToHelper(ControllerProfile profile)
+        private void SendControllerSettingsToHelper(ControllerProfile profile, bool force = false)
         {
             try
             {
+                // force: on a RECONNECT resend the widget's cached values equal the
+                // profile values, so plain SetValue hits GenericProperty's equality
+                // skip and nothing goes over the wire — a restarted helper would only
+                // have whatever its own persistence restored. ForceSetValue bypasses
+                // the skip (same pattern as the button-mapping resend).
+                void Send<T>(Shared.Data.GenericProperty<T> prop, T value)
+                {
+                    if (prop == null) return;
+                    if (force) prop.ForceSetValue(value);
+                    else prop.SetValue(value);
+                }
+
                 // Vibration settings
-                legionVibration?.SetValue(profile.VibrationLevel);
-                legionVibrationMode?.SetValue(profile.VibrationMode);
+                Send(legionVibration, profile.VibrationLevel);
+                Send(legionVibrationMode, profile.VibrationMode);
 
                 // Gyro settings
-                legionGyroTarget?.SetValue(profile.GyroTarget);
-                legionGyroSensitivityX?.SetValue(profile.GyroSensitivityX);
-                legionGyroSensitivityY?.SetValue(profile.GyroSensitivityY);
-                legionGyroInvertX?.SetValue(profile.GyroInvertX);
-                legionGyroInvertY?.SetValue(profile.GyroInvertY);
-                legionGyroMappingType?.SetValue(profile.GyroMappingType);
-                legionGyroActivationMode?.SetValue(profile.GyroActivationMode);
-                legionGyroActivationButton?.SetValue(profile.GyroActivationButton);
-                legionGyroDeadzone?.SetValue(profile.GyroDeadzone);
+                Send(legionGyroTarget, profile.GyroTarget);
+                Send(legionGyroSensitivityX, profile.GyroSensitivityX);
+                Send(legionGyroSensitivityY, profile.GyroSensitivityY);
+                Send(legionGyroInvertX, profile.GyroInvertX);
+                Send(legionGyroInvertY, profile.GyroInvertY);
+                Send(legionGyroMappingType, profile.GyroMappingType);
+                Send(legionGyroActivationMode, profile.GyroActivationMode);
+                Send(legionGyroActivationButton, profile.GyroActivationButton);
+                Send(legionGyroDeadzone, profile.GyroDeadzone);
 
                 // Stick deadzone settings
-                legionLeftStickDeadzone?.SetValue(profile.LeftStickDeadzone);
-                legionRightStickDeadzone?.SetValue(profile.RightStickDeadzone);
+                Send(legionLeftStickDeadzone, profile.LeftStickDeadzone);
+                Send(legionRightStickDeadzone, profile.RightStickDeadzone);
 
                 // Trigger travel settings
-                legionLeftTriggerStart?.SetValue(profile.LeftTriggerStart);
-                legionLeftTriggerEnd?.SetValue(profile.LeftTriggerEnd);
-                legionRightTriggerStart?.SetValue(profile.RightTriggerStart);
-                legionRightTriggerEnd?.SetValue(profile.RightTriggerEnd);
-                legionHairTriggers?.SetValue(profile.HairTriggers);
+                Send(legionLeftTriggerStart, profile.LeftTriggerStart);
+                Send(legionLeftTriggerEnd, profile.LeftTriggerEnd);
+                Send(legionRightTriggerStart, profile.RightTriggerStart);
+                Send(legionRightTriggerEnd, profile.RightTriggerEnd);
+                Send(legionHairTriggers, profile.HairTriggers);
 
-                Logger.Info($"Sent controller settings to helper: Vib={profile.VibrationLevel}, VibMode={profile.VibrationMode}, GyroTarget={profile.GyroTarget}, LDZ={profile.LeftStickDeadzone}, RDZ={profile.RightStickDeadzone}");
+                Logger.Info($"Sent controller settings to helper (force={force}): Vib={profile.VibrationLevel}, VibMode={profile.VibrationMode}, GyroTarget={profile.GyroTarget}, LDZ={profile.LeftStickDeadzone}, RDZ={profile.RightStickDeadzone}");
             }
             catch (Exception ex)
             {

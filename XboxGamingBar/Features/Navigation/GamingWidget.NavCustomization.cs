@@ -22,6 +22,7 @@ namespace XboxGamingBar
         // Tag -> display label (nav logic keys on Tag; Content is presentation only).
         private static readonly Dictionary<string, string> NavLabels = new Dictionary<string, string>
         {
+            { "Setup", "Setup" },
             { "Quick", "Quick" },
             { "Performance", "Power" },
             { "Game", "Profiles" },
@@ -54,6 +55,7 @@ namespace XboxGamingBar
         {
             { "Legion", "\uE7FC" }, // Game (controller outline)
             { "GPD", "\uE7EF" },    // alternate controller glyph (matches ClawTweaks' GPD tab)
+            { "Setup", "\uE90F" },  // Repair (wrench) \u2014 first-run tool setup
         };
 
         internal void NavBarIconsToggle_Toggled(object sender, RoutedEventArgs e)

@@ -102,7 +102,14 @@ namespace XboxGamingBar
             // diagnosed from the widget log.
             this.UnhandledException += (s, e) =>
             {
-                try { Logger.Error($"Unhandled widget exception (suppressed to keep Game Bar alive): {e.Message}\n{e.Exception}"); }
+                try
+                {
+                    Logger.Error($"Unhandled widget exception (suppressed to keep Game Bar alive): {e.Message}\n{e.Exception}");
+                    // Flush synchronously: if suppression fails (or a second exception
+                    // follows) the process dies with the async NLog buffer unwritten —
+                    // exactly the crashes whose logs we most need.
+                    LogManager.Flush();
+                }
                 catch { /* logging must never re-throw here */ }
                 e.Handled = true;
             };
