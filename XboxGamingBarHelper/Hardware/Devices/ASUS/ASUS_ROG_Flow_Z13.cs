@@ -1,4 +1,4 @@
-´╗┐namespace XboxGamingBarHelper.Hardware.Devices.ASUS
+namespace XboxGamingBarHelper.Hardware.Devices.ASUS
 {
     [DeviceId("ASUS GZ302EA")]
     internal class ASUS_ROG_Flow_Z13 : ASUS_Device

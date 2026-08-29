@@ -1,4 +1,4 @@
-´╗┐namespace XboxGamingBarHelper.Hardware.CPUs.AMD
+namespace XboxGamingBarHelper.Hardware.CPUs.AMD
 {
     internal abstract class AMD_Ryzen : AMD_CPU
     {

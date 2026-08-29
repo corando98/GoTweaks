@@ -1,4 +1,4 @@
-´╗┐namespace XboxGamingBarHelper.Hardware.Devices.Onexplayer
+namespace XboxGamingBarHelper.Hardware.Devices.Onexplayer
 {
     [DeviceId("ONEXPLAYER 2 PRO ARP23P")]
     internal class Onexplayer_2_Pro : Device

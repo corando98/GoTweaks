@@ -1,4 +1,4 @@
-´╗┐using NLog;
+using NLog;
 using System;
 using XboxGamingBarHelper.Hardware.Devices.ASUS;
 using XboxGamingBarHelper.Hardware.Devices.Lenovo;

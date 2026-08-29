@@ -1,4 +1,4 @@
-´╗┐namespace XboxGamingBarHelper.Hardware.Devices
+namespace XboxGamingBarHelper.Hardware.Devices
 {
     internal class GenericDevice : Device
     {

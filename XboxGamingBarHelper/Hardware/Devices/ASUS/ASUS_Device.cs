@@ -1,4 +1,4 @@
-´╗┐namespace XboxGamingBarHelper.Hardware.Devices.ASUS
+namespace XboxGamingBarHelper.Hardware.Devices.ASUS
 {
     internal class ASUS_Device : Device
     {

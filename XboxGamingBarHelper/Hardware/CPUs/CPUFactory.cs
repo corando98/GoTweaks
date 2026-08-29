@@ -1,4 +1,4 @@
-´╗┐using NLog;
+using NLog;
 using System;
 using XboxGamingBarHelper.Hardware.CPUs;
 using XboxGamingBarHelper.Hardware.CPUs.AMD;

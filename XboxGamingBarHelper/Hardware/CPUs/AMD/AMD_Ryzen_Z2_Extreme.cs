@@ -1,4 +1,4 @@
-´╗┐namespace XboxGamingBarHelper.Hardware.CPUs.AMD
+namespace XboxGamingBarHelper.Hardware.CPUs.AMD
 {
     [CPUId("AMD Ryzen Z2 Extreme")]
     internal class AMD_Ryzen_Z2_Extreme : AMD_Ryzen

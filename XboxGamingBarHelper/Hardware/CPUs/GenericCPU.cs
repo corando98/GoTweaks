@@ -1,4 +1,4 @@
-´╗┐namespace XboxGamingBarHelper.Hardware.CPUs
+namespace XboxGamingBarHelper.Hardware.CPUs
 {
     internal class GenericCPU : CPU
     {

@@ -1,6 +1,7 @@
 using System.Drawing;
 using XboxGamingBarHelper.AutoTDP;
 
+using XboxGamingBarHelper.Performance;
 namespace XboxGamingBarHelper.RTSS.OSDItems
 {
     internal class OSDItemAutoTDP : OSDItem

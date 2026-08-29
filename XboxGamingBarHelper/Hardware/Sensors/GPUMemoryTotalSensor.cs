@@ -2,6 +2,7 @@
 using LibreHardwareMonitor.Hardware;
 #endif
 
+using XboxGamingBarHelper.Performance;
 namespace XboxGamingBarHelper.Hardware.Sensors
 {
     internal class GPUMemoryTotalSensor : HardwareSensor

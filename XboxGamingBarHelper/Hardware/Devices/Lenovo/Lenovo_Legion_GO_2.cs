@@ -1,4 +1,4 @@
-´╗┐namespace XboxGamingBarHelper.Hardware.Devices.Lenovo
+namespace XboxGamingBarHelper.Hardware.Devices.Lenovo
 {
     [DeviceId("Lenovo LNVNB161216")]
     internal class Lenovo_Legion_GO_2 : Device

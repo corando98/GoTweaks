@@ -1,5 +1,6 @@
 using System.Drawing;
 
+using XboxGamingBarHelper.Performance;
 namespace XboxGamingBarHelper.RTSS.OSDItems
 {
     /// <summary>

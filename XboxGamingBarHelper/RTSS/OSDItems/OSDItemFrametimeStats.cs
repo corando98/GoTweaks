@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Drawing;
 
+using XboxGamingBarHelper.Performance;
 namespace XboxGamingBarHelper.RTSS.OSDItems
 {
     internal class OSDItemFrametimeStats : OSDItem

@@ -1,4 +1,5 @@
-´╗┐namespace XboxGamingBarHelper.RTSS.OSDItems
+using XboxGamingBarHelper.Performance;
+namespace XboxGamingBarHelper.RTSS.OSDItems
 {
     internal class OSDItemFPS : OSDItem
     {

@@ -1,4 +1,4 @@
-´╗┐namespace XboxGamingBarHelper.Hardware
+namespace XboxGamingBarHelper.Hardware
 {
     internal abstract class Device
     {

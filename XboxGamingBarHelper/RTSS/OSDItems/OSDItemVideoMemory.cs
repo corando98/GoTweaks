@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using XboxGamingBarHelper.Hardware;
 
+using XboxGamingBarHelper.Performance;
 namespace XboxGamingBarHelper.RTSS.OSDItems
 {
     internal class OSDItemVideoMemory : OSDItem
