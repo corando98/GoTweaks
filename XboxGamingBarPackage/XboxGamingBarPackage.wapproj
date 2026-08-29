@@ -41,7 +41,7 @@
     <HoursBetweenUpdateChecks>0</HoursBetweenUpdateChecks>
     <AppxSymbolPackageEnabled>True</AppxSymbolPackageEnabled>
     <GenerateTemporaryStoreCertificate>True</GenerateTemporaryStoreCertificate>
-    <PackageCertificateKeyFile>XboxGamingBarPackage_TemporaryKey.pfx</PackageCertificateKeyFile>
+    <PackageCertificateThumbprint>E86093A40DDAA5C34F130FE644A9E69335ED863E</PackageCertificateThumbprint>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x86'">
     <AppxBundle>Always</AppxBundle>

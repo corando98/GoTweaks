@@ -1,4 +1,4 @@
-﻿using Microsoft.Win32;
+using Microsoft.Win32;
 using System;
 using System.Diagnostics;
 //using XboxGamingBarHelper.Windows;
@@ -297,10 +297,38 @@ namespace XboxGamingBarHelper.AMD
 
         public AMDManager() : base()
         {
+            EnsureAmdSoftwareIsRunning();
             RunAdlxInitWithWatchdog();
             // Always run — fills any property the init left null (timeout,
             // exception, or a probe that hung partway).
             EnsureAmdPropertyDefaults();
+        }
+
+        private void EnsureAmdSoftwareIsRunning()
+        {
+            if (Shared.Utilities.AMDHelper.IsInstalled(out string amdInstallDir))
+            {
+                if (!Shared.Utilities.AMDHelper.IsRunning(out _))
+                {
+                    var executablePath = System.IO.Path.Combine(amdInstallDir, $"{Shared.Utilities.AMDHelper.AMD_SOFTWARE_ADRENALINE_EDITION_FILE_NAME}.exe");
+                    if (System.IO.File.Exists(executablePath))
+                    {
+                        Logger.Info("AMD Software is not running. Starting it automatically...");
+                        try
+                        {
+                            Process.Start(new ProcessStartInfo(executablePath)
+                            {
+                                UseShellExecute = true,
+                                WindowStyle = ProcessWindowStyle.Hidden,
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Error(ex, "Failed to start AMD Software.");
+                        }
+                    }
+                }
+            }
         }
 
         private void InitializeAdlxCore()

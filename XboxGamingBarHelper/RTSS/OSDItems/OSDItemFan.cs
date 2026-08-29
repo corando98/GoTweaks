@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using XboxGamingBarHelper.Devices.Libraries.Legion;
 
+using XboxGamingBarHelper.Performance;
 namespace XboxGamingBarHelper.RTSS.OSDItems
 {
     /// <summary>
