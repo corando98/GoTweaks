@@ -114,6 +114,7 @@ namespace XboxGamingBarHelper
         private static GPDManager gpdManager;
         private static ControllerEmulationManager controllerEmulationManager;
         private static XboxGamingBarHelper.ControllerEmulation.Viiper.ViiperEmulationManager viiperEmulationManager;
+        private static AttachedControllerAutoOff attachedControllerAutoOff;
         private static AutoTDPManager autoTDPManager;
         private static DefaultGameProfileManager defaultGameProfileManager;
         private static List<IManager> Managers;
@@ -406,6 +407,8 @@ namespace XboxGamingBarHelper
                     legionManager?.EmergencyReleaseFanOverride();
                     try { controllerEmulationManager?.SuppressionManager?.Disable(); }
                     catch (Exception ex) { Logger.Warn($"ProcessExit HidHide.Disable threw: {ex.Message}"); }
+                    try { attachedControllerAutoOff?.Dispose(); }
+                    catch (Exception ex) { Logger.Warn($"ProcessExit AttachedControllerAutoOff.Dispose threw: {ex.Message}"); }
                     try { viiperEmulationManager?.Dispose(); }
                     catch (Exception ex) { Logger.Warn($"ProcessExit VIIPER.Dispose threw: {ex.Message}"); }
                     LogManager.Flush();
@@ -422,6 +425,8 @@ namespace XboxGamingBarHelper
                     legionManager?.EmergencyReleaseFanOverride();
                     try { controllerEmulationManager?.SuppressionManager?.Disable(); }
                     catch (Exception ex) { Logger.Warn($"UnhandledException HidHide.Disable threw: {ex.Message}"); }
+                    try { attachedControllerAutoOff?.Dispose(); }
+                    catch (Exception ex) { Logger.Warn($"UnhandledException AttachedControllerAutoOff.Dispose threw: {ex.Message}"); }
                     try { viiperEmulationManager?.Dispose(); }
                     catch (Exception ex) { Logger.Warn($"UnhandledException VIIPER.Dispose threw: {ex.Message}"); }
                     LogManager.Flush();
@@ -1393,6 +1398,30 @@ namespace XboxGamingBarHelper
             // legionManager is passed so VIIPER can forward LED color reports to the Legion stick lights.
             viiperEmulationManager = new XboxGamingBarHelper.ControllerEmulation.Viiper.ViiperEmulationManager(settingsManager, controllerEmulationManager, legionManager);
 
+            // Attached-controller auto-off (Legion Go): turns the side-attached Legion pad off
+            // while another gamepad is in use. Off unless the user enables it per dock state.
+            if (legionManager != null)
+            {
+                attachedControllerAutoOff = new AttachedControllerAutoOff(legionManager, settingsManager);
+            }
+
+            // Windows shutdown / sign-out: tear the usbip virtual pad down cleanly NOW, while
+            // the usbip2_ude driver is still fully up. Without this the helper is simply killed
+            // with the pad still attached and the UDE driver tears it down itself during
+            // driver shutdown (BSODs at shutdown, 2026-11-25). SessionEnded (not Ending) so a
+            // cancelled shutdown doesn't leave emulation off.
+            Microsoft.Win32.SystemEvents.SessionEnded += (s, e) =>
+            {
+                Logger.Info($"Session ended ({e.Reason}) — releasing virtual pad, HidHide and controller state");
+                try { attachedControllerAutoOff?.Dispose(); }
+                catch (Exception ex) { Logger.Warn($"SessionEnded AttachedControllerAutoOff.Dispose threw: {ex.Message}"); }
+                try { viiperEmulationManager?.Dispose(); }
+                catch (Exception ex) { Logger.Warn($"SessionEnded VIIPER.Dispose threw: {ex.Message}"); }
+                try { controllerEmulationManager?.SuppressionManager?.Disable(); }
+                catch (Exception ex) { Logger.Warn($"SessionEnded HidHide.Disable threw: {ex.Message}"); }
+                LogManager.Flush();
+            };
+
             // PawnIO/RyzenSMU initialization for anti-cheat compatible TDP control
             // Priority: Legion WMI > PawnIO/RyzenSMU > RyzenAdj (deprecated, WinRing0 not bundled)
             // Uses official signed module from release 0.2.1
@@ -1651,6 +1680,8 @@ namespace XboxGamingBarHelper
                 settingsManager.ViiperDesktopButtonTarget,
                 settingsManager.ViiperPageButtonTarget,
                 settingsManager.ViiperSwapRumbleMotors,
+                settingsManager.LegionAutoOffWhenDocked,
+                settingsManager.LegionAutoOffWhenUndocked,
                 settingsManager.ViiperRumbleIntensity,
                 settingsManager.GoTweaksLightingConfig,
                 settingsManager.GoTweaksHapticsConfig,
@@ -2260,6 +2291,10 @@ namespace XboxGamingBarHelper
             settingsManager = null;
             legionManager = null;
             controllerEmulationManager = null;
+
+            try { attachedControllerAutoOff?.Dispose(); }
+            catch (Exception ex) { Logger.Warn($"attachedControllerAutoOff.Dispose threw: {ex.Message}"); }
+            attachedControllerAutoOff = null;
 
             try { viiperEmulationManager?.Dispose(); }
             catch (Exception ex) { Logger.Warn($"viiperEmulationManager.Dispose threw: {ex.Message}"); }

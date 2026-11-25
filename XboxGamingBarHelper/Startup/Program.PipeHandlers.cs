@@ -888,10 +888,12 @@ namespace XboxGamingBarHelper
                     {
                         int action = Convert.ToInt32(request.Content);
                         ControlDAService(action);
-                        // No sleep needed: ControlDAService applies the permanent startup-type change
-                        // synchronously (the background task only handles the slow stop/start), and
-                        // GetDAServiceStatus reports that StartType — so it's already accurate here.
-                        int status = GetDAServiceStatus();
+                        // Disable: report the state the user just asked for. The kills are issued
+                        // synchronously but processes take a moment to exit, so probing here would
+                        // race and flip the button straight back to "Disable". A later status poll
+                        // picks up anything that relaunches. Enable: StartType is now auto, which
+                        // GetDAServiceStatus reports immediately.
+                        int status = action == 0 ? 0 : GetDAServiceStatus();
                         response = new global::Windows.Foundation.Collections.ValueSet();
                         response.Add(nameof(Function), (int)Function.Labs_DAServiceStatus);
                         response.Add("Content", status);

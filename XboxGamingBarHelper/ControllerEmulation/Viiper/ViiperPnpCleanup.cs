@@ -111,15 +111,32 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
         /// handle on exit — those show up alive in joy.cpl as duplicate
         /// "Xbox 360 Controller for Windows" entries delivering double input).
         /// </summary>
+        /// <summary>
+        /// Synchronous version of <see cref="CleanupAllKnownGhosts"/> for the VIIPER start
+        /// paths: returns only after every removal is done, so nothing can race the
+        /// AddDevice + usbip attach that follows. Listing takes ~0.2 s; removals are rare.
+        /// </summary>
+        public static void CleanupAllKnownGhostsBlocking()
+        {
+            try { RunCleanup(AllKnownVidPids()); }
+            catch (Exception ex) { Logger.Debug($"ViiperPnpCleanup blocking sweep threw: {ex.Message}"); }
+        }
+
+        private static HashSet<(ushort vid, ushort pid)> AllKnownVidPids()
+        {
+            var all = new HashSet<(ushort vid, ushort pid)>();
+            foreach (var kvp in TargetVidPids)
+            {
+                foreach (var pair in kvp.Value) all.Add(pair);
+            }
+            return all;
+        }
+
         public static void CleanupAllKnownGhosts()
         {
             System.Threading.Tasks.Task.Run(() =>
             {
-                var all = new HashSet<(ushort vid, ushort pid)>();
-                foreach (var kvp in TargetVidPids)
-                {
-                    foreach (var pair in kvp.Value) all.Add(pair);
-                }
+                var all = AllKnownVidPids();
                 try { RunCleanup(all); }
                 catch (Exception ex) { Logger.Debug($"ViiperPnpCleanup startup sweep threw: {ex.Message}"); }
 
@@ -406,7 +423,17 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
                 string upperId = instanceId.ToUpperInvariant();
                 foreach (var prefix in targetVidPids)
                 {
-                    if (upperId.Contains(prefix)) { toRemove.Add(instanceId); break; }
+                    if (!upperId.Contains(prefix)) continue;
+                    // The VID/PIDs we emulate are the same ones real Xbox / PlayStation /
+                    // Switch pads use. Never delete the PnP entry of the user's real,
+                    // currently-unplugged controller — only ghosts of our virtual pads.
+                    if (IsGhostOfRealHardware(instanceId))
+                    {
+                        Logger.Debug($"ViiperPnpCleanup: keeping {instanceId} (real hardware, not a VIIPER ghost)");
+                        break;
+                    }
+                    toRemove.Add(instanceId);
+                    break;
                 }
             }
 
@@ -414,9 +441,58 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             Logger.Info($"ViiperPnpCleanup: removing {toRemove.Count} ghost PnP entr{(toRemove.Count == 1 ? "y" : "ies")}");
             foreach (var id in toRemove)
             {
-                string output = RunPnputil($"/remove-device \"{id}\"");
-                Logger.Info($"  pnputil /remove-device {id} → {(output ?? string.Empty).TrimEnd()}");
+                // Serialize with usbip attach/detach, and re-check right before removing: the
+                // list above is a snapshot, and a virtual pad re-attached since then reuses the
+                // same instance ID. Removing a LIVE usbip2_ude device crashes the kernel.
+                lock (UsbipCli.AttachSync)
+                {
+                    if (IsPresentNow(id))
+                    {
+                        Logger.Info($"  skipping {id}: present again (live device), not a ghost");
+                        continue;
+                    }
+                    string output = RunPnputil($"/remove-device \"{id}\"");
+                    Logger.Info($"  pnputil /remove-device {id} → {(output ?? string.Empty).TrimEnd()}");
+                }
             }
+        }
+
+        /// <summary>True if the device node is currently in the live PnP tree (not a phantom).</summary>
+        private static bool IsPresentNow(string instanceId)
+        {
+            try { return CM_Locate_DevNodeW(out _, instanceId, 0 /*CM_LOCATE_DEVNODE_NORMAL*/) == 0; }
+            catch { return true; } // unsure -> don't remove
+        }
+
+        /// <summary>
+        /// For a disconnected (Present=False) entry: follows its recorded parent chain
+        /// (DEVPKEY_Device_Parent works on phantom nodes too) and returns true only when it
+        /// was attached through real hardware (reaches PCI\ or ACPI\) rather than the
+        /// usbip-win2 software bus (ROOT\USB\). Unresolvable chains return false, keeping the
+        /// old behavior of sweeping them, since VIIPER ghosts are the common case.
+        /// </summary>
+        private static bool IsGhostOfRealHardware(string instanceId)
+        {
+            try
+            {
+                string id = instanceId;
+                for (int depth = 0; depth < 16 && !string.IsNullOrEmpty(id); depth++)
+                {
+                    if (id.StartsWith("ROOT\\USB\\", StringComparison.OrdinalIgnoreCase)) return false;
+                    if (id.StartsWith("PCI\\", StringComparison.OrdinalIgnoreCase) ||
+                        id.StartsWith("ACPI\\", StringComparison.OrdinalIgnoreCase) ||
+                        id.StartsWith("BTH", StringComparison.OrdinalIgnoreCase)) return true;
+
+                    var node = Nefarius.Utilities.DeviceManagement.PnP.PnPDevice.GetDeviceByInstanceId(
+                        id, Nefarius.Utilities.DeviceManagement.PnP.DeviceLocationFlags.Phantom);
+                    id = node?.GetProperty<string>(Nefarius.Utilities.DeviceManagement.PnP.DevicePropertyKey.Device_Parent);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Debug($"IsGhostOfRealHardware({instanceId}) lookup failed: {ex.Message}");
+            }
+            return false;
         }
 
         private static string RunPnputil(string args)

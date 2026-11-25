@@ -145,14 +145,14 @@ namespace XboxGamingBar
                 {
                     case 0: // Disabled (no auto-start; still launchable on demand)
                         daServiceIsRunning = false;
-                        DAServiceStatusText.Text = "Auto-start off - Legion Space won't run at boot (still launchable)";
+                        DAServiceStatusText.Text = "Legion Space stopped - won't run at boot (still launchable)";
                         DAServiceStatusText.Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0, 200, 83)); // Green
                         ToggleDAServiceButton.Content = "Enable";
                         ToggleDAServiceButton.IsEnabled = true;
                         break;
                     case 1: // Enabled (auto-starts at boot)
                         daServiceIsRunning = true;
-                        DAServiceStatusText.Text = "Auto-start on - Legion Space runs at boot";
+                        DAServiceStatusText.Text = "Legion Space is active (running or set to start at boot)";
                         DAServiceStatusText.Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 170, 0)); // Orange
                         ToggleDAServiceButton.Content = "Disable";
                         ToggleDAServiceButton.IsEnabled = true;

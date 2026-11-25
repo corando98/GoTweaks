@@ -56,7 +56,9 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
         // same exported busid, giving two live imports of one virtual pad (identical
         // duplicate controllers in every tester). Field-confirmed 2026-07-16:
         // two "usbip attach -b 1-1 succeeded" 3s apart, both "newly attached=1".
-        private static readonly object AttachSync = new object();
+        // Also taken by DetachAll and by ViiperPnpCleanup around each pnputil removal, so a
+        // device node is never removed while usbip is attaching/detaching it.
+        internal static readonly object AttachSync = new object();
 
         // Set when the in-process USBIP server (re)starts. Any import of our busids
         // that predates the server is a ZOMBIE: it belongs to a dead helper's server
@@ -193,6 +195,11 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
         /// <summary>Detaches every UDE port imported from libviiper's loopback server (any
         /// loopback spelling), including duplicates. Best-effort.</summary>
         public static void DetachAll()
+        {
+            lock (AttachSync) { DetachAllCore(); }
+        }
+
+        private static void DetachAllCore()
         {
             string exe = ResolveExe();
             if (exe == null) return;

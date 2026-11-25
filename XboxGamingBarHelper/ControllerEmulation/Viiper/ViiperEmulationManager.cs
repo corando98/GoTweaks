@@ -289,6 +289,16 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             // visible in helper_2026-05-20_23.log around 23:13:14.
             lock (startLock)
             {
+                // Attached-controller auto-off: the Legion pad is "turned off" while another
+                // gamepad is in use, so no virtual pad (full or guide-only) may stay plugged —
+                // it would still mirror the Legion input and could grab player 1.
+                if (legionAutoOffActive)
+                {
+                    if (isRunning) StopLocked();
+                    if (guideOnlyMode) StopGuideOnly();
+                    return;
+                }
+
                 bool backendOn = settingsManager?.EmulationBackend?.Value ?? false;
                 bool emulationEnabled = legacyManager?.EmulationEnabled ?? true;
 
@@ -345,6 +355,30 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
         {
             try { ReapplyMode(); }
             catch (Exception ex) { Logger.Warn($"ViiperEmulationManager.OnGuideRouteChanged threw: {ex.Message}"); }
+        }
+
+        private static volatile bool legionAutoOffActive;
+
+        /// <summary>True while attached-controller auto-off holds the virtual pad unplugged.</summary>
+        public static bool IsLegionAutoOffActive => legionAutoOffActive;
+
+        /// <summary>
+        /// Attached-controller auto-off (AttachedControllerAutoOff): true unplugs the VIIPER
+        /// virtual pad (and the guide-only pad) and keeps it unplugged; false re-applies the
+        /// normal mode, so emulation comes back exactly as the user had it configured.
+        /// Runs the (slow, HidHide/usbip-touching) re-apply off the caller's thread.
+        /// </summary>
+        public static void SetLegionAutoOff(bool active)
+        {
+            if (legionAutoOffActive == active) return;
+            legionAutoOffActive = active;
+            var inst = activeInstance;
+            if (inst == null) return;
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try { inst.ReapplyMode(); }
+                catch (Exception ex) { Logger.Warn($"SetLegionAutoOff({active}) re-apply threw: {ex.Message}"); }
+            });
         }
 
         /// <summary>
@@ -483,7 +517,12 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             // CE master is off, so the user wants their real pad visible. The guide-only
             // virtual pad sits alongside it just to deliver Game-Bar guide presses.
 
-            ViiperPnpCleanup.CleanupAllKnownGhosts();
+            // BLOCKING: the sweep must finish before AddDevice/attach. It used to run on the
+            // thread pool and pnputil-remove a "ghost" seconds later — by then usbip had
+            // re-attached the new pad under the SAME instance ID (stable serial), so it
+            // removed the LIVE virtual device out from under usbip2_ude, followed by a
+            // detach: kernel pool corruption / BSOD 0x13A (helper log 2026-11-25 10:08:45).
+            ViiperPnpCleanup.CleanupAllKnownGhostsBlocking();
 
             // A prior emulation session's pad may have been auto-reattached by usbip2_ude
             // after our DetachAll - force the next attach pass to sweep such zombies, else
@@ -668,6 +707,11 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
         {
             lock (startLock)
             {
+                if (legionAutoOffActive)
+                {
+                    Logger.Info("VIIPER start skipped: attached-controller auto-off is active");
+                    return false;
+                }
                 return StartLocked();
             }
         }
@@ -738,7 +782,12 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             // pin a game's rumble routing to one, so live rumble events stop
             // reaching the active device. Run this BEFORE AddDevice so the bus
             // is clean when the new device arrives.
-            ViiperPnpCleanup.CleanupAllKnownGhosts();
+            // BLOCKING: the sweep must finish before AddDevice/attach. It used to run on the
+            // thread pool and pnputil-remove a "ghost" seconds later — by then usbip had
+            // re-attached the new pad under the SAME instance ID (stable serial), so it
+            // removed the LIVE virtual device out from under usbip2_ude, followed by a
+            // detach: kernel pool corruption / BSOD 0x13A (helper log 2026-11-25 10:08:45).
+            ViiperPnpCleanup.CleanupAllKnownGhostsBlocking();
 
             // joycon-pair publishes two separate USB devices (left + right
             // Joy-Cons) on the same bus. libviiper has no "joycon-pair"
@@ -751,6 +800,7 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
             if (!addResult.Success)
             {
                 Logger.Warn($"VIIPER failed to add {registryName} device (target={targetType}); tearing down.");
+                ReleaseSuppressionAfterFailedStart();
                 service.RemoveBus(activeBusId);
                 service.Dispose();
                 return false;
@@ -765,6 +815,7 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
                 if (!secondary.Success)
                 {
                     Logger.Warn("VIIPER joycon-pair: secondary joycon-right add failed; tearing down primary.");
+                    ReleaseSuppressionAfterFailedStart();
                     service.RemoveDevice(activeBusId, activeDeviceId);
                     service.RemoveBus(activeBusId);
                     service.Dispose();
@@ -828,6 +879,26 @@ namespace XboxGamingBarHelper.ControllerEmulation.Viiper
                 forwarder.UpdatePhysicalIndex(repinnedIdx);
             }
             return true;
+        }
+
+        /// <summary>
+        /// Undo the HidHide cloak applied earlier in StartLocked when the start aborts
+        /// before a virtual pad exists. StopLocked can't do this for us: it bails on
+        /// !isRunning, and isRunning is only set once the forwarder is up. Without this,
+        /// a failed AddDevice left the physical controller hidden with no virtual pad
+        /// replacing it, so all controller input died a few seconds after launch (once
+        /// the deferred startup apply ran) until the helper was restarted.
+        /// </summary>
+        private void ReleaseSuppressionAfterFailedStart()
+        {
+            if (!viiperOwnsSuppression) return;
+            try
+            {
+                legacyManager?.SuppressionManager?.Disable();
+                Logger.Info("VIIPER: HidHide suppression released after failed start");
+            }
+            catch (Exception ex) { Logger.Warn($"VIIPER HidHide Disable (failed start) threw: {ex.Message}"); }
+            viiperOwnsSuppression = false;
         }
 
         /// <summary>
