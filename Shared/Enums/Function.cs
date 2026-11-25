@@ -615,5 +615,9 @@
         // virtual pad unplugged). Split by dock state; docked = an external display is active.
         LegionAutoOffWhenDocked,    // bool - default false
         LegionAutoOffWhenUndocked,  // bool - default false
+
+        // "Desktop / not in-game" profile: while no game is running, apply desktop.xml
+        // (settings changed on the desktop save there) instead of the global profile.
+        DesktopProfileEnabled,      // bool - default false
     }
 }

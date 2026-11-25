@@ -1682,6 +1682,7 @@ namespace XboxGamingBarHelper
                 settingsManager.ViiperSwapRumbleMotors,
                 settingsManager.LegionAutoOffWhenDocked,
                 settingsManager.LegionAutoOffWhenUndocked,
+                settingsManager.DesktopProfileEnabled,
                 settingsManager.ViiperRumbleIntensity,
                 settingsManager.GoTweaksLightingConfig,
                 settingsManager.GoTweaksHapticsConfig,
@@ -1921,6 +1922,9 @@ namespace XboxGamingBarHelper
                 };
             }
             profileManager.PerGameProfile.PropertyChanged += PerGameProfile_PropertyChanged;
+            settingsManager.DesktopProfileEnabled.PropertyChanged += DesktopProfileEnabled_PropertyChanged;
+            // Boot: no game is running yet, so put the Desktop profile in place now if enabled.
+            DesktopProfileEnabled_PropertyChanged(null, null);
             performanceManager.TDP.PropertyChanged += TDP_PropertyChanged;
             performanceManager.TDPBoostEnabled.PropertyChanged += TDPBoostEnabled_PropertyChanged;
             performanceManager.TDPBoostSPPT.PropertyChanged += TDPBoostSPPT_PropertyChanged;

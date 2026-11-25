@@ -12,6 +12,10 @@ namespace Shared.Data
     public struct GameProfile
     {
         public const string GLOBAL_PROFILE_NAME = "global";
+        // Optional "Desktop / not in-game" base profile (desktop.xml). Used instead of global
+        // while no game is running, when the user enables it. Like global it is a BASE profile:
+        // never "in use" as a per-game profile, and receives the not-per-game writes.
+        public const string DESKTOP_PROFILE_NAME = "desktop";
 
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
@@ -1107,7 +1111,10 @@ namespace Shared.Data
         [XmlIgnore]
         public string Path;
 
-        public bool IsGlobalProfile { get { return string.Compare(GameId.Name, GLOBAL_PROFILE_NAME) == 0; } }
+        /// <summary>True for a base profile: the in-game global profile OR the Desktop profile.</summary>
+        public bool IsGlobalProfile { get { return string.Compare(GameId.Name, GLOBAL_PROFILE_NAME) == 0 || IsDesktopProfile; } }
+
+        public bool IsDesktopProfile { get { return string.Compare(GameId.Name, DESKTOP_PROFILE_NAME) == 0; } }
 
         [XmlIgnore]
         private IDictionary<GameId, GameProfile> cache;

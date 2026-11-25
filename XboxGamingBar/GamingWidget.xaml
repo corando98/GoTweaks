@@ -1651,6 +1651,29 @@
                                    FontWeight="SemiBold"
                                    Margin="0,16,0,8"/>
 
+                        <!-- Desktop / not in-game profile: a separate base profile (desktop.xml)
+                             applied while no game is running; desktop-time changes save there. -->
+                        <Border Style="{StaticResource CardStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Text="Desktop / not in-game profile"
+                                               Style="{StaticResource CardTitleStyle}"/>
+                                    <TextBlock Text="When no game is running, switch to a separate Desktop profile. Power settings you change on the desktop are saved to it, and it comes back whenever you leave a game. Games without their own profile keep using the global profile."
+                                               Style="{StaticResource CardCaptionStyle}"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <ToggleSwitch x:Name="DesktopProfileToggle"
+                                              Grid.Column="1"
+                                              VerticalAlignment="Center"
+                                              Style="{StaticResource ModernToggleStyle}"
+                                              IsOn="False"/>
+                            </Grid>
+                        </Border>
+
                         <!-- Game Detection Card -->
                         <Border Style="{StaticResource CardStyle}">
                             <StackPanel>

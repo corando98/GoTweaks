@@ -592,6 +592,7 @@
     <Compile Include="Settings\ViiperGuideButtonModeProperty.cs" />
     <Compile Include="Settings\ViiperSwapRumbleMotorsProperty.cs" />
     <Compile Include="Settings\LegionAutoOffProperties.cs" />
+    <Compile Include="Settings\DesktopProfileEnabledProperty.cs" />
     <Compile Include="Devices\Libraries\Legion\AttachedControllerAutoOff.cs" />
     <Compile Include="Settings\ViiperRumbleIntensityProperty.cs" />
     <Compile Include="Settings\GoTweaksLightingConfigProperty.cs" />

@@ -118,6 +118,7 @@
     <Compile Include="Data\ViiperStringComboProperty.cs" />
     <Compile Include="Data\ViiperSwapRumbleMotorsProperty.cs" />
     <Compile Include="Data\LegionAutoOffProperties.cs" />
+    <Compile Include="Data\DesktopProfileEnabledProperty.cs" />
     <Compile Include="Data\ViiperRumbleIntensityProperty.cs" />
     <Compile Include="Data\ViiperMirrorLightbarToStickProperty.cs" />
     <Compile Include="Data\ViiperStickGyroEnabledProperty.cs" />

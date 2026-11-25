@@ -1007,6 +1007,7 @@ namespace XboxGamingBar
         private readonly ViiperSwapRumbleMotorsProperty viiperSwapRumbleMotors;
         private readonly LegionAutoOffWhenDockedProperty legionAutoOffWhenDocked;
         private readonly LegionAutoOffWhenUndockedProperty legionAutoOffWhenUndocked;
+        private readonly DesktopProfileEnabledProperty desktopProfileEnabled;
         private readonly ViiperMirrorLightbarToStickProperty viiperMirrorLightbarToStick;
         private readonly ViiperStickGyroEnabledProperty viiperStickGyroEnabled;
         private readonly ViiperJoyconGyroPerHalfProperty viiperJoyconGyroPerHalf;
@@ -1748,6 +1749,7 @@ namespace XboxGamingBar
             viiperSwapRumbleMotors = new ViiperSwapRumbleMotorsProperty(ViiperSwapRumbleMotorsToggle, this);
             legionAutoOffWhenDocked = new LegionAutoOffWhenDockedProperty(LegionAutoOffWhenDockedToggle, this);
             legionAutoOffWhenUndocked = new LegionAutoOffWhenUndockedProperty(LegionAutoOffWhenUndockedToggle, this);
+            desktopProfileEnabled = new DesktopProfileEnabledProperty(DesktopProfileToggle, this);
             viiperMirrorLightbarToStick = new ViiperMirrorLightbarToStickProperty(ViiperMirrorLightbarToStickToggle, this);
             viiperStickGyroEnabled = new ViiperStickGyroEnabledProperty(ViiperStickGyroEnabledToggle, this);
             viiperJoyconGyroPerHalf = new ViiperJoyconGyroPerHalfProperty(ViiperJoyconGyroPerHalfToggle, this);
@@ -2037,6 +2039,7 @@ namespace XboxGamingBar
                 viiperSwapRumbleMotors,
                 legionAutoOffWhenDocked,
                 legionAutoOffWhenUndocked,
+                desktopProfileEnabled,
                 viiperRumbleIntensity,
                 viiperMirrorLightbarToStick,
                 viiperStickGyroEnabled,
