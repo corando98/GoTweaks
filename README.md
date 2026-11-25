@@ -1,10 +1,41 @@
-# GoTweaks Widget
+# GoTweaks Plus
+
+**GoTweaks Plus is a fork of [GoTweaks](https://github.com/corando98/GoTweaks)**, the Game Bar widget for controlling gaming settings with your controller. It keeps all of GoTweaks' features and adds stability fixes and new options, mainly for the Legion Go. See [What's different in GoTweaks Plus](#whats-different-in-gotweaks-plus) below.
 
 A powerful Game Bar widget for controlling gaming settings with your controller. Designed for handheld gaming PCs with deep integration for Legion Go, AMD Radeon GPUs, and performance tuning.
 
 [![Video Overview](https://img.youtube.com/vi/6zoOBG9X_WU/0.jpg)](https://www.youtube.com/watch?v=6zoOBG9X_WU)
 
 *Video by [GameTechPlanet](https://www.youtube.com/@GameTechPlanet) - Note: Installation has been simplified and the widget has received many updates since this video.*
+
+## What's different in GoTweaks Plus
+
+Everything in GoTweaks, plus the following.
+
+### Stability and crash fixes
+- **Fixes random blue screens (BSODs), including at boot and shutdown.** GoTweaks installed usbip-win2 0.9.7.8, the driver behind controller emulation. That version has a known driver bug that corrupts kernel memory ([usbip-win2 #180](https://github.com/vadimgrn/usbip-win2/issues/180), [#181](https://github.com/vadimgrn/usbip-win2/issues/181)). GoTweaks Plus installs the fixed **usbip-win2 0.9.8.0** and checks the installer's SHA-256 hash before running it. If an older version is already installed, the Setup banner shows an **Update usbip-win2** button.
+- **Fixes a crash caused by the ghost-device cleanup.** The cleanup could remove the live virtual controller while it was being attached. It now finishes before the controller is attached, and rechecks each device first.
+- **Clean shutdown.** The virtual controller is released properly when Windows shuts down or you sign out, instead of being left attached while drivers unload.
+- **Your real controllers are left alone.** The cleanup no longer deletes the Windows device entries of real Xbox, PlayStation or Switch controllers you've unplugged.
+- **Fixes controller input stopping after the app finishes loading.** If the virtual controller failed to start, the physical controller stayed hidden with nothing replacing it. It's now un-hidden again.
+
+### Legion Space
+- **Disable Legion Space now shuts it down immediately.** In GoTweaks the button only stopped it starting at boot, so Legion Space kept running (and controlling the hardware) until a reboot. GoTweaks Plus stops its service and closes all of its processes right away: Legion Space, its quick-settings overlay and its Game Bar widget.
+- The status shows Legion Space as active whenever any part of it is running, so the Disable button always appears when there's something to stop.
+
+### Turn off attached controllers (Legion tab, off by default)
+- **Turn off attached controllers when docked:** when an external display is connected and another controller (Xbox, PlayStation or any other, over USB or Bluetooth) is in use, the Legion Go controllers attached to the sides of the system are turned off. Other controllers keep working normally.
+- **Also when not docked:** a second toggle does the same without a dock.
+- Controllers that are detached and in use wirelessly are never turned off. The Legion controllers turn back on as soon as you detach one, the other controller disconnects, or the condition no longer applies (for example, you undock with only the docked option on).
+
+### Desktop / not in-game profile (Profiles tab, off by default)
+- When no game is running, GoTweaks Plus switches to a separate **Desktop profile**. Power settings you change on the desktop (TDP, CPU boost, EPP, AutoTDP, performance mode and more) are saved to it, and it's restored whenever you leave a game.
+- Games with their own profile use that profile. Games without one keep using the global profile, so in-game tweaks never change your desktop settings.
+
+### Certificate
+- Releases are signed with a new test certificate (publisher `CN=dg`). GoTweaks' original certificate had expired. The install script installs the new certificate for you.
+
+---
 
 ## Features
 
@@ -173,7 +204,7 @@ Designed for full gamepad control - no mouse needed.
 
 ### Option A: Install Script (Recommended)
 
-1. Download the latest release from [Releases](https://github.com/corando98/GoTweaks/releases)
+1. Download the latest release from [Releases](https://github.com/fireflamesniper/GoTweaks-Plus/releases)
 2. Extract the package
 3. Right-click `Install.ps1` → **Run with PowerShell**
 4. Click **Yes** if prompted for Administrator access
@@ -214,6 +245,10 @@ Required for per-game profiles and AutoTDP:
 
 
 
+### Disabling Legion Space
+
+In the widget, use **Disable Legion Space Service**. It stops Legion Space and all of its processes immediately and keeps it from starting at boot. You can still open Legion Space manually for updates.
+
 ### Removing Legion Space OEM Widget
 Legion Space widget if undesired can be removed using the following command from a Powershell admin shell, 
 
@@ -232,6 +267,7 @@ To ReAdd:
 - **Optional:**
   - [RivaTuner Statistics Server](https://www.guru3d.com/download/rtss-rivatuner-statistics-server-download/) (required for OSD overlay)
   - [PawnIO](https://github.com/SuporteTI/PawnIO) (required for extended sensors like fan speed, GPU power draw on some devices)
+  - [usbip-win2](https://github.com/vadimgrn/usbip-win2) 0.9.8.0 or newer (required for controller emulation; install it from the widget's Setup tab, then reboot)
   - AMD GPU (for Radeon features)
   - Legion Go/Go S (for device-specific features)
   - Lossless Scaling (for scaling integration)
@@ -258,7 +294,7 @@ Note: Other gaming software like ASUS Armoury Crate (for ROG Ally) also faces si
 
 ## Credits
 
-Original project by [namquang93](https://github.com/namquang93).
+GoTweaks Plus is a fork of [GoTweaks](https://github.com/corando98/GoTweaks) by [corando98](https://github.com/corando98). Original project by [namquang93](https://github.com/namquang93).
 
 **Special Thanks:**
 - **Mute** (Legion Go Discord) - For always being available for testing and providing valuable user feedback

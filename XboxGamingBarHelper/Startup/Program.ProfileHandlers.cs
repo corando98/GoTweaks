@@ -448,6 +448,52 @@ namespace XboxGamingBarHelper
         }
 
         /// <summary>
+        /// Picks the base profile for the current state: the Desktop profile while it is
+        /// enabled and no game is running, otherwise the in-game global profile. Returns true
+        /// if the base profile changed (the caller must then apply it).
+        /// </summary>
+        private static bool SyncBaseProfile()
+        {
+            if (profileManager == null) return false;
+            bool desktopEnabled = settingsManager?.DesktopProfileEnabled?.Value ?? false;
+            bool gameRunning = systemManager?.RunningGame?.Value.IsValid() ?? false;
+            return profileManager.SelectBaseProfile(desktopEnabled && !gameRunning);
+        }
+
+        /// <summary>
+        /// Desktop profile toggled (or helper boot): swap the base profile now if no game is
+        /// running and no per-game profile is active, and apply it.
+        /// </summary>
+        private static void DesktopProfileEnabled_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            try
+            {
+                lock (profileApplicationLock)
+                {
+                    if (isApplyingProfile) return;
+                    if (!SyncBaseProfile()) return;
+                    // A per-game profile in use keeps priority; the new base applies when it ends.
+                    if (!profileManager.CurrentProfile.IsGlobalProfile) return;
+                    try
+                    {
+                        isApplyingProfile = true;
+                        Logger.Info($"Desktop profile {(profileManager.DesktopProfileActive ? "active" : "inactive")} — applying base profile");
+                        RestoreGlobalProfileSettings();
+                    }
+                    finally
+                    {
+                        profileSwitchTime = DateTime.UtcNow;
+                        isApplyingProfile = false;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"DesktopProfileEnabled handler failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>
         /// Restores global profile settings (TDP, AutoTDP, Legion mode, etc.)
         /// Called when transitioning away from a per-game profile:
         /// - Game stops (RunningGame becomes invalid)
@@ -457,6 +503,9 @@ namespace XboxGamingBarHelper
         /// </summary>
         private static void RestoreGlobalProfileSettings()
         {
+            // Desktop profile while no game runs (if enabled), global otherwise.
+            SyncBaseProfile();
+
             // Refresh GlobalProfile from cache — property change handlers (TDP_PropertyChanged, etc.)
             // update CurrentProfile (a struct copy), which saves to cache/disk, but the
             // GlobalProfile field stays stale since GameProfile is a struct.
@@ -936,7 +985,10 @@ namespace XboxGamingBarHelper
                     // Without the gameHasActiveProfile check, re-firing for the SAME game
                     // (e.g., foreground change) would incorrectly restore global and cause
                     // per-game AutoTDP settings to bleed into the global profile.
-                    if (!gameHasActiveProfile && !profileManager.CurrentProfile.IsGlobalProfile)
+                    // A game is running, so the base profile is the in-game global one. If we
+                    // were on the Desktop profile, an unprofiled game must switch to global.
+                    bool baseProfileChanged = SyncBaseProfile();
+                    if (!gameHasActiveProfile && (baseProfileChanged || !profileManager.CurrentProfile.IsGlobalProfile))
                     {
                         Logger.Info($"Previous game had per-game profile active, restoring global profile for {systemManager.RunningGame.GameId}");
                         RestoreGlobalProfileSettings();

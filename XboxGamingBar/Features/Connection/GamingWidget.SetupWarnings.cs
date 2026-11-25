@@ -53,7 +53,7 @@ namespace XboxGamingBar
                 }
                 else if (actionable?.Action == "usbip")
                 {
-                    SetupWarningsActionButton.Content = "Install usbip-win2";
+                    SetupWarningsActionButton.Content = actionable.Id == "usbip-update" ? "Update usbip-win2" : "Install usbip-win2";
                     SetupWarningsActionButton.Visibility = Visibility.Visible;
                 }
                 else

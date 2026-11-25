@@ -608,5 +608,16 @@
         // = identity, a no-op over the hardcoded per-target frame.
         Viiper_GyroTuning,          // string - gyroscope tuning matrix + inverts
         Viiper_AccelTuning,         // string - accelerometer tuning matrix + inverts
+
+        // Attached-controller auto-off (Legion Go): while the Legion halves are attached to the
+        // sides (none detached-and-wireless) and another real gamepad (USB or Bluetooth) is
+        // connected, take the Legion pad off the OS (firmware 04/0f vendor-exclusive + VIIPER
+        // virtual pad unplugged). Split by dock state; docked = an external display is active.
+        LegionAutoOffWhenDocked,    // bool - default false
+        LegionAutoOffWhenUndocked,  // bool - default false
+
+        // "Desktop / not in-game" profile: while no game is running, apply desktop.xml
+        // (settings changed on the desktop save there) instead of the global profile.
+        DesktopProfileEnabled,      // bool - default false
     }
 }

@@ -155,6 +155,74 @@ namespace XboxGamingBarHelper.Profile
             return Path.Combine(GetLocalFolderPath(), $"{GameProfile.GLOBAL_PROFILE_NAME}{XML_EXTENSION}");
         }
 
+        public static string GetDesktopProfilePath()
+        {
+            return Path.Combine(GetLocalFolderPath(), $"{GameProfile.DESKTOP_PROFILE_NAME}{XML_EXTENSION}");
+        }
+
+        /// <summary>
+        /// True while the Desktop profile (desktop.xml) is the active BASE profile, i.e. what
+        /// <see cref="GlobalProfile"/> currently holds. Every "not a per-game profile" read and
+        /// write in the helper goes through GlobalProfile, so swapping which file backs it is
+        /// all it takes for desktop-time changes to land in desktop.xml and in-game ones (games
+        /// without their own profile) to land in global.xml.
+        /// </summary>
+        public bool DesktopProfileActive { get; private set; }
+
+        private string ActiveBaseProfilePath => DesktopProfileActive ? GetDesktopProfilePath() : GetGlobalProfilePath();
+
+        /// <summary>
+        /// Points <see cref="GlobalProfile"/> at desktop.xml (desktop=true) or global.xml.
+        /// Returns true if the active base profile changed. desktop.xml is created on first
+        /// use as a copy of the current global profile, so turning the option on changes
+        /// nothing until the user tweaks something on the desktop.
+        /// </summary>
+        public bool SelectBaseProfile(bool desktop)
+        {
+            if (DesktopProfileActive == desktop) return false;
+
+            // Land any debounced write to the outgoing base profile first.
+            GameProfile.FlushAllPendingWrites();
+            string path = desktop ? GetDesktopProfilePath() : GetGlobalProfilePath();
+            try
+            {
+                GameProfile next;
+                if (File.Exists(path))
+                {
+                    next = XmlHelper.FromXMLFile<GameProfile>(path);
+                }
+                else if (desktop)
+                {
+                    // Seed from the in-game global profile (read fresh from disk).
+                    next = File.Exists(GetGlobalProfilePath())
+                        ? XmlHelper.FromXMLFile<GameProfile>(GetGlobalProfilePath())
+                        : GlobalProfile;
+                    next.GameId = new GameId(GameProfile.DESKTOP_PROFILE_NAME, GameProfile.DESKTOP_PROFILE_NAME);
+                    Logger.Info("Created Desktop profile from the current global profile.");
+                }
+                else
+                {
+                    Logger.Warn("global.xml missing while switching back from the Desktop profile; keeping current values as global.");
+                    next = GlobalProfile;
+                    next.GameId = new GameId(GameProfile.GLOBAL_PROFILE_NAME, GameProfile.GLOBAL_PROFILE_NAME);
+                }
+                next.Path = path;
+                next.Cache = gameProfiles;
+                gameProfiles[next.GameId] = next;
+                if (!File.Exists(path)) next.Save();
+
+                GlobalProfile = next;
+                DesktopProfileActive = desktop;
+                Logger.Info($"Base profile is now {(desktop ? "Desktop (desktop.xml)" : "global (global.xml)")}: TDP={GlobalProfile.TDP}, CPUBoost={GlobalProfile.CPUBoost}, EPP={GlobalProfile.CPUEPP}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"SelectBaseProfile(desktop={desktop}) failed, keeping current base profile: {ex.Message}");
+                return false;
+            }
+        }
+
         /// <summary>
         /// Refreshes the GlobalProfile field from disk first, then from the in-memory
         /// cache. Disk re-read catches edits the widget made to global.xml that the
@@ -177,7 +245,7 @@ namespace XboxGamingBarHelper.Profile
             // we read (else we'd read our own pre-write snapshot).
             try
             {
-                var globalProfilePath = GetGlobalProfilePath();
+                var globalProfilePath = ActiveBaseProfilePath;
                 Shared.Data.GameProfile.FlushAllPendingWrites();
                 if (File.Exists(globalProfilePath))
                 {

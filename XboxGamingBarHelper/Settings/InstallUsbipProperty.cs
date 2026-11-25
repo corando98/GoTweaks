@@ -24,10 +24,44 @@ namespace XboxGamingBarHelper.Settings
     {
         private new static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
-        // Pinned release (matches the version verified against libviiper).
-        // Bump deliberately — driver installers are not a place for "latest".
+        // Pinned release. Bump deliberately — driver installers are not a place for "latest".
+        // 0.9.7.8 (previous pin) has a usbip2_filter bug that corrupts kernel pool and BSODs
+        // (upstream issues #180/#181; its release notes now carry a BSOD warning). The filter
+        // attaches to EVERY USB 3 root hub, so it crashes even with no virtual pad attached
+        // (field: 0x7E in usbip2_filter+0x2441 at restart, 2026-11-25). Fixed in 0.9.8.0;
+        // 0.9.8.1 is a large AI-reviewed refactor the maintainer flags as regression-prone.
+        internal static readonly Version RecommendedVersion = new Version(0, 9, 8, 0);
         private const string UsbipDownloadUrl =
-            "https://github.com/vadimgrn/usbip-win2/releases/download/v.0.9.7.8/USBip-0.9.7.8-x64.exe";
+            "https://github.com/vadimgrn/usbip-win2/releases/download/v.0.9.8.0/USBip-0.9.8.0-x64.exe";
+        // SHA-256 of the published asset (GitHub release v.0.9.8.0, uploaded 2026-09-07).
+        private const string UsbipInstallerSha256 =
+            "81f426741f7ee2ed991febe24a22daca8400b6ae2f171054e3fb404897e15d39";
+
+        /// <summary>
+        /// Version of the installed usbip-win2 (from usbip.exe), or null if not installed /
+        /// unreadable.
+        /// </summary>
+        internal static Version GetInstalledVersion()
+        {
+            try
+            {
+                string exe = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "USBip", "usbip.exe");
+                if (!File.Exists(exe)) return null;
+                string v = FileVersionInfo.GetVersionInfo(exe).ProductVersion ?? FileVersionInfo.GetVersionInfo(exe).FileVersion;
+                return Version.TryParse((v ?? "").Trim(), out var parsed) ? parsed : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>True when an installed usbip-win2 predates the BSOD fix.</summary>
+        internal static bool IsInstalledVersionKnownBad()
+        {
+            var v = GetInstalledVersion();
+            return v != null && v < RecommendedVersion;
+        }
 
         public InstallUsbipProperty(SettingsManager inManager)
             : base("", null, Function.Viiper_InstallUsbip, inManager)
@@ -59,6 +93,18 @@ namespace XboxGamingBarHelper.Settings
                     client.DownloadFile(UsbipDownloadUrl, tempPath);
                 }
                 Logger.Info($"usbip-win2 installer downloaded to {tempPath}");
+
+                string actualHash;
+                using (var sha = System.Security.Cryptography.SHA256.Create())
+                using (var stream = File.OpenRead(tempPath))
+                {
+                    actualHash = BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", "").ToLowerInvariant();
+                }
+                if (!string.Equals(actualHash, UsbipInstallerSha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    Logger.Error($"usbip-win2 installer hash mismatch (got {actualHash}, expected {UsbipInstallerSha256}); not running it");
+                    return;
+                }
 
                 var startInfo = new ProcessStartInfo
                 {

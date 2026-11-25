@@ -57,8 +57,18 @@ namespace XboxGamingBarHelper
                 using (var sc = new ServiceController("DAService"))
                 {
                     var startType = sc.StartType;
-                    Logger.Debug($"Labs: DAService StartType = {startType}, Status = {sc.Status}");
-                    return startType == ServiceStartMode.Automatic ? 1 : 0;
+                    var runStatus = sc.Status;
+                    bool appRunning = IsAnyLegionSpaceProcessRunning();
+                    Logger.Debug($"Labs: DAService StartType = {startType}, Status = {runStatus}, LegionSpace processes running = {appRunning}");
+                    // "Enabled" also covers Legion Space being live right now even though
+                    // auto-start is off (e.g. the daemon launched the app at sign-in before
+                    // being set to Manual, or the user opened it) — otherwise the widget shows
+                    // "Enable" and there's no way to shut the running instance down.
+                    bool active = startType == ServiceStartMode.Automatic
+                        || runStatus == ServiceControllerStatus.Running
+                        || runStatus == ServiceControllerStatus.StartPending
+                        || appRunning;
+                    return active ? 1 : 0;
                 }
             }
             catch (InvalidOperationException)
@@ -75,8 +85,9 @@ namespace XboxGamingBarHelper
 
         /// <summary>
         /// Control DAService (Legion Space service) startup type.
-        /// Action: 0 = Disable auto-start — set startup to Manual ("demand") + stop the running
-        ///         instance. The daemon no longer runs at boot and does NOT return after a reboot,
+        /// Action: 0 = Disable — set startup to Manual ("demand"), stop the service, and kill every
+        ///         running Legion Space process immediately (LegionSpaceProcessNames). The daemon
+        ///         no longer runs at boot and does NOT return after a reboot,
         ///         but Legion Space can STILL start it on demand (unlike Windows-Disabled, which
         ///         blocks launching it entirely). 1 = Enable — set startup to auto + start now.
         ///
@@ -110,26 +121,44 @@ namespace XboxGamingBarHelper
                     // return after a reboot), but stays launchable on demand by Legion Space.
                     SetDAServiceStartType("demand");
 
-                    // Then stop the running instance in the background (best-effort).
+                    // Shut Legion Space down NOW, not just at next boot. Stopping DAService alone
+                    // left the whole app running: the daemon launches LegionSpace.exe
+                    // (-startfromdaemon, a CEF app with ~8 processes) and LegionSettingMenu.exe at
+                    // sign-in, and those survive the service stopping — they keep driving the
+                    // controller/TDP until a reboot, and can restart the daemon on demand.
+                    // Order: send the service stop first so the daemon can't relaunch the UI,
+                    // then kill the app processes. Both calls return immediately (no
+                    // WaitForStatus on the pipe thread).
+                    RequestDAServiceStop();
+                    KillLegionSpaceProcesses("disable");
+
+                    // Background follow-up: wait for the service to actually stop, force-kill the
+                    // daemon if it ignores the stop, then sweep once more for anything it
+                    // respawned while shutting down.
                     Task.Run(() =>
                     {
                         try
                         {
                             using (var sc = new ServiceController("DAService"))
                             {
-                                if (sc.Status == ServiceControllerStatus.Running)
+                                try
                                 {
-                                    Logger.Info("Labs: Stopping DAService (background)...");
-                                    sc.Stop();
-                                    sc.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(15));
+                                    sc.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(8));
                                     Logger.Info("Labs: DAService stopped");
+                                }
+                                catch (System.ServiceProcess.TimeoutException)
+                                {
+                                    Logger.Warn("Labs: DAService did not stop within 8 s; force-killing LSDaemon");
+                                    KillProcessesByName("LSDaemon", "disable-timeout");
                                 }
                             }
                         }
                         catch (Exception ex)
                         {
-                            Logger.Warn($"Labs: background DAService stop failed: {ex.Message}");
+                            Logger.Warn($"Labs: background DAService stop follow-up failed: {ex.Message}");
                         }
+
+                        KillLegionSpaceProcesses("disable-sweep");
                     });
                 }
                 else // Enable auto-start
@@ -163,6 +192,99 @@ namespace XboxGamingBarHelper
             catch (Exception ex)
             {
                 Logger.Error($"Labs: Error controlling DAService: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Every user-mode process Legion Space runs besides the DAService daemon (LSDaemon).
+        /// LegionSpace = main CEF app + its gpu/renderer/utility children; LegionSettingMenu =
+        /// quick-settings overlay; LegionGoGameBarWidget = Legion Space's own Game Bar widget;
+        /// the rest are names older Legion Space builds used (see SetupHealthService).
+        /// </summary>
+        private static readonly string[] LegionSpaceProcessNames =
+        {
+            "LegionSpace",
+            "LegionSettingMenu",
+            "LegionGoGameBarWidget",
+            "LegionGoQuickSettings",
+            "LegionSpaceService",
+            "LegionZoneService",
+        };
+
+        /// <summary>Sends DAService a stop request without waiting for it to finish.</summary>
+        private static void RequestDAServiceStop()
+        {
+            try
+            {
+                using (var sc = new ServiceController("DAService"))
+                {
+                    if (sc.Status != ServiceControllerStatus.Stopped &&
+                        sc.Status != ServiceControllerStatus.StopPending)
+                    {
+                        Logger.Info("Labs: Stopping DAService...");
+                        sc.Stop();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"Labs: DAService stop request failed: {ex.Message}");
+            }
+        }
+
+        private static bool IsAnyLegionSpaceProcessRunning()
+        {
+            foreach (var name in LegionSpaceProcessNames)
+            {
+                try
+                {
+                    var processes = Process.GetProcessesByName(name);
+                    bool any = processes.Length > 0;
+                    foreach (var p in processes) p.Dispose();
+                    if (any) return true;
+                }
+                catch { }
+            }
+            return false;
+        }
+
+        private static void KillLegionSpaceProcesses(string reason)
+        {
+            foreach (var name in LegionSpaceProcessNames)
+            {
+                KillProcessesByName(name, reason);
+            }
+        }
+
+        private static void KillProcessesByName(string name, string reason)
+        {
+            Process[] processes;
+            try { processes = Process.GetProcessesByName(name); }
+            catch (Exception ex)
+            {
+                Logger.Warn($"Labs: enumerating {name} failed: {ex.Message}");
+                return;
+            }
+
+            foreach (var process in processes)
+            {
+                try
+                {
+                    if (!process.HasExited)
+                    {
+                        process.Kill();
+                        Logger.Info($"Labs: killed {name} (pid {process.Id}, {reason})");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Already exiting (CEF children die with their parent) or access denied.
+                    Logger.Debug($"Labs: kill {name} (pid {process.Id}) failed: {ex.Message}");
+                }
+                finally
+                {
+                    process.Dispose();
+                }
             }
         }
 

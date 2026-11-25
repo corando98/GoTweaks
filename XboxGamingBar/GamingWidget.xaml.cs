@@ -1005,6 +1005,9 @@ namespace XboxGamingBar
         private readonly ViiperStringComboProperty viiperDesktopButtonTarget;
         private readonly ViiperStringComboProperty viiperPageButtonTarget;
         private readonly ViiperSwapRumbleMotorsProperty viiperSwapRumbleMotors;
+        private readonly LegionAutoOffWhenDockedProperty legionAutoOffWhenDocked;
+        private readonly LegionAutoOffWhenUndockedProperty legionAutoOffWhenUndocked;
+        private readonly DesktopProfileEnabledProperty desktopProfileEnabled;
         private readonly ViiperMirrorLightbarToStickProperty viiperMirrorLightbarToStick;
         private readonly ViiperStickGyroEnabledProperty viiperStickGyroEnabled;
         private readonly ViiperJoyconGyroPerHalfProperty viiperJoyconGyroPerHalf;
@@ -1744,6 +1747,9 @@ namespace XboxGamingBar
             viiperDesktopButtonTarget = new ViiperStringComboProperty("guide", Shared.Enums.Function.Viiper_DesktopButtonTarget, ViiperDesktopButtonTargetComboBox, this);
             viiperPageButtonTarget = new ViiperStringComboProperty("touchpad", Shared.Enums.Function.Viiper_PageButtonTarget, ViiperPageButtonTargetComboBox, this);
             viiperSwapRumbleMotors = new ViiperSwapRumbleMotorsProperty(ViiperSwapRumbleMotorsToggle, this);
+            legionAutoOffWhenDocked = new LegionAutoOffWhenDockedProperty(LegionAutoOffWhenDockedToggle, this);
+            legionAutoOffWhenUndocked = new LegionAutoOffWhenUndockedProperty(LegionAutoOffWhenUndockedToggle, this);
+            desktopProfileEnabled = new DesktopProfileEnabledProperty(DesktopProfileToggle, this);
             viiperMirrorLightbarToStick = new ViiperMirrorLightbarToStickProperty(ViiperMirrorLightbarToStickToggle, this);
             viiperStickGyroEnabled = new ViiperStickGyroEnabledProperty(ViiperStickGyroEnabledToggle, this);
             viiperJoyconGyroPerHalf = new ViiperJoyconGyroPerHalfProperty(ViiperJoyconGyroPerHalfToggle, this);
@@ -2031,6 +2037,9 @@ namespace XboxGamingBar
                 viiperDesktopButtonTarget,
                 viiperPageButtonTarget,
                 viiperSwapRumbleMotors,
+                legionAutoOffWhenDocked,
+                legionAutoOffWhenUndocked,
+                desktopProfileEnabled,
                 viiperRumbleIntensity,
                 viiperMirrorLightbarToStick,
                 viiperStickGyroEnabled,

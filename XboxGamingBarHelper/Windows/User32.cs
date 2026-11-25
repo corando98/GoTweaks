@@ -1513,6 +1513,44 @@ namespace XboxGamingBarHelper.Windows
         }
 
         /// <summary>
+        /// True when any active display path is NOT the built-in panel — used as the "docked"
+        /// signal (a Legion Go dock / hub driving a TV or monitor). Embedded DisplayPort/UDI
+        /// targets count as internal. Returns null if the display config can't be queried.
+        /// </summary>
+        public static bool? IsExternalDisplayActive()
+        {
+            const uint DISPLAYCONFIG_OUTPUT_TECHNOLOGY_DISPLAYPORT_EMBEDDED = 11;
+            const uint DISPLAYCONFIG_OUTPUT_TECHNOLOGY_UDI_EMBEDDED = 13;
+            try
+            {
+                int result = GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, out uint pathCount, out uint modeCount);
+                if (result != ERROR_SUCCESS) return null;
+
+                var paths = new DISPLAYCONFIG_PATH_INFO[pathCount];
+                var modes = new DISPLAYCONFIG_MODE_INFO[modeCount];
+                result = QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, ref pathCount, paths, ref modeCount, modes, IntPtr.Zero);
+                if (result != ERROR_SUCCESS) return null;
+
+                for (int i = 0; i < pathCount; i++)
+                {
+                    uint tech = (uint)paths[i].targetInfo.outputTechnology;
+                    if (tech != (uint)DISPLAYCONFIG_OUTPUT_TECHNOLOGY_INTERNAL &&
+                        tech != DISPLAYCONFIG_OUTPUT_TECHNOLOGY_DISPLAYPORT_EMBEDDED &&
+                        tech != DISPLAYCONFIG_OUTPUT_TECHNOLOGY_UDI_EMBEDDED)
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"IsExternalDisplayActive failed: {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
         /// Get HDR support and enabled status for the primary display.
         /// </summary>
         public static (bool Supported, bool Enabled) GetHDRStatus()

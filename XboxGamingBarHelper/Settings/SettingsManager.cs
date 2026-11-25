@@ -144,6 +144,10 @@ namespace XboxGamingBarHelper.Settings
             get { return viiperGuideButtonMode; }
         }
 
+        public LegionAutoOffWhenDockedProperty LegionAutoOffWhenDocked { get; }
+        public LegionAutoOffWhenUndockedProperty LegionAutoOffWhenUndocked { get; }
+        public DesktopProfileEnabledProperty DesktopProfileEnabled { get; }
+
         private readonly ViiperSwapRumbleMotorsProperty viiperSwapRumbleMotors;
         public ViiperSwapRumbleMotorsProperty ViiperSwapRumbleMotors
         {
@@ -277,6 +281,9 @@ namespace XboxGamingBarHelper.Settings
             viiperPageButtonTarget = new ViiperPageButtonTargetProperty(this);
             viiperGuideButtonMode = new ViiperGuideButtonModeProperty(this);
             viiperSwapRumbleMotors = new ViiperSwapRumbleMotorsProperty(this);
+            LegionAutoOffWhenDocked = new LegionAutoOffWhenDockedProperty(this);
+            LegionAutoOffWhenUndocked = new LegionAutoOffWhenUndockedProperty(this);
+            DesktopProfileEnabled = new DesktopProfileEnabledProperty(this);
             viiperRumbleIntensity = new ViiperRumbleIntensityProperty(this);
             goTweaksLightingConfig = new GoTweaksLightingConfigProperty(this);
             goTweaksHapticsConfig = new GoTweaksHapticsConfigProperty(this);

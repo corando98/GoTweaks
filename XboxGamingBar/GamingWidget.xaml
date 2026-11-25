@@ -1651,6 +1651,29 @@
                                    FontWeight="SemiBold"
                                    Margin="0,16,0,8"/>
 
+                        <!-- Desktop / not in-game profile: a separate base profile (desktop.xml)
+                             applied while no game is running; desktop-time changes save there. -->
+                        <Border Style="{StaticResource CardStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Text="Desktop / not in-game profile"
+                                               Style="{StaticResource CardTitleStyle}"/>
+                                    <TextBlock Text="When no game is running, switch to a separate Desktop profile. Power settings you change on the desktop are saved to it, and it comes back whenever you leave a game. Games without their own profile keep using the global profile."
+                                               Style="{StaticResource CardCaptionStyle}"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <ToggleSwitch x:Name="DesktopProfileToggle"
+                                              Grid.Column="1"
+                                              VerticalAlignment="Center"
+                                              Style="{StaticResource ModernToggleStyle}"
+                                              IsOn="False"/>
+                            </Grid>
+                        </Border>
+
                         <!-- Game Detection Card -->
                         <Border Style="{StaticResource CardStyle}">
                             <StackPanel>
@@ -7317,6 +7340,47 @@
                             </Grid>
                         </Border>
 
+                        <!-- Attached-controller auto-off: turn the side-attached Legion pad off
+                             while another controller (USB or Bluetooth) is connected. Never
+                             affects controllers detached and used wirelessly. -->
+                        <Border x:Name="LegionAutoOffCard" Style="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="Turn off attached controllers when docked" Style="{StaticResource CardTitleStyle}"/>
+                                        <TextBlock Text="When docked (external display connected) and another controller is connected by USB or Bluetooth, turn off the Legion controllers while they are attached to the sides. Detached controllers in use are never turned off."
+                                                   FontSize="11" Foreground="#888888" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <ToggleSwitch x:Name="LegionAutoOffWhenDockedToggle"
+                                                  Grid.Column="1"
+                                                  VerticalAlignment="Center"
+                                                  Style="{StaticResource ModernToggleStyle}"
+                                                  IsOn="False"/>
+                                </Grid>
+                                <Grid Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="Also when not docked"
+                                                   FontSize="13" Foreground="#CCCCCC"/>
+                                        <TextBlock Text="Do the same without a dock, whenever another controller is connected."
+                                                   FontSize="11" Foreground="#888888" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <ToggleSwitch x:Name="LegionAutoOffWhenUndockedToggle"
+                                                  Grid.Column="1"
+                                                  VerticalAlignment="Center"
+                                                  Style="{StaticResource ModernToggleStyle}"
+                                                  IsOn="False"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
                         <!-- Input Mode & OS Reporting Card (Legion Go 2 firmware registers; values
                              read back from the controller, not cached settings) -->
                         <Border x:Name="ControllerInputModeCard" Style="{StaticResource CardStyle}" Visibility="Collapsed">
@@ -9665,7 +9729,7 @@
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                         <TextBlock Text="Disable Legion Space Service" Style="{StaticResource CardTitleStyle}"/>
-                                        <TextBlock Text="Removes Legion L/R handling. May override TDP, remaps, fan curve. You can still open Legion Space for updates."
+                                        <TextBlock Text="Stops Legion Space and all of its processes now, and keeps it from starting at boot. Removes Legion L/R handling. You can still open Legion Space for updates."
                                                    Style="{StaticResource CardCaptionStyle}"
                                                    TextWrapping="Wrap"/>
                                     </StackPanel>
