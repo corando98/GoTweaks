@@ -111,6 +111,21 @@ namespace XboxGamingBarHelper.Services
                     });
                 }
 
+                // usbip-win2 0.9.7.8's filter driver corrupts kernel memory (BSODs at
+                // random, at boot and at shutdown) and loads on every USB 3 root hub even
+                // when emulation is off — so flag it whenever it's installed, not only when
+                // emulation needs it. The "usbip" action re-runs the pinned (fixed) installer.
+                if (usbipInstalled && Settings.InstallUsbipProperty.IsInstalledVersionKnownBad())
+                {
+                    var installed = Settings.InstallUsbipProperty.GetInstalledVersion();
+                    warnings.Add(new Warning
+                    {
+                        Id = "usbip-update",
+                        Message = $"usbip-win2 {installed} has a known driver bug that can crash Windows (BSOD). Update to {Settings.InstallUsbipProperty.RecommendedVersion}, then reboot.",
+                        Action = "usbip",
+                    });
+                }
+
                 return Serialize(warnings);
             }
             catch (Exception ex)
